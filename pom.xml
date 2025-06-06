@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.0</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+    <groupId>com.arvindand.mcp</groupId>
+    <artifactId>maven-tools-mcp</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>maven-tools-mcp</name>
+    <description>A Model Context Protocol (MCP) server for Maven dependency management. Works with Claude Desktop, GitHub Copilot, and other MCP clients.</description>
+    <url/>
+    <licenses>
+        <license/>
+    </licenses>
+    <developers>
+        <developer/>
+    </developers>
+    <scm>
+        <connection/>
+        <developerConnection/>
+        <tag/>
+        <url/>
+    </scm>    
+    <properties>
+        <java.version>24</java.version>
+        <spring-ai.version>1.0.0</spring-ai.version>
+        
+        <!-- Test execution properties -->
+        <skipUTs>false</skipUTs>
+        <skipITs>false</skipITs>
+    </properties>
+    <dependencies>
+        <!-- MCP Server -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <!-- Caching support -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+
+        <!-- Caffeine cache implementation -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!-- Jackson for JSON processing -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-json</artifactId>
+        </dependency>
+
+        <!-- Test dependencies -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        
+    </dependencies>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>        
+        </dependencies>
+    </dependencyManagement>
+    
+    <profiles>
+        <!-- CI Profile: Only unit tests, no integration tests -->
+        <profile>
+            <id>ci</id>
+            <properties>
+                <skipITs>true</skipITs>
+                <skipUTs>false</skipUTs>
+            </properties>
+        </profile>
+        
+        <!-- Integration Profile: Run integration tests only -->
+        <profile>
+            <id>integration</id>
+            <properties>
+                <skipITs>false</skipITs>
+                <skipUTs>true</skipUTs>
+            </properties>
+        </profile>
+        
+        <!-- Full Profile: Run all tests -->
+        <profile>
+            <id>full</id>
+            <properties>
+                <skipITs>false</skipITs>
+                <skipUTs>false</skipUTs>
+            </properties>
+        </profile>
+    </profiles>
+    
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            
+            <!-- Surefire for Unit Tests -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Run only unit tests (exclude integration tests) -->
+                    <excludes>
+                        <exclude>**/*IntegrationTest.java</exclude>
+                        <exclude>**/*IT.java</exclude>
+                    </excludes>
+                    <!-- Prevent hanging issues in CI -->
+                    <forkedProcessTimeoutInSeconds>60</forkedProcessTimeoutInSeconds>
+                    <forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
+                </configuration>
+            </plugin>
+            
+            <!-- Failsafe for Integration Tests -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <!-- Run only integration tests -->
+                    <includes>
+                        <include>**/*IntegrationTest.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                    <!-- Longer timeouts for integration tests -->
+                    <forkedProcessTimeoutInSeconds>300</forkedProcessTimeoutInSeconds>
+                    <forkedProcessExitTimeoutInSeconds>60</forkedProcessExitTimeoutInSeconds>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

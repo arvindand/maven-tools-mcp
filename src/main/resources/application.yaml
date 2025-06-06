@@ -1,0 +1,34 @@
+spring:
+  main:
+    web-application-type: none
+    banner-mode: off
+  application:
+    name: maven-tools-mcp
+  ai:
+    mcp:
+      server:
+        name: maven-tools-mcp
+        version: 0.1.0
+        type: SYNC
+        instructions: "This server provides comprehensive Maven dependency analysis tools including latest version lookup, version existence checks, bulk dependency analysis, POM file analysis, and version comparison with intelligent caching support"
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=300s
+
+# Logging configuration for STDIO mode - allow app logs but suppress framework logs
+logging:
+  level:
+    "[com.arvindand.mcp.maven]": INFO
+    "[org.springframework.ai.mcp]": ERROR
+    "[org.springframework.boot]": ERROR
+    "[org.springframework]": ERROR
+    root: ERROR
+  config: "classpath:logback-spring.xml"
+
+# Maven Central API configuration
+maven:
+  central:
+    base-url: https://search.maven.org/solrsearch/select
+    timeout: 10s
+    max-results: 100

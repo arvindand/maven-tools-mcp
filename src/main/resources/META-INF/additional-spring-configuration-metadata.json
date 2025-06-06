@@ -1,0 +1,19 @@
+{
+  "properties": [
+    {
+      "name": "maven.central.base-url",
+      "type": "java.lang.String",
+      "description": "The base URL for the Maven Central search API. Used for querying artifact and version information."
+    },
+    {
+      "name": "maven.central.timeout",
+      "type": "java.lang.String",
+      "description": "The timeout duration for requests to the Maven Central API (e.g., '10s' for 10 seconds)."
+    },
+    {
+      "name": "maven.central.max-results",
+      "type": "java.lang.String",
+      "description": "The maximum number of results to retrieve per request from the Maven Central API."
+    }
+  ]
+}
