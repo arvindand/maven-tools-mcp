@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2025-06-07
+
 ### Added
 
 - Initial release
@@ -29,4 +31,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/HEAD...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/arvindand/maven-tools-mcp/releases/tag/v0.1.0
