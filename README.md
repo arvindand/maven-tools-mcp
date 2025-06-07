@@ -48,11 +48,9 @@ Retrieves the latest available version of a Maven dependency from Maven Central 
 ```json
 {
   "dependency": "org.springframework:spring-core",
-  "latest_stable": { "version": "6.1.14", "type": "stable" },
-  "latest_rc": { "version": "7.0.0-RC1", "type": "rc" },
-  "latest_beta": { "version": "7.0.0-beta-2", "type": "beta" },
-  "latest_alpha": { "version": "7.0.0-alpha-1", "type": "alpha" },  "latest_milestone": { "version": "7.0.0-M5", "type": "milestone" },
-  "total_versions": 156
+  "latest_stable": { "version": "6.2.7", "type": "stable" },
+  "latest_milestone": { "version": "7.0.0-M5", "type": "milestone" },
+  "total_versions": 100
 }
 ```
 
@@ -107,10 +105,10 @@ Retrieves the latest stable version of a Maven dependency (excludes RCs, alphas,
 
 ```json
 {
-  "version": "2.18.2",
+  "version": "2.19.0",
   "type": "stable",
-  "total_versions": 45,
-  "stable_versions": 38
+  "total_versions": 100,
+  "stable_versions": 82
 }
 ```
 
@@ -133,24 +131,35 @@ Checks latest versions for multiple dependencies in a single call.
 **Response:**
 
 ```json
-{
-  "dependency": "org.springframework:spring-core",
-  "version": "7.0.0-M5",
-  "type": "milestone",
-  "status": "found"
-},
-{
-  "dependency": "com.fasterxml.jackson.core:jackson-core",
-  "version": "2.18.2",
-  "type": "stable",
-  "status": "found"
-},
-{
-  "dependency": "junit:junit",
-  "version": "4.13-rc-2",
-  "type": "rc",
-  "status": "found"
-}
+[
+  {
+    "dependency": "org.springframework:spring-core",
+    "version": "7.0.0-M5",
+    "type": "milestone",
+    "status": "found",
+    "error": null,
+    "total_versions": 100,
+    "stable_versions": 95
+  },
+  {
+    "dependency": "com.fasterxml.jackson.core:jackson-core",
+    "version": "2.19.0",
+    "type": "stable",
+    "status": "found",
+    "error": null,
+    "total_versions": 100,
+    "stable_versions": 82
+  },
+  {
+    "dependency": "junit:junit",
+    "version": "4.13.2",
+    "type": "stable",
+    "status": "found",
+    "error": null,
+    "total_versions": 32,
+    "stable_versions": 32
+  }
+]
 ```
 
 ### `maven_bulk_check_stable`
@@ -172,22 +181,26 @@ Checks latest stable versions for multiple dependencies.
 **Response:**
 
 ```json
-{
-  "dependency": "org.springframework:spring-core",
-  "version": "6.1.14",
-  "type": "stable",
-  "total_versions": 156,
-  "stable_versions": 142,
-  "status": "found"
-},
-{
-  "dependency": "com.fasterxml.jackson.core:jackson-core",
-  "version": "2.18.2",
-  "type": "stable",
-  "total_versions": 45,
-  "stable_versions": 38,
-  "status": "found"
-}
+[
+  {
+    "dependency": "org.springframework:spring-core",
+    "version": "6.2.7",
+    "type": "stable",
+    "status": "found",
+    "error": null,
+    "total_versions": 100,
+    "stable_versions": 95
+  },
+  {
+    "dependency": "com.fasterxml.jackson.core:jackson-core",
+    "version": "2.19.0",
+    "type": "stable",
+    "status": "found",
+    "error": null,
+    "total_versions": 100,
+    "stable_versions": 82
+  }
+]
 ```
 
 ### `maven_compare_versions`
@@ -210,7 +223,7 @@ Compares current dependencies with their latest versions and provides update rec
 
 ```json
 {
-  "comparison_date": "2025-06-04T01:00:00Z",
+  "comparison_date": "2025-06-07T22:38:47Z",
   "dependencies": [
     {
       "dependency": "org.springframework:spring-core:6.0.0",
@@ -218,15 +231,19 @@ Compares current dependencies with their latest versions and provides update rec
       "latest_version": "7.0.0-M5",
       "latest_type": "milestone",
       "update_type": "major",
-      "update_available": true
+      "update_available": true,
+      "status": "success",
+      "error": null
     },
     {
       "dependency": "junit:junit:4.12",
       "current_version": "4.12",
-      "latest_version": "4.13-rc-2",
-      "latest_type": "rc",
+      "latest_version": "4.13.2",
+      "latest_type": "stable",
       "update_type": "minor",
-      "update_available": true
+      "update_available": true,
+      "status": "success",
+      "error": null
     }
   ],
   "update_summary": {
@@ -303,7 +320,7 @@ Stable Version Result: CallToolResult[content=[TextContent[text="{\"version\":\"
 **Step 1:** Locate Configuration File
 
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`  
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Linux:** `~/.config/Claude/claude_desktop_config.json`
 
 **Step 2:** Add Server Configuration
@@ -358,35 +375,93 @@ This server implements MCP Protocol 2024-11-05 with stdio transport, making it c
 
 Once integrated, you can ask your AI assistant:
 
-**Get Latest Versions (any type):**
+### Getting Started Examples
 
-- "What's the latest version of org.springframework:spring-core?"
-- "Find the newest version of com.fasterxml.jackson.core:jackson-core"
-- "What's the current version of junit:junit?"
+**Beginner:**
 
-**Get Latest Stable Versions (production-ready):**
+- "What's the latest version of Jackson?"
+- "Is Spring Boot 3.5.0 available?"
+- "Find the current stable version of JUnit"
 
-- "What's the latest stable version of Spring Boot?"
-- "I need the production-ready version of Jackson Core"
-- "Get me the stable release of Hibernate, not any pre-release versions"
+**Intermediate:**
 
-**Check Specific Versions:**
+- "Compare my current Spring dependencies with latest stable versions"
+- "What's the latest version of each: Spring Boot, Jackson, Hibernate?"
+- "Check if org.springframework:spring-core:6.0.0 should be updated"
 
-- "Does Spring Boot 3.2.0 exist and is it stable?"
-- "Is Jackson 2.19.0-rc2 available? What type of release is it?"
-- "Check if org.apache.commons:commons-lang3:3.12.0 exists"
+**Advanced:**
 
-**Version Type Intelligence:**
+- "Analyze these dependencies for updates: Spring Boot 3.1.0, Jackson 2.15.0, JUnit 4.13.2"
+- "Show me version comparison with update recommendations for my project dependencies"
 
-- "The latest Jackson version is 2.19.0-rc2 - should I use this in production?"
-- "Show me both the latest and latest stable versions of Spring Framework"
-- "Help me choose between the latest version and stable version of this dependency"
+### Common Workflow Examples
 
-**Project Dependencies:**
+**Updating a Spring Boot project:**
 
-- "Help me update my Spring dependencies to the latest stable versions"
-- "Check if all these versions exist and are stable: Spring Boot 3.2.0, Jackson 2.18.0"
-- "What's the difference between the latest and stable versions of Hibernate?"
+- "What's the latest Spring Boot version and compatible Spring Framework version?"
+- "Help me upgrade from Spring Boot 3.1.0 to the latest stable version"
+- "I'm using Spring Boot 3.2.0 - what's the latest version I can safely upgrade to?"
+
+**Checking project health:**
+
+- "Compare these current versions with latest: Spring Boot 3.1.5, Jackson 2.15.2, JUnit 5.9.3"
+- "What major/minor/patch updates are available for my dependencies?"
+- "Show me update recommendations for my current dependency versions"
+
+**Release planning:**
+
+- "Show me all dependencies that have major version updates available"
+- "Which of my dependencies have only patch updates available?"
+- "Compare Spring Boot 3.2.0 vs 3.5.0 - what's the update impact?"
+
+**Dependency research:**
+
+- "What types of releases are available for Spring Boot? (stable, RC, beta, etc.)"
+- "Should I use Jackson 2.18.2 or wait for 2.19.0?"
+- "What's the difference between Spring Framework 6.1.4 and 6.1.4.RELEASE?"
+
+### Troubleshooting Examples
+
+**Version conflicts:**
+
+- "Why can't I find Spring Boot 3.5.1?"
+- "Is there a Spring Boot 3.6.0 version available yet?"
+- "What's the difference between Spring Boot 3.5.0 and 3.5.0-RC1?"
+
+**Version validation:**
+
+- "Does Spring Boot 3.5.0 exist?"
+- "Is JUnit 4.13.2 available on Maven Central?"
+- "Check if these versions exist: org.springframework:spring-core:6.1.14, junit:junit:4.13.2"
+
+### Bulk Operations Examples
+
+**Multiple dependency checks:**
+
+- "What are the latest versions of: Spring Boot, Jackson Core, JUnit?"
+- "Check latest stable versions for: org.springframework:spring-core, com.fasterxml.jackson.core:jackson-core"
+- "Find the newest versions of these dependencies: org.springframework.boot:spring-boot-starter-parent, org.springframework.ai:spring-ai-bom"
+
+**Version comparisons:**
+
+- "Compare my current versions with latest: org.springframework.boot:spring-boot-starter-parent:3.2.0, org.springframework.ai:spring-ai-bom:1.0.0"
+- "I'm using Spring Boot 3.1.5, Jackson 2.15.2, JUnit 5.9.3 - what updates are available?"
+- "Show update recommendations for: org.springframework:spring-core:6.0.0, junit:junit:4.12"
+
+### Working with Project Files
+
+**Pom.xml analysis:**
+
+- "Here's my pom.xml [paste content]. Check which dependencies have updates available."
+- "Analyze my project dependencies and show version recommendations: [paste pom.xml]"
+- "Parse this pom.xml and tell me which dependencies are outdated: [paste content]"
+
+**Dependency list analysis:**
+
+- "Check these dependencies from my project: [paste dependency list]"
+- "My project uses these versions: [list dependencies]. What updates are available?"
+
+> **Note on Advanced Use Cases:** This MCP server focuses specifically on Maven Central version information and doesn't provide compatibility analysis, security advisories, or migration guidance between dependency versions. However, intelligent MCP clients like Claude may be able to bridge these gaps by combining the version data from this server with web search capabilities or other knowledge sources to provide more comprehensive dependency management advice.
 
 ## Configuration
 
@@ -396,7 +471,8 @@ The server can be configured via `application.yaml`:
 # Cache configuration
 spring:
   cache:
-    type: caffeine    caffeine:
+    type: caffeine
+    caffeine:
       spec: maximumSize=2000,expireAfterWrite=3600s
 
 # Maven Central API settings
