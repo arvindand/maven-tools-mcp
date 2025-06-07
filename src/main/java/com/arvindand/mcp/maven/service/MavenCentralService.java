@@ -232,9 +232,6 @@ public class MavenCentralService {
     String packaging = coordinate.packaging();
     if (packaging != null) {
       query.append(" AND p:\"").append(packaging).append("\"");
-    } else {
-      // Default to jar packaging for better performance
-      query.append(" AND p:\"jar\"");
     }
 
     return query.toString();

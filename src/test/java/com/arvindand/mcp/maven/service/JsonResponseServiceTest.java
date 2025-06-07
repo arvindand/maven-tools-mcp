@@ -25,6 +25,7 @@ class JsonResponseServiceTest {
   private ObjectMapper realObjectMapper;
 
   @BeforeEach
+  @SuppressWarnings("unused")
   void setUp() {
     // Create real ObjectMapper for most tests
     realObjectMapper = new ObjectMapper();

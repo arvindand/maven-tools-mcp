@@ -100,4 +100,25 @@ class MavenDependencyToolsIT {
             || result.contains("latest_milestone");
     assertTrue(hasAnyType);
   }
+
+  /** Tests that POM artifacts like parent POMs and BOMs can be found correctly. */
+  @Test
+  void testPomArtifactsCanBeFound() {
+    // Test Spring Boot starter parent POM
+    String springBootResult =
+        mavenDependencyTools.maven_get_latest(
+            "org.springframework.boot:spring-boot-starter-parent");
+    assertNotNull(springBootResult);
+    assertTrue(springBootResult.contains("\"dependency\":"));
+    assertTrue(springBootResult.contains("spring-boot-starter-parent"));
+    assertTrue(!springBootResult.contains("error"));
+
+    // Test Spring AI BOM
+    String springAiResult =
+        mavenDependencyTools.maven_get_latest("org.springframework.ai:spring-ai-bom");
+    assertNotNull(springAiResult);
+    assertTrue(springAiResult.contains("\"dependency\":"));
+    assertTrue(springAiResult.contains("spring-ai-bom"));
+    assertTrue(!springAiResult.contains("error"));
+  }
 }
