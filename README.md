@@ -291,7 +291,6 @@ java -jar target/maven-tools-mcp-0.1.2-SNAPSHOT.jar
 
 **Output Location:** `target/maven-tools-mcp-0.1.2-SNAPSHOT.jar`
 
-
 ## AI Assistant Integration
 
 ### Claude Desktop Setup
