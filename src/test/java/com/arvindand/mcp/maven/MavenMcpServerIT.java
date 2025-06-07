@@ -24,7 +24,7 @@ import com.arvindand.mcp.maven.service.MavenCentralService;
  */
 @SpringBootTest
 @TestPropertySource(properties = {"maven.central.timeout=PT10S", "maven.central.max-results=50"})
-class MavenMcpServerIntegrationTest {
+class MavenMcpServerIT {
 
   @Autowired private MavenCentralService mavenCentralService;
 
@@ -34,10 +34,7 @@ class MavenMcpServerIntegrationTest {
     return Stream.of(
         Arguments.of("org.springframework", "spring-core", "Spring Core"),
         Arguments.of("junit", "junit", "JUnit"),
-        Arguments.of(
-            "org.springframework.boot",
-            "spring-boot-starter-parent",
-            "Spring Boot Starter Parent"));
+        Arguments.of("com.google.guava", "guava", "Google Guava"));
   }
 
   /**
@@ -53,8 +50,8 @@ class MavenMcpServerIntegrationTest {
     // When
     String latestVersion = mavenCentralService.getLatestVersion(coordinate);
 
-    // Then
-    assertThat(latestVersion).isNotNull().isNotEmpty().contains(".");
+    // Then - Version should be a valid version string (may contain dots, letters, numbers, etc.)
+    assertThat(latestVersion).isNotNull().isNotEmpty().matches("^[\\w\\.\\-]+$");
     System.out.println(displayName + " latest version: " + latestVersion);
   }
 
@@ -141,5 +138,24 @@ class MavenMcpServerIntegrationTest {
     assertThatThrownBy(() -> mavenCentralService.getLatestVersion(coordinate))
         .isInstanceOf(MavenCentralException.class)
         .hasMessageContaining("No versions found");
+  }
+
+  /**
+   * Tests getting the latest version for a POM artifact (different packaging type). This ensures
+   * our service can handle different Maven packaging types correctly.
+   */
+  @Test
+  void testGetLatestVersion_PomPackaging() {
+    // Given - Spring Boot Starter Parent is a POM artifact, not JAR
+    MavenCoordinate coordinate =
+        new MavenCoordinate(
+            "org.springframework.boot", "spring-boot-starter-parent", null, "pom", null);
+
+    // When
+    String latestVersion = mavenCentralService.getLatestVersion(coordinate);
+
+    // Then
+    assertThat(latestVersion).isNotNull().isNotEmpty().contains(".");
+    System.out.println("Spring Boot Starter Parent (POM) latest version: " + latestVersion);
   }
 }

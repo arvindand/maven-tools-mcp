@@ -1,12 +1,18 @@
 package com.arvindand.mcp.maven.service;
 
+import java.util.Arrays;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
 /**
- * Service for analyzing version types and comparing versions. Provides classification of Maven
- * versions into types (stable, snapshot, rc, alpha, beta, milestone) and determines update types
- * between versions.
+ * Service for analyzing and categorizing Maven artifact versions.
+ *
+ * <p>Provides utilities to determine the type of a version (e.g., release candidate, alpha, beta,
+ * milestone, stable), check if a version is stable, and determine the type of update (major, minor,
+ * patch, or none) between two versions.
+ *
+ * <p>Version types are detected using regular expressions and string patterns for common
+ * pre-release and release identifiers.
  *
  * @author Arvind Menon
  * @since 0.1.0
@@ -14,63 +20,68 @@ import org.springframework.stereotype.Service;
 @Service
 public class VersionAnalysisService {
 
+  private static final String RC_TYPE = "rc";
+  private static final String ALPHA_TYPE = "alpha";
+  private static final String BETA_TYPE = "beta";
+  private static final String MILESTONE_TYPE = "milestone";
+  private static final String STABLE_TYPE = "stable";
   private static final String UNKNOWN_TYPE = "unknown";
-
-  // Version type patterns
-  private static final Pattern SNAPSHOT_PATTERN =
-      Pattern.compile(".*-SNAPSHOT$", Pattern.CASE_INSENSITIVE);
-  private static final Pattern RC_PATTERN = Pattern.compile(".*-RC\\d*$", Pattern.CASE_INSENSITIVE);
+  private static final String NONE_TYPE = "none";
+  private static final String MAJOR_TYPE = "major";
+  private static final String MINOR_TYPE = "minor";
+  private static final String PATCH_TYPE = "patch";
+  private static final Pattern RC_PATTERN =
+      Pattern.compile(".*[-.](?:RC|CR)\\d*$", Pattern.CASE_INSENSITIVE);
   private static final Pattern ALPHA_PATTERN =
-      Pattern.compile(".*-(ALPHA|A)\\d*$", Pattern.CASE_INSENSITIVE);
+      Pattern.compile(".*[-.](?:ALPHA|A)\\d*$", Pattern.CASE_INSENSITIVE);
   private static final Pattern BETA_PATTERN =
-      Pattern.compile(".*-(BETA|B)\\d*$", Pattern.CASE_INSENSITIVE);
-  private static final Pattern MILESTONE_PATTERN = Pattern.compile(".*-[Mm]\\d+$");
+      Pattern.compile(".*[-.](?:BETA|B)\\d*$", Pattern.CASE_INSENSITIVE);
+  private static final Pattern MILESTONE_PATTERN =
+      Pattern.compile(".*[-.](?:M|MILESTONE)\\d*$", Pattern.CASE_INSENSITIVE);
 
-  /**
-   * Determines the version type (stable, snapshot, rc, alpha, beta, milestone).
-   *
-   * @param version the version string to analyze
-   * @return the version type
-   */
   public String getVersionType(String version) {
-    if (version == null) {
-      return UNKNOWN_TYPE;
-    }
+    if (version == null) return UNKNOWN_TYPE;
 
-    if (SNAPSHOT_PATTERN.matcher(version).matches()) return "snapshot";
-    if (RC_PATTERN.matcher(version).matches()) return "rc";
-    if (ALPHA_PATTERN.matcher(version).matches()) return "alpha";
-    if (BETA_PATTERN.matcher(version).matches()) return "beta";
-    if (MILESTONE_PATTERN.matcher(version).matches()) return "milestone";
+    var normalizedVersion = version.trim();
 
-    return "stable";
+    return switch (checkVersionPattern(normalizedVersion)) {
+      case RC_TYPE -> RC_TYPE;
+      case ALPHA_TYPE -> ALPHA_TYPE;
+      case BETA_TYPE -> BETA_TYPE;
+      case MILESTONE_TYPE -> MILESTONE_TYPE;
+      default -> checkStringPatterns(normalizedVersion.toLowerCase());
+    };
   }
 
-  /**
-   * Checks if a version is considered stable (not snapshot, rc, alpha, beta, or milestone).
-   *
-   * @param version the version to check
-   * @return true if the version is stable
-   */
+  private String checkVersionPattern(String version) {
+    if (RC_PATTERN.matcher(version).matches()) return RC_TYPE;
+    if (ALPHA_PATTERN.matcher(version).matches()) return ALPHA_TYPE;
+    if (BETA_PATTERN.matcher(version).matches()) return BETA_TYPE;
+    if (MILESTONE_PATTERN.matcher(version).matches()) return MILESTONE_TYPE;
+    return STABLE_TYPE;
+  }
+
+  private String checkStringPatterns(String lowerVersion) {
+    if (lowerVersion.contains("preview")
+        || lowerVersion.contains("pre")
+        || lowerVersion.contains("dev")
+        || lowerVersion.contains("experimental")) {
+      return ALPHA_TYPE;
+    }
+    if (lowerVersion.contains("candidate") || lowerVersion.contains("release-candidate")) {
+      return RC_TYPE;
+    }
+    return STABLE_TYPE;
+  }
+
   public boolean isStableVersion(String version) {
-    return "stable".equals(getVersionType(version));
+    return STABLE_TYPE.equals(getVersionType(version));
   }
 
-  /**
-   * Determines the update type between two versions (major, minor, patch, none, unknown).
-   *
-   * @param currentVersion the current version
-   * @param latestVersion the latest version
-   * @return the update type as a string
-   */
   public String determineUpdateType(String currentVersion, String latestVersion) {
-    if (currentVersion == null || latestVersion == null) {
-      return UNKNOWN_TYPE;
-    }
+    if (currentVersion == null || latestVersion == null) return UNKNOWN_TYPE;
+    if (currentVersion.equals(latestVersion)) return NONE_TYPE;
 
-    if (currentVersion.equals(latestVersion)) {
-      return "none";
-    }
     try {
       return compareVersions(currentVersion, latestVersion);
     } catch (Exception _) {
@@ -78,48 +89,29 @@ public class VersionAnalysisService {
     }
   }
 
-  /**
-   * Compares two versions and determines the update type.
-   *
-   * @param currentVersion the current version
-   * @param latestVersion the latest version
-   * @return the update type (major, minor, patch, or unknown)
-   */
   private String compareVersions(String currentVersion, String latestVersion) {
     var currentParts = parseVersionParts(currentVersion);
     var latestParts = parseVersionParts(latestVersion);
 
     if (currentParts.length >= 1 && latestParts.length >= 1 && latestParts[0] > currentParts[0]) {
-      return "major";
+      return MAJOR_TYPE;
     }
-
     if (currentParts.length >= 2 && latestParts.length >= 2 && latestParts[1] > currentParts[1]) {
-      return "minor";
+      return MINOR_TYPE;
     }
-
     if (currentParts.length >= 3 && latestParts.length >= 3 && latestParts[2] > currentParts[2]) {
-      return "patch";
+      return PATCH_TYPE;
     }
-
     return UNKNOWN_TYPE;
   }
 
-  /**
-   * Parses version string into numeric parts for comparison.
-   *
-   * @param version the version string to parse
-   * @return array of numeric version parts
-   */
   private int[] parseVersionParts(String version) {
-    String[] parts = version.split("\\.");
-    int[] numericParts = new int[parts.length];
-
-    for (int i = 0; i < parts.length; i++) {
-      // Extract only numeric part of each segment
-      String numericPart = parts[i].replaceAll("\\D", "");
-      numericParts[i] = numericPart.isEmpty() ? 0 : Integer.parseInt(numericPart);
-    }
-
-    return numericParts;
+    return Arrays.stream(version.split("\\."))
+        .mapToInt(
+            part -> {
+              String numeric = part.replaceAll("\\D", "");
+              return numeric.isEmpty() ? 0 : Integer.valueOf(numeric);
+            })
+        .toArray();
   }
 }

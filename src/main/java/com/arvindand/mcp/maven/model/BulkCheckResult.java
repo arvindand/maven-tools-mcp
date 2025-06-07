@@ -22,26 +22,37 @@ public record BulkCheckResult(
     Integer totalVersions,
     Integer stableVersions) {
 
+  private static final String STATUS_FOUND = "found";
+  private static final String STATUS_NOT_FOUND = "not_found";
+  private static final String STATUS_NO_STABLE_VERSION = "no_stable_version";
+  private static final String STATUS_ERROR = "error";
+
   public static BulkCheckResult found(String dependency, String version, String type) {
-    return new BulkCheckResult(dependency, version, type, "found", null, null, null);
+    return new BulkCheckResult(dependency, version, type, STATUS_FOUND, null, null, null);
   }
 
   public static BulkCheckResult foundStable(
       String dependency, String version, String type, int totalVersions, int stableVersions) {
     return new BulkCheckResult(
-        dependency, version, type, "found", null, totalVersions, stableVersions);
+        dependency, version, type, STATUS_FOUND, null, totalVersions, stableVersions);
+  }
+
+  public static BulkCheckResult foundWithCounts(
+      String dependency, String version, String type, int totalVersions, int stableVersions) {
+    return new BulkCheckResult(
+        dependency, version, type, STATUS_FOUND, null, totalVersions, stableVersions);
   }
 
   public static BulkCheckResult notFound(String dependency) {
-    return new BulkCheckResult(dependency, null, null, "not_found", null, null, null);
+    return new BulkCheckResult(dependency, null, null, STATUS_NOT_FOUND, null, null, null);
   }
 
   public static BulkCheckResult noStableVersion(String dependency, int totalVersions) {
     return new BulkCheckResult(
-        dependency, null, null, "no_stable_version", null, totalVersions, null);
+        dependency, null, null, STATUS_NO_STABLE_VERSION, null, totalVersions, null);
   }
 
   public static BulkCheckResult error(String dependency, String error) {
-    return new BulkCheckResult(dependency, null, null, "error", error, null, null);
+    return new BulkCheckResult(dependency, null, null, STATUS_ERROR, error, null, null);
   }
 }

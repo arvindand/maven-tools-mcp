@@ -94,8 +94,6 @@ public final class VersionComparator implements Comparator<String> {
       return 80;
     } else if (lower.contains("alpha")) {
       return 70;
-    } else if (lower.contains("snapshot")) {
-      return 60;
     } else if (lower.contains("m") && NUMERIC_PATTERN.matcher(lower.substring(1)).matches()) {
       return 50; // Milestone
     }

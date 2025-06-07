@@ -34,12 +34,17 @@ public class MavenCentralService {
    */
   public MavenCentralService(MavenCentralProperties properties) {
     this.properties = properties;
+
+    // Configure timeouts for better performance
+    var requestFactory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+    requestFactory.setConnectTimeout((int) properties.timeout().toMillis());
+    requestFactory.setReadTimeout((int) properties.timeout().toMillis());
+
     this.restClient =
         RestClient.builder()
             .baseUrl(properties.baseUrl())
-            .defaultHeader(
-                "User-Agent", //
-                "Maven-Tools-MCP/0.1.0 (https://github.com/arvindand)")
+            .defaultHeader("User-Agent", "Maven-Tools-MCP/0.1.0 (https://github.com/arvindand)")
+            .requestFactory(requestFactory)
             .build();
   }
 
@@ -208,24 +213,27 @@ public class MavenCentralService {
     }
   }
 
-  /**
-   * Builds a Solr query string for Maven Central search.
-   *
-   * @param coordinate the Maven coordinate
-   * @param version the specific version (optional)
-   * @return the formatted query string
-   */
+  /** Builds a Solr query string for Maven Central search. */
   private String buildQuery(MavenCoordinate coordinate, String version) {
-    StringBuilder query = new StringBuilder();
-    query.append("g:\"").append(coordinate.groupId()).append("\"");
-    query.append(" AND a:\"").append(coordinate.artifactId()).append("\"");
+    var query =
+        new StringBuilder()
+            .append("g:\"")
+            .append(coordinate.groupId())
+            .append("\"")
+            .append(" AND a:\"")
+            .append(coordinate.artifactId())
+            .append("\"");
 
     if (version != null) {
       query.append(" AND v:\"").append(version).append("\"");
     }
 
-    if (coordinate.packaging() != null) {
-      query.append(" AND p:\"").append(coordinate.packaging()).append("\"");
+    String packaging = coordinate.packaging();
+    if (packaging != null) {
+      query.append(" AND p:\"").append(packaging).append("\"");
+    } else {
+      // Default to jar packaging for better performance
+      query.append(" AND p:\"jar\"");
     }
 
     return query.toString();

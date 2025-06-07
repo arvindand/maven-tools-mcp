@@ -12,24 +12,24 @@ A Model Context Protocol (MCP) server for Maven dependency management. Works wit
 - Get latest or stable versions of Maven dependencies
 - Check if specific versions exist
 - Bulk version checking for multiple dependencies
-- Analyze POM files for outdated dependencies
 - Compare versions and get update recommendations
 
 ## Features
 
 - Version lookup (latest, stable, or specific versions)
-- Version type classification (stable, RC, beta, alpha, milestone, snapshot)
+- Version type classification (stable, RC, beta, alpha, milestone)
 - Bulk operations for multiple dependencies
-- POM file analysis with update recommendations
 - Version comparison tools
 - Caching for better performance
 - Works with MCP-compatible AI assistants
+
+> **Note:** Snapshot versions are not supported. This is because the Maven Central API does not index or provide access to snapshot artifacts. Only released versions (stable, rc, beta, alpha, milestone) are available.
 
 ## Tools Available
 
 ### `maven_get_latest`
 
-Retrieves the latest available version of a Maven dependency from Maven Central for each version type (stable, rc, beta, alpha, milestone, snapshot).
+Retrieves the latest available version of a Maven dependency from Maven Central for each version type (stable, rc, beta, alpha, milestone).
 
 **Parameters:**
 
@@ -51,9 +51,7 @@ Retrieves the latest available version of a Maven dependency from Maven Central 
   "latest_stable": { "version": "6.1.14", "type": "stable" },
   "latest_rc": { "version": "7.0.0-RC1", "type": "rc" },
   "latest_beta": { "version": "7.0.0-beta-2", "type": "beta" },
-  "latest_alpha": { "version": "7.0.0-alpha-1", "type": "alpha" },
-  "latest_milestone": { "version": "7.0.0-M5", "type": "milestone" },
-  "latest_snapshot": { "version": "7.0.1-SNAPSHOT", "type": "snapshot" },
+  "latest_alpha": { "version": "7.0.0-alpha-1", "type": "alpha" },  "latest_milestone": { "version": "7.0.0-M5", "type": "milestone" },
   "total_versions": 156
 }
 ```
@@ -91,7 +89,7 @@ Checks if a specific version of a Maven dependency exists in Maven Central with 
 
 ### `maven_get_stable`
 
-Retrieves the latest stable version of a Maven dependency (excludes snapshots, RCs, alphas, betas, milestones).
+Retrieves the latest stable version of a Maven dependency (excludes RCs, alphas, betas, milestones).
 
 **Parameters:**
 
@@ -192,48 +190,6 @@ Checks latest stable versions for multiple dependencies.
 }
 ```
 
-### `maven_analyze_pom`
-
-Analyzes a POM file and provides dependency update recommendations.
-
-**Parameters:**
-
-- `pomContent` (string, required): XML content of a pom.xml file
-
-**Example:**
-
-```json
-{
-  "pomContent": "<?xml version=\"1.0\"?>..."
-}
-```
-
-**Response:**
-
-```json
-{
-  "analysis_date": "2025-06-04T01:00:00Z",
-  "total_dependencies": 5,
-  "dependencies": [
-    {
-      "dependency": "org.springframework:spring-core:6.0.0",
-      "current_version": "6.0.0",
-      "latest_version": "7.0.0-M5",
-      "latest_type": "milestone",
-      "latest_stable": "6.1.14",
-      "is_outdated": true,
-      "status": "found"
-    }
-  ],
-  "summary": {
-    "total": 5,
-    "outdated": 3,
-    "up_to_date": 2,
-    "errors": 0
-  }
-}
-```
-
 ### `maven_compare_versions`
 
 Compares current dependencies with their latest versions and provides update recommendations.
@@ -313,10 +269,10 @@ mvn test
 mvn verify -Pintegration
 
 # Verify the build
-java -jar target/maven-tools-mcp-0.0.1-SNAPSHOT.jar
+java -jar target/maven-tools-mcp-0.1.1-SNAPSHOT.jar
 ```
 
-**Output Location:** `target/maven-tools-mcp-0.0.1-SNAPSHOT.jar`
+**Output Location:** `target/maven-tools-mcp-0.1.1-SNAPSHOT.jar`
 
 ### Testing
 
@@ -359,7 +315,7 @@ Stable Version Result: CallToolResult[content=[TextContent[text="{\"version\":\"
       "command": "java",
       "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-0.0.1-SNAPSHOT.jar"
+        "/absolute/path/to/maven-tools-mcp-0.1.1-SNAPSHOT.jar"
       ]
     }
   }
@@ -375,7 +331,7 @@ Stable Version Result: CallToolResult[content=[TextContent[text="{\"version\":\"
       "command": "java", 
       "args": [
         "-jar",
-        "C:\\Users\\YourName\\Documents\\Github\\maven-tools-mcp\\target\\maven-tools-mcp-0.0.1-SNAPSHOT.jar"
+        "C:\\Users\\YourName\\Documents\\Github\\maven-tools-mcp\\target\\maven-tools-mcp-0.1.1-SNAPSHOT.jar"
       ]
     }
   }
@@ -440,9 +396,8 @@ The server can be configured via `application.yaml`:
 # Cache configuration
 spring:
   cache:
-    type: caffeine
-    caffeine:
-      spec: maximumSize=1000,expireAfterWrite=300s
+    type: caffeine    caffeine:
+      spec: maximumSize=2000,expireAfterWrite=3600s
 
 # Maven Central API settings
 maven:
@@ -502,7 +457,7 @@ mvn test -Dtest=MavenMcpServerIntegrationTest
 - **Java Version**: 24
 - **Transport**: stdio
 - **HTTP Client**: Spring Web RestClient
-- **Cache**: Caffeine (5-minute TTL, 1000 entries max)
+- **Cache**: Caffeine (1-hour TTL, 2000 entries max)
 - **API**: Maven Central Search API
 
 ## License

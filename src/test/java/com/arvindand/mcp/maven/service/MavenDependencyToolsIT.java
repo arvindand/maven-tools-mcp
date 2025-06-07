@@ -9,8 +9,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
- * Integration test class for bulk operations and POM analysis features. Validates the functionality
- * of bulk dependency checking and POM analysis operations in the Maven MCP server.
+ * Integration test class for bulk operations features. Validates the functionality of bulk
+ * dependency checking operations in the Maven MCP server.
  *
  * <p>This is an integration test because it: - Uses @SpringBootTest to start the full application
  * context - Makes real HTTP calls to Maven Central API - Tests the complete flow from service layer
@@ -21,7 +21,7 @@ import org.springframework.test.context.ActiveProfiles;
  */
 @SpringBootTest
 @ActiveProfiles("test")
-class MavenDependencyToolsIntegrationTest {
+class MavenDependencyToolsIT {
 
   @Autowired private MavenDependencyTools mavenDependencyTools;
 
@@ -51,39 +51,6 @@ class MavenDependencyToolsIntegrationTest {
     assertTrue(result.contains("org.springframework:spring-core"));
     assertTrue(result.contains("jackson-core"));
     assertTrue(result.contains("\"type\":\"stable\""));
-  }
-
-  /** Tests POM analysis functionality with a sample POM content. */
-  @Test
-  void testMavenAnalyzePom() {
-    String pomContent =
-        """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <project xmlns="http://maven.apache.org/POM/4.0.0">
-            <dependencies>
-                <dependency>
-                    <groupId>org.springframework</groupId>
-                    <artifactId>spring-core</artifactId>
-                    <version>6.0.0</version>
-                </dependency>
-                <dependency>
-                    <groupId>junit</groupId>
-                    <artifactId>junit</artifactId>
-                    <version>4.12</version>
-                    <scope>test</scope>
-                </dependency>
-            </dependencies>
-        </project>
-        """;
-    String result = mavenDependencyTools.maven_analyze_pom(pomContent);
-
-    assertNotNull(result);
-    assertTrue(result.startsWith("{"));
-    assertTrue(result.endsWith("}"));
-    assertTrue(result.contains("total_dependencies"));
-    assertTrue(result.contains("org.springframework:spring-core"));
-    assertTrue(result.contains("junit:junit"));
-    assertTrue(result.contains("summary"));
   }
 
   @Test
@@ -119,8 +86,9 @@ class MavenDependencyToolsIntegrationTest {
     String result = mavenDependencyTools.maven_get_latest(dependency);
 
     assertNotNull(result);
-    assertTrue(result.startsWith("{") && result.endsWith("}"));
-    // Should always have dependency and total_versions
+    assertTrue(
+        result.startsWith("{")
+            && result.endsWith("}")); // Should always have dependency and total_versions
     assertTrue(result.contains("\"dependency\""));
     assertTrue(result.contains("\"total_versions\""));
     // At least one of the type fields should be present
@@ -129,8 +97,7 @@ class MavenDependencyToolsIntegrationTest {
             || result.contains("latest_rc")
             || result.contains("latest_beta")
             || result.contains("latest_alpha")
-            || result.contains("latest_milestone")
-            || result.contains("latest_snapshot");
+            || result.contains("latest_milestone");
     assertTrue(hasAnyType);
   }
 }

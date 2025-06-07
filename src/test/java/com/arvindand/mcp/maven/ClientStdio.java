@@ -24,7 +24,7 @@ public class ClientStdio {
 
     var stdioParams =
         ServerParameters.builder("java")
-            .args("-jar", "target/maven-tools-mcp-0.0.1-SNAPSHOT.jar")
+            .args("-jar", "target/maven-tools-mcp-0.1.1-SNAPSHOT.jar")
             .build();
 
     var transport = new StdioClientTransport(stdioParams);
