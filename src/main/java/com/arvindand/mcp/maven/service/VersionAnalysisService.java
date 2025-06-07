@@ -93,16 +93,22 @@ public class VersionAnalysisService {
     var currentParts = parseVersionParts(currentVersion);
     var latestParts = parseVersionParts(latestVersion);
 
-    if (currentParts.length >= 1 && latestParts.length >= 1 && latestParts[0] > currentParts[0]) {
-      return MAJOR_TYPE;
+    // Compare each part in order to determine update type
+    for (int i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
+      int current = i < currentParts.length ? currentParts[i] : 0;
+      int latest = i < latestParts.length ? latestParts[i] : 0;
+
+      if (latest > current) {
+        return switch (i) {
+          case 0 -> MAJOR_TYPE;
+          case 1 -> MINOR_TYPE;
+          default -> PATCH_TYPE;
+        };
+      } else if (current > latest) {
+        return UNKNOWN_TYPE; // Downgrade scenario
+      }
     }
-    if (currentParts.length >= 2 && latestParts.length >= 2 && latestParts[1] > currentParts[1]) {
-      return MINOR_TYPE;
-    }
-    if (currentParts.length >= 3 && latestParts.length >= 3 && latestParts[2] > currentParts[2]) {
-      return PATCH_TYPE;
-    }
-    return UNKNOWN_TYPE;
+    return NONE_TYPE; // Same version
   }
 
   private int[] parseVersionParts(String version) {

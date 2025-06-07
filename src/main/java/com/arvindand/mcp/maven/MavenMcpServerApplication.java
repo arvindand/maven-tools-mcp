@@ -1,11 +1,10 @@
 package com.arvindand.mcp.maven;
 
+import com.arvindand.mcp.maven.config.MavenCentralProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cache.annotation.EnableCaching;
-
-import com.arvindand.mcp.maven.config.MavenCentralProperties;
 
 /**
  * Main Spring Boot application class for the Maven MCP Server. This application provides Model

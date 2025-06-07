@@ -90,9 +90,10 @@ public class MavenCentralService {
           response.response().docs().stream()
               .map(MavenSearchResponse.MavenArtifact::version)
               .distinct()
+              .sorted(new VersionComparator().reversed())
               .toList();
 
-      String latest = VersionComparator.getLatest(versions.toArray(String[]::new));
+      String latest = versions.isEmpty() ? null : versions.get(0);
       logger.debug(
           "Latest version for {}:{} is {}", coordinate.groupId(), coordinate.artifactId(), latest);
       return latest;

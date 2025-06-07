@@ -1,15 +1,5 @@
 package com.arvindand.mcp.maven.service;
 
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.stereotype.Service;
-
 import com.arvindand.mcp.maven.model.BulkCheckResult;
 import com.arvindand.mcp.maven.model.DependencyExistsResponse;
 import com.arvindand.mcp.maven.model.DetailedVersionInfo;
@@ -17,6 +7,14 @@ import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.VersionComparisonResponse;
 import com.arvindand.mcp.maven.model.VersionInfo;
 import com.arvindand.mcp.maven.util.MavenCoordinateParser;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.stereotype.Service;
 
 /**
  * Service providing Maven dependency tools for MCP. Exposes Maven dependency lookup functionality
@@ -291,6 +289,7 @@ public class MavenDependencyTools {
       String type = versionAnalysisService.getVersionType(version);
       firstOfType.putIfAbsent(type, version);
 
+      // Early exit once we have all 5 types (versions are already sorted, so these are the latest)
       if (firstOfType.size() == 5) break;
     }
 

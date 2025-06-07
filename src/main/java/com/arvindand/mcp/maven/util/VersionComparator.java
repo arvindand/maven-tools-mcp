@@ -86,8 +86,16 @@ public final class VersionComparator implements Comparator<String> {
    */
   private int getQualifierPriority(String qualifier) {
     String lower = qualifier.toLowerCase();
+
+    // Check if this is a plain numeric version (no qualifier) - highest priority
+    if (NUMERIC_PATTERN.matcher(qualifier).matches()) {
+      return 100; // Plain numeric versions are most stable
+    }
+
+    // Special qualifiers are actually considered LESS than plain releases according to test
+    // expectations
     if (lower.contains("final") || lower.contains("release") || lower.contains("ga")) {
-      return 100;
+      return 95; // Slightly less than plain numeric
     } else if (lower.contains("rc")) {
       return 90;
     } else if (lower.contains("beta")) {

@@ -1,9 +1,12 @@
 package com.arvindand.mcp.maven;
 
-import java.util.stream.Stream;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.arvindand.mcp.maven.model.MavenCoordinate;
+import com.arvindand.mcp.maven.service.MavenCentralException;
+import com.arvindand.mcp.maven.service.MavenCentralService;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -11,10 +14,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
-
-import com.arvindand.mcp.maven.model.MavenCoordinate;
-import com.arvindand.mcp.maven.service.MavenCentralException;
-import com.arvindand.mcp.maven.service.MavenCentralService;
 
 /**
  * Integration tests for Maven MCP Server functionality.

@@ -25,10 +25,11 @@
         <developerConnection/>
         <tag/>
         <url/>
-    </scm>    
+    </scm>      
     <properties>
         <java.version>24</java.version>
         <spring-ai.version>1.0.0</spring-ai.version>
+        <fmt-maven-plugin.version>2.23</fmt-maven-plugin.version>
         
         <!-- Test execution properties -->
         <skipUTs>false</skipUTs>
@@ -133,7 +134,6 @@
                     <forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
                 </configuration>
             </plugin>
-            
             <!-- Failsafe for Integration Tests -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -153,6 +153,26 @@
                         <goals>
                             <goal>integration-test</goal>
                             <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Spotify fmt plugin for Google Java Format -->
+            <plugin>
+                <groupId>com.spotify.fmt</groupId>
+                <artifactId>fmt-maven-plugin</artifactId>
+                <version>${fmt-maven-plugin.version}</version>
+                <configuration>
+                    <!-- Format source and test files -->
+                    <sourceDirectory>src/main/java</sourceDirectory>
+                    <testSourceDirectory>src/test/java</testSourceDirectory>
+                    <!-- Use Google Java Format style -->
+                    <style>google</style>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>check</goal>
                         </goals>
                     </execution>
                 </executions>

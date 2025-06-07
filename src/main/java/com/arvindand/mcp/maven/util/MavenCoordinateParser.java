@@ -35,6 +35,12 @@ public final class MavenCoordinateParser {
               + dependency);
     }
 
+    if (parts.length > 5) {
+      throw new IllegalArgumentException(
+          "Invalid Maven coordinate format. Maximum format is 'groupId:artifactId:version:packaging:classifier'. Got: "
+              + dependency);
+    }
+
     String groupId = parts[0].trim();
     String artifactId = parts[1].trim();
 

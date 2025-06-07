@@ -1,4 +1,5 @@
 HELP.md
+CLAUDE.md
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
@@ -35,3 +36,5 @@ build/
 
 # Environment variables file
 .env
+
+.claude

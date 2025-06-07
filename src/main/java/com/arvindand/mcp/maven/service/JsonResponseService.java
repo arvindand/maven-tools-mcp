@@ -58,7 +58,7 @@ public class JsonResponseService {
     } catch (JsonProcessingException _) {
       // Fallback to manual JSON if ObjectMapper fails
       return String.format(
-          "{\"status\":\"error\",\"error\":\"%s\"}", errorMessage.replace("\"", "\\\""));
+          "{\"status\":\"error\",\"message\":\"%s\"}", errorMessage.replace("\"", "\\\""));
     }
   }
 
@@ -81,7 +81,7 @@ public class JsonResponseService {
    * Error response record for standardized error formatting.
    *
    * @param status the response status
-   * @param error the error message
+   * @param message the error message
    */
-  private record ErrorResponse(String status, String error) {}
+  private record ErrorResponse(String status, String message) {}
 }
