@@ -286,10 +286,10 @@ mvn test
 mvn verify -Pintegration
 
 # Verify the build
-java -jar target/maven-tools-mcp-0.1.1-SNAPSHOT.jar
+java -jar target/maven-tools-mcp-0.1.2-SNAPSHOT.jar
 ```
 
-**Output Location:** `target/maven-tools-mcp-0.1.1-SNAPSHOT.jar`
+**Output Location:** `target/maven-tools-mcp-0.1.2-SNAPSHOT.jar`
 
 
 ## AI Assistant Integration
@@ -308,10 +308,9 @@ java -jar target/maven-tools-mcp-0.1.1-SNAPSHOT.jar
 {
   "mcpServers": {
     "maven-tools": {
-      "command": "java",
-      "args": [
+      "command": "java",      "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-0.1.1-SNAPSHOT.jar"
+        "/absolute/path/to/maven-tools-mcp-0.1.2-SNAPSHOT.jar"
       ]
     }
   }
@@ -324,10 +323,9 @@ java -jar target/maven-tools-mcp-0.1.1-SNAPSHOT.jar
 {
   "mcpServers": {
     "maven-tools": {
-      "command": "java", 
-      "args": [
+      "command": "java",      "args": [
         "-jar",
-        "C:\\Users\\YourName\\Documents\\Github\\maven-tools-mcp\\target\\maven-tools-mcp-0.1.1-SNAPSHOT.jar"
+        "C:\\Users\\YourName\\Documents\\Github\\maven-tools-mcp\\target\\maven-tools-mcp-0.1.2-SNAPSHOT.jar"
       ]
     }
   }
