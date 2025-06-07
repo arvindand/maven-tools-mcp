@@ -11,6 +11,8 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
@@ -169,8 +171,18 @@ public class MavenDependencyTools {
           List<String> depList = parseDependencyList(dependencies);
           long startTime = System.currentTimeMillis();
 
-          List<BulkCheckResult> results =
-              depList.stream().distinct().parallel().map(this::processLatestVersionCheck).toList();
+          List<BulkCheckResult> results;
+          try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<BulkCheckResult>> futures =
+                depList.stream()
+                    .distinct()
+                    .map(
+                        dep ->
+                            CompletableFuture.supplyAsync(
+                                () -> processLatestVersionCheck(dep), executor))
+                    .toList();
+            results = futures.stream().map(CompletableFuture::join).toList();
+          }
 
           if (logger.isDebugEnabled()) {
             long duration = System.currentTimeMillis() - startTime;
@@ -198,8 +210,18 @@ public class MavenDependencyTools {
           List<String> depList = parseDependencyList(dependencies);
           long startTime = System.currentTimeMillis();
 
-          List<BulkCheckResult> results =
-              depList.stream().distinct().parallel().map(this::processStableVersionCheck).toList();
+          List<BulkCheckResult> results;
+          try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<BulkCheckResult>> futures =
+                depList.stream()
+                    .distinct()
+                    .map(
+                        dep ->
+                            CompletableFuture.supplyAsync(
+                                () -> processStableVersionCheck(dep), executor))
+                    .toList();
+            results = futures.stream().map(CompletableFuture::join).toList();
+          }
 
           if (logger.isDebugEnabled()) {
             long duration = System.currentTimeMillis() - startTime;
@@ -229,8 +251,18 @@ public class MavenDependencyTools {
           List<String> depList = parseDependencyList(currentDependencies);
           long startTime = System.currentTimeMillis();
 
-          List<VersionComparisonResponse.DependencyComparisonResult> comparisonResults =
-              depList.stream().distinct().parallel().map(this::compareDependencyVersion).toList();
+          List<VersionComparisonResponse.DependencyComparisonResult> comparisonResults;
+          try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<VersionComparisonResponse.DependencyComparisonResult>> futures =
+                depList.stream()
+                    .distinct()
+                    .map(
+                        dep ->
+                            CompletableFuture.supplyAsync(
+                                () -> compareDependencyVersion(dep), executor))
+                    .toList();
+            comparisonResults = futures.stream().map(CompletableFuture::join).toList();
+          }
 
           VersionComparisonResponse.UpdateSummary summary =
               calculateComparisonSummary(comparisonResults);

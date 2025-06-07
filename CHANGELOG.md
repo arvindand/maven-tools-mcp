@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.1-SNAPSHOT]
 
+### Added
+
+- Virtual thread support for optimal I/O-bound performance in bulk operations
+
+### Changed
+
+- Extended cache TTL from 1 hour to 24 hours for optimal performance
+
 ### Removed
 
 - Support for 'snapshot' version type in all tools, API responses, and documentation. Only stable, rc, beta, alpha, and milestone are now supported.
@@ -29,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `maven_bulk_check_stable` - Bulk stable version checking
   - `maven_analyze_pom` - POM file analysis
   - `maven_compare_versions` - Version comparison
-- Caching with 5-minute TTL
+- Caching with 1 hour TTL
 - Version classification (stable, rc, beta, alpha, milestone)
 - Works with Claude Desktop and GitHub Copilot
 

@@ -14,7 +14,7 @@ spring:
   cache:
     type: caffeine
     caffeine:
-      spec: maximumSize=2000,expireAfterWrite=3600s
+      spec: maximumSize=2000,expireAfterWrite=86400s
 
 # Logging configuration for STDIO mode - allow app logs but suppress framework logs
 logging:
