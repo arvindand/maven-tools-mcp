@@ -291,27 +291,6 @@ java -jar target/maven-tools-mcp-0.1.1-SNAPSHOT.jar
 
 **Output Location:** `target/maven-tools-mcp-0.1.1-SNAPSHOT.jar`
 
-### Testing
-
-This project separates unit tests from integration tests:
-
-- **Unit Tests**: Fast, no network calls
-- **Integration Tests**: Real Maven Central API calls
-
-### Validation Testing
-
-Verify your installation with the included test client:
-
-src\test\java\com\arvindand\mcp\maven\ClientStdio.java
-
-**Expected Output:**
-
-```text
-Available Tools = [Tool[name=maven_check_exists...], Tool[name=maven_get_latest...], Tool[name=maven_get_stable...]]
-Latest Version Result: CallToolResult[content=[TextContent[text="{\"version\":\"7.0.0-M5\",\"type\":\"milestone\"}"]], isError=false]
-Version Exists Result: CallToolResult[content=[TextContent[text="{\"exists\":true,\"version\":\"6.0.0\",\"type\":\"stable\"}"]], isError=false]
-Stable Version Result: CallToolResult[content=[TextContent[text="{\"version\":\"2.18.2\",\"type\":\"stable\",\"total_versions\":45,\"stable_versions\":38}"]], isError=false]
-```
 
 ## AI Assistant Integration
 
