@@ -259,11 +259,65 @@ Compares current dependencies with their latest versions and provides update rec
 
 ### Prerequisites
 
+#### Option 1: Docker (Recommended)
+
+- Docker 20.10+
+- Internet connection for Maven Central API access
+
+#### Option 2: Java Development (Build from Source)
+
 - Java 24
 - Maven 3.9+
 - Internet connection for Maven Central API access
 
-### Build & Deploy
+### Using Pre-built Docker Image (Easiest)
+
+**Docker Compose (Recommended for local development):**
+
+```bash
+# Use with docker-compose (see docker-compose.yml)
+docker compose up
+
+# Run in detached mode
+docker compose up -d
+
+# Stop the service
+docker compose down
+```
+
+**Direct Docker commands:**
+
+```bash
+# Pull and run the latest version from Docker Hub
+docker run -i arvindand/maven-tools-mcp:latest
+
+# Or use a specific version
+docker run -i arvindand/maven-tools-mcp:0.1.2
+```
+
+**Benefits of Docker Compose:**
+
+- Easier container management with predefined configuration
+- Automatic memory and resource limits
+- Consistent environment variables
+- Easy to start/stop/restart
+- Perfect for MCP client integration
+
+### Build from Source (Optional)
+
+```bash
+# Clone the repository
+git clone https://github.com/arvindand/maven-tools-mcp.git
+cd maven-tools-mcp
+
+# Build with Spring Boot buildpacks (creates optimized image)
+./mvnw spring-boot:build-image
+
+# Run the locally built image
+docker run -i maven-tools-mcp:0.1.2-SNAPSHOT
+```
+
+**Traditional Java Build:**
 
 ```bash
 # Clone the repository
@@ -271,22 +325,40 @@ git clone https://github.com/arvindand/maven-tools-mcp.git
 cd maven-tools-mcp
 
 # Quick build (CI-friendly - unit tests only)
-mvn clean package -Pci
+./mvnw clean package -Pci
 
 # Full build with all tests (requires network access)
-mvn clean package -Pfull
+./mvnw clean package -Pfull
 
 # Build without any tests (fastest)
-mvn clean package -DskipTests
+./mvnw clean package -DskipTests
 
 # Run only unit tests (no Maven Central API calls)
-mvn test
+./mvnw test
 
 # Run only integration tests (requires network access)
-mvn verify -Pintegration
+./mvnw verify -Pintegration
 
 # Verify the build
 java -jar target/maven-tools-mcp-0.1.2-SNAPSHOT.jar
+```
+
+**Convenient Build Scripts:**
+
+For easier builds, use the provided scripts in the `build/` folder:
+
+```bash
+# Linux/macOS - Complete build helper (JAR, Docker, tests, clean)
+./build/build.sh
+
+# Linux/macOS - Docker-focused options
+./build/build-docker.sh
+
+# Windows - Complete build helper (handles spaces in paths)
+.\build\build-windows.cmd
+
+# Windows - Docker-focused options
+.\build\build-docker.cmd
 ```
 
 **Output Location:** `target/maven-tools-mcp-0.1.2-SNAPSHOT.jar`
@@ -301,13 +373,107 @@ java -jar target/maven-tools-mcp-0.1.2-SNAPSHOT.jar
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Linux:** `~/.config/Claude/claude_desktop_config.json`
 
-**Step 2:** Add Server Configuration
+**Step 2:** Choose Your Deployment Method
+
+#### Option A: Docker Deployment (Recommended)
+
+**A1: Docker Compose (Recommended):**
 
 ```json
 {
   "mcpServers": {
     "maven-tools": {
-      "command": "java",      "args": [
+      "command": "docker",
+      "args": [
+        "compose", "-f", "/absolute/path/to/docker-compose.yml", 
+        "run", "--rm", "maven-tools-mcp"
+      ]
+    }
+  }
+}
+```
+
+**Windows Example:**
+
+```json
+{
+  "mcpServers": {
+    "maven-tools": {
+      "command": "docker",
+      "args": [
+        "compose", "-f", "C:\\Users\\YourName\\Documents\\Github\\maven-tools-mcp\\docker-compose.yml",
+        "run", "--rm", "maven-tools-mcp"
+      ]
+    }
+  }
+}
+```
+
+**macOS/Linux Example:**
+
+```json
+{
+  "mcpServers": {
+    "maven-tools": {
+      "command": "docker",
+      "args": [
+        "compose", "-f", "/Users/YourName/Documents/Github/maven-tools-mcp/docker-compose.yml",
+        "run", "--rm", "maven-tools-mcp"
+      ]
+    }
+  }
+}
+```
+
+**A2: Direct Docker Commands:**
+
+**Using Pre-built Image from Docker Hub:**
+
+```json
+{
+  "mcpServers": {
+    "maven-tools": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "arvindand/maven-tools-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+**Using Locally Built Image:**
+
+```json
+{
+  "mcpServers": {
+    "maven-tools": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "maven-tools-mcp:0.1.2-SNAPSHOT"
+      ]
+    }
+  }
+}
+```
+
+**Prerequisites for Docker Deployment:**
+
+- Docker and Docker Compose installed
+- Internet connection for Maven Central API access
+
+#### Option B: Java/JAR Deployment
+
+**General Configuration:**
+
+```json
+{
+  "mcpServers": {
+    "maven-tools": {
+      "command": "java",
+      "args": [
         "-jar",
         "/absolute/path/to/maven-tools-mcp-0.1.2-SNAPSHOT.jar"
       ]
@@ -322,7 +488,8 @@ java -jar target/maven-tools-mcp-0.1.2-SNAPSHOT.jar
 {
   "mcpServers": {
     "maven-tools": {
-      "command": "java",      "args": [
+      "command": "java",
+      "args": [
         "-jar",
         "C:\\Users\\YourName\\Documents\\Github\\maven-tools-mcp\\target\\maven-tools-mcp-0.1.2-SNAPSHOT.jar"
       ]
@@ -330,6 +497,11 @@ java -jar target/maven-tools-mcp-0.1.2-SNAPSHOT.jar
   }
 }
 ```
+
+**Prerequisites for Java Deployment:**
+
+- Java 24 installed and in PATH
+- Built JAR file available at specified location
 
 **Step 3:** Restart Claude Desktop
 
@@ -339,9 +511,75 @@ java -jar target/maven-tools-mcp-0.1.2-SNAPSHOT.jar
 - *"Does version 3.2.0 exist for org.springframework.boot:spring-boot-starter?"*
 - *"Check if Jackson 2.15.0 is available"*
 
-### GitHub Copilot Integration
+### VS Code with GitHub Copilot Integration
 
-GitHub Copilot supports MCP servers through IDE extensions. Configure using the same JAR file path in your IDE's MCP settings.
+VS Code supports MCP servers in agent mode (VS Code 1.99+). Enable with `chat.mcp.enabled` setting, then configure using either:
+
+**Option 1: Workspace Configuration** - Create `.vscode/mcp.json`:
+
+**1a: Docker Compose (Recommended):**
+
+```json
+{
+  "servers": {
+    "maven-tools": {
+      "type": "stdio",
+      "command": "docker",
+      "args": ["compose", "-f", "${workspaceFolder}/docker-compose.yml", "run", "--rm", "maven-tools-mcp"]
+    }
+  }
+}
+```
+
+**1b: Direct Docker:**
+
+```json
+{
+  "servers": {
+    "maven-tools": {
+      "type": "stdio",
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "arvindand/maven-tools-mcp:latest"]
+    }
+  }
+}
+```
+
+**Option 2: User Settings** - Add to your VS Code settings:
+
+**2a: Docker Compose:**
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "maven-tools": {
+        "type": "stdio", 
+        "command": "docker",
+        "args": ["compose", "-f", "/absolute/path/to/docker-compose.yml", "run", "--rm", "maven-tools-mcp"]
+      }
+    }
+  }
+}
+```
+
+**2b: Java/JAR:**
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "maven-tools": {
+        "type": "stdio", 
+        "command": "java",
+        "args": ["-jar", "${workspaceFolder}/target/maven-tools-mcp-0.1.2-SNAPSHOT.jar"]
+      }
+    }
+  }
+}
+```
+
+**Usage:** Open Chat view (Ctrl+Alt+I), select Agent mode, then use the Tools button to enable Maven tools.
 
 ### Enterprise & Custom Clients
 

@@ -7,24 +7,30 @@
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>3.5.0</version>
         <relativePath/> <!-- lookup parent from repository -->
-    </parent>    
+    </parent>  
     <groupId>com.arvindand.mcp</groupId>
     <artifactId>maven-tools-mcp</artifactId>
     <version>0.1.2-SNAPSHOT</version>
     <name>maven-tools-mcp</name>
     <description>A Model Context Protocol (MCP) server for Maven dependency management. Works with Claude Desktop, GitHub Copilot, and other MCP clients.</description>
-    <url/>
+    <url>https://github.com/arvindand/maven-tools-mcp</url>
     <licenses>
-        <license/>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+        </license>
     </licenses>
     <developers>
-        <developer/>
+        <developer>
+            <name>Arvind Menon</name>
+            <email>arvind@example.com</email>
+        </developer>
     </developers>
     <scm>
-        <connection/>
-        <developerConnection/> 
-        <tag/>
-        <url/>
+        <connection>scm:git:git://github.com/arvindand/maven-tools-mcp.git</connection>
+        <developerConnection>scm:git:ssh://github.com:arvindand/maven-tools-mcp.git</developerConnection> 
+        <tag>HEAD</tag>
+        <url>https://github.com/arvindand/maven-tools-mcp</url>
     </scm>        
     <properties>
         <java.version>24</java.version>
@@ -113,10 +119,26 @@
     </profiles>
     
     <build>
-        <plugins>
+        <plugins>                
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <image>
+                        <name>arvindand/maven-tools-mcp:${project.version}</name>
+                        <tags>
+                            <tag>arvindand/maven-tools-mcp:latest</tag>
+                        </tags>
+                        <publish>true</publish>
+                    </image>
+                    <docker>
+                        <publishRegistry>
+                            <username>${docker.publishRegistry.username}</username>
+                            <password>${docker.publishRegistry.password}</password>
+                            <url>https://index.docker.io/v1/</url>
+                        </publishRegistry>
+                    </docker>
+                </configuration>
             </plugin>
             
             <!-- Surefire for Unit Tests -->

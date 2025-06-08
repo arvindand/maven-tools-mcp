@@ -33,14 +33,14 @@
 @SET __MVNW_PSMODULEP_SAVE=%PSModulePath%
 @SET PSModulePath=
 @FOR /F "usebackq tokens=1* delims==" %%A IN (`powershell -noprofile "& {$scriptDir='%~dp0'; $script='%__MVNW_ARG0_NAME__%'; icm -ScriptBlock ([Scriptblock]::Create((Get-Content -Raw '%~f0'))) -NoNewScope}"`) DO @(
-  IF "%%A"=="MVN_CMD" (set __MVNW_CMD__=%%B) ELSE IF "%%B"=="" (echo %%A) ELSE (echo %%A=%%B)
+  IF "%%A"=="MVN_CMD" (set "__MVNW_CMD__=%%B") ELSE IF "%%B"=="" (echo %%A) ELSE (echo %%A=%%B)
 )
 @SET PSModulePath=%__MVNW_PSMODULEP_SAVE%
 @SET __MVNW_PSMODULEP_SAVE=
 @SET __MVNW_ARG0_NAME__=
 @SET MVNW_USERNAME=
 @SET MVNW_PASSWORD=
-@IF NOT "%__MVNW_CMD__%"=="" (%__MVNW_CMD__% %*)
+@IF NOT "%__MVNW_CMD__%"=="" (call "%__MVNW_CMD__%" %* && exit /b 0)
 @echo Cannot start maven from wrapper >&2 && exit /b 1
 @GOTO :EOF
 : end batch / begin powershell #>
@@ -78,16 +78,16 @@ if ($env:MVNW_REPOURL) {
 }
 $distributionUrlName = $distributionUrl -replace '^.*/',''
 $distributionUrlNameMain = $distributionUrlName -replace '\.[^.]*$','' -replace '-bin$',''
-$MAVEN_HOME_PARENT = "$HOME/.m2/wrapper/dists/$distributionUrlNameMain"
+$MAVEN_HOME_PARENT = "$env:USERPROFILE\.m2\wrapper\dists\$distributionUrlNameMain"
 if ($env:MAVEN_USER_HOME) {
-  $MAVEN_HOME_PARENT = "$env:MAVEN_USER_HOME/wrapper/dists/$distributionUrlNameMain"
+  $MAVEN_HOME_PARENT = "$env:MAVEN_USER_HOME\wrapper\dists\$distributionUrlNameMain"
 }
 $MAVEN_HOME_NAME = ([System.Security.Cryptography.MD5]::Create().ComputeHash([byte[]][char[]]$distributionUrl) | ForEach-Object {$_.ToString("x2")}) -join ''
-$MAVEN_HOME = "$MAVEN_HOME_PARENT/$MAVEN_HOME_NAME"
+$MAVEN_HOME = "$MAVEN_HOME_PARENT\$MAVEN_HOME_NAME"
 
 if (Test-Path -Path "$MAVEN_HOME" -PathType Container) {
   Write-Verbose "found existing MAVEN_HOME at $MAVEN_HOME"
-  Write-Output "MVN_CMD=$MAVEN_HOME/bin/$MVN_CMD"
+  Write-Output "MVN_CMD=$MAVEN_HOME\bin\$MVN_CMD"
   exit $?
 }
 
@@ -141,9 +141,8 @@ try {
   if (! (Test-Path -Path "$MAVEN_HOME" -PathType Container)) {
     Write-Error "fail to move MAVEN_HOME"
   }
-} finally {
-  try { Remove-Item $TMP_DOWNLOAD_DIR -Recurse -Force | Out-Null }
+} finally {  try { Remove-Item $TMP_DOWNLOAD_DIR -Recurse -Force | Out-Null }
   catch { Write-Warning "Cannot remove $TMP_DOWNLOAD_DIR" }
 }
 
-Write-Output "MVN_CMD=$MAVEN_HOME/bin/$MVN_CMD"
+Write-Output "MVN_CMD=$MAVEN_HOME\bin\$MVN_CMD"

@@ -1,0 +1,27 @@
+# Maven Tools MCP Server - Buildpack Optimizations
+# Exclude unnecessary files from Docker build context
+
+# Build artifacts
+target/
+*.jar
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git and documentation (not needed in runtime)
+.git/
+*.md
+CHANGELOG.md
+CLAUDE.md
+
+# Logs and temporary files
+logs/
+*.log
+*.tmp
+*.bak

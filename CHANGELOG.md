@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Docker support for MCP server deployment with pre-built images and Docker Compose
+
 ### Changed
+
+- Enhanced build tooling and documentation for Docker deployment
 
 ### Removed
 
