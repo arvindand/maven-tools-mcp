@@ -295,14 +295,6 @@ docker run -i arvindand/maven-tools-mcp:latest
 docker run -i arvindand/maven-tools-mcp:0.1.2
 ```
 
-**Benefits of Docker Compose:**
-
-- Easier container management with predefined configuration
-- Automatic memory and resource limits
-- Consistent environment variables
-- Easy to start/stop/restart
-- Perfect for MCP client integration
-
 ### Build from Source (Optional)
 
 ```bash
