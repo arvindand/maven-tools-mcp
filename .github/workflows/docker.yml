@@ -1,4 +1,4 @@
-name: Build and Publish Docker Image
+﻿name: Build and Publish Docker Image
 
 on:
   push:
@@ -53,7 +53,9 @@ jobs:
         # For PRs, build locally without pushing (override publish setting)
         ./mvnw spring-boot:build-image \
           -Dspring-boot.build-image.publish=false \
-          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:pr-${{ github.event.number }}    - name: Test Docker image functionality
+          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:pr-${{ github.event.number }}
+
+    - name: Test Docker image functionality
       run: |
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
           IMAGE_NAME="arvindand/maven-tools-mcp:pr-${{ github.event.number }}"
