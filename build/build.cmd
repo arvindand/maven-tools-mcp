@@ -54,10 +54,9 @@ if "%choice%"=="3" (
     echo Step 2: Build Docker image...
     call :run_maven spring-boot:build-image
     if errorlevel 1 goto :error
-    
-    echo ✅ Docker image built successfully!
+      echo ✅ Docker image built successfully!
     echo.
-    echo To run: docker run -i maven-tools-mcp:0.1.2-SNAPSHOT
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:0.1.2-SNAPSHOT
     goto :end
 )
 

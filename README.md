@@ -427,7 +427,7 @@ For easier builds, use the provided scripts in the `build/` folder:
     "maven-tools": {
       "command": "docker",
       "args": [
-        "run", "-i", "--rm",
+        "run", "-i", "--rm", "-e", "SPRING_PROFILES_ACTIVE=docker",
         "arvindand/maven-tools-mcp:latest"
       ]
     }
@@ -443,7 +443,7 @@ For easier builds, use the provided scripts in the `build/` folder:
     "maven-tools": {
       "command": "docker",
       "args": [
-        "run", "-i", "--rm",
+        "run", "-i", "--rm", "-e", "SPRING_PROFILES_ACTIVE=docker",
         "maven-tools-mcp:0.1.2-SNAPSHOT"
       ]
     }
@@ -531,7 +531,7 @@ VS Code supports MCP servers in agent mode (VS Code 1.99+). Enable with `chat.mc
     "maven-tools": {
       "type": "stdio",
       "command": "docker",
-      "args": ["run", "-i", "--rm", "arvindand/maven-tools-mcp:latest"]
+      "args": ["run", "-i", "--rm", "-e", "SPRING_PROFILES_ACTIVE=docker", "arvindand/maven-tools-mcp:latest"]
     }
   }
 }

@@ -29,7 +29,7 @@ if not "%1"=="" (
 if "%choice%"=="1" (
     echo Pulling pre-built image from Docker Hub...
     docker pull arvindand/maven-tools-mcp:latest
-    echo Ready to use: docker run -i arvindand/maven-tools-mcp:latest
+    echo Ready to use: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:latest
     goto :end
 )
 
@@ -75,7 +75,7 @@ REM Fallback to default version if Maven command failed
 if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=0.1.2-SNAPSHOT
 
 echo Built image: maven-tools-mcp:%PROJECT_VERSION%
-echo Run with: docker run -i maven-tools-mcp:%PROJECT_VERSION%
+echo Run with: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:%PROJECT_VERSION%
 goto :end
 
 :end

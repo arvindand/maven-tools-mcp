@@ -74,7 +74,7 @@ case $choice in
         
         echo "✅ Docker image built successfully!"
         echo ""
-        echo "To run: docker run -i maven-tools-mcp:${PROJECT_VERSION}"
+        echo "To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:${PROJECT_VERSION}"
         exit 0
         ;;
     4)

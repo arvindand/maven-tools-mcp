@@ -53,9 +53,7 @@ jobs:
         # For PRs, build locally without pushing (override publish setting)
         ./mvnw spring-boot:build-image \
           -Dspring-boot.build-image.publish=false \
-          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:pr-${{ github.event.number }}
-
-    - name: Test Docker image functionality
+          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:pr-${{ github.event.number }}    - name: Test Docker image functionality
       run: |
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
           IMAGE_NAME="arvindand/maven-tools-mcp:pr-${{ github.event.number }}"
@@ -65,18 +63,8 @@ jobs:
           IMAGE_NAME="arvindand/maven-tools-mcp:${PROJECT_VERSION}"
         fi
         
-        # Test that the container starts and responds
-        timeout 30s docker run --rm $IMAGE_NAME --help || true
+        # Test that the container starts and responds with docker profile
+        timeout 30s docker run --rm -e SPRING_PROFILES_ACTIVE=docker $IMAGE_NAME --help || true
         
         # Basic health check
         echo "Docker image built and basic tests passed"
-
-    - name: Update Docker Hub description
-      if: github.ref == 'refs/heads/main'
-      uses: peter-evans/dockerhub-description@v4
-      with:
-        username: ${{ secrets.DOCKER_HUB_USERNAME }}
-        password: ${{ secrets.DOCKER_HUB_TOKEN }}
-        repository: ${{ env.DOCKER_HUB_REPOSITORY }}
-        short-description: "Model Context Protocol (MCP) server for Maven dependency management"
-        readme-filepath: ./DOCKER.md

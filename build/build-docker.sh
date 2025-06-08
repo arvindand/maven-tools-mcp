@@ -33,7 +33,7 @@ case $choice in
     1)
         echo "🐳 Pulling pre-built image from Docker Hub..."
         docker pull arvindand/maven-tools-mcp:latest
-        echo "✅ Ready to use: docker run -i arvindand/maven-tools-mcp:latest"
+        echo "✅ Ready to use: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:latest"
         ;;
     2)
         echo "🏗️  Building with Spring Boot buildpacks..."
@@ -56,7 +56,7 @@ case $choice in
         
         PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.2-SNAPSHOT")
         echo "✅ Built image: maven-tools-mcp:${PROJECT_VERSION}"
-        echo "🚀 Run with: docker run -i maven-tools-mcp:${PROJECT_VERSION}"
+        echo "🚀 Run with: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:${PROJECT_VERSION}"
         ;;
     *)
         echo "❌ Invalid option. Please choose 1 or 2."
