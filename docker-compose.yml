@@ -6,25 +6,13 @@ services:
     image: arvindand/maven-tools-mcp:latest
     container_name: maven-tools-mcp
     
-    # MCP uses stdio transport, so we need interactive mode
+    # MCP uses stdio transport - stdin_open required, tty should be false
     stdin_open: true
-    tty: true
+    tty: false  # Changed: tty interferes with JSON-RPC stdio
     
     # Network access for Maven Central API
     network_mode: "bridge"
-      # Environment variables for configuration
+    
+    # Environment variables for configuration
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - MAVEN_CENTRAL_TIMEOUT=PT15S
-      - MAVEN_CENTRAL_MAX_RESULTS=100
-      
-    # Restart policy
-    restart: unless-stopped
-    
-    # Health check
-    healthcheck:
-      test: ["CMD", "java", "-version"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s

@@ -130,6 +130,10 @@
                             <tag>arvindand/maven-tools-mcp:latest</tag>
                         </tags>
                         <publish>true</publish>
+                        <env>
+                            <!-- Override buildpack JVM options for MCP compatibility -->
+                            <JAVA_TOOL_OPTIONS>-XX:+ExitOnOutOfMemoryError -XX:MaxDirectMemorySize=10M -Xmx512M -XX:MaxMetaspaceSize=128M -XX:ReservedCodeCacheSize=128M -Xss1M</JAVA_TOOL_OPTIONS>
+                        </env>
                     </image>
                     <docker>
                         <publishRegistry>
