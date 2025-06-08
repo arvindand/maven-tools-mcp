@@ -2,7 +2,6 @@ spring:
   main:
     web-application-type: none
     banner-mode: off
-    log-startup-info: false
   application:
     name: maven-tools-mcp
   ai:

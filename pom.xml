@@ -129,11 +129,7 @@
                         <tags>
                             <tag>arvindand/maven-tools-mcp:latest</tag>
                         </tags>
-                        <publish>true</publish>
-                        <env>
-                            <!-- Override buildpack JVM options for MCP compatibility -->
-                            <BPE_OVERRIDE_JAVA_TOOL_OPTIONS>-XX:+ExitOnOutOfMemoryError -XX:MaxDirectMemorySize=10M -Xmx512M -XX:MaxMetaspaceSize=128M -XX:ReservedCodeCacheSize=128M -Xss1M</BPE_OVERRIDE_JAVA_TOOL_OPTIONS>
-                        </env>
+                        <publish>false</publish>
                     </image>
                     <docker>
                         <publishRegistry>
