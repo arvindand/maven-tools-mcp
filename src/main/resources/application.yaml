@@ -2,6 +2,7 @@ spring:
   main:
     web-application-type: none
     banner-mode: off
+    log-startup-info: false
   application:
     name: maven-tools-mcp
   ai:
@@ -16,17 +17,22 @@ spring:
     caffeine:
       spec: maximumSize=2000,expireAfterWrite=86400s
 
-# Logging configuration for STDIO mode - allow app logs but suppress framework logs
+# Logging configuration - let logback-spring.xml handle the appenders
 logging:
   level:
+    # Your app logs at INFO level (goes to STDERR via logback config)
     "[com.arvindand.mcp.maven]": INFO
+    # Framework logs at ERROR level to minimize noise
     "[org.springframework.ai.mcp]": ERROR
     "[org.springframework.boot]": ERROR
     "[org.springframework]": ERROR
+    "[org.apache.http]": ERROR
+    "[ch.qos.logback]": ERROR
     root: ERROR
+  # Keep your logback configuration
   config: "classpath:logback-spring.xml"
 
-# Maven Central API configuration
+# Maven Central API configuration  
 maven:
   central: 
     base-url: https://search.maven.org/solrsearch/select
