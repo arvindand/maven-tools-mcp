@@ -129,7 +129,7 @@
                         <tags>
                             <tag>arvindand/maven-tools-mcp:latest</tag>
                         </tags>
-                        <publish>false</publish>
+                        <publish>true</publish>
                     </image>
                     <docker>
                         <publishRegistry>
