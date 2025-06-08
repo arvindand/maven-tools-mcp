@@ -108,7 +108,7 @@
             </properties>
         </profile>
         
-        <!-- Full Profile: Run all tests -->
+        <!-- Full Profile: Run all tests --> 
         <profile>
             <id>full</id>
             <properties>
@@ -119,7 +119,11 @@
     </profiles>
     
     <build>
-        <plugins>                
+        <plugins>
+            <plugin>
+                <groupId>org.graalvm.buildtools</groupId>
+                <artifactId>native-maven-plugin</artifactId>
+            </plugin>                
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
@@ -129,6 +133,9 @@
                         <tags>
                             <tag>arvindand/maven-tools-mcp:latest</tag>
                         </tags>
+                        <env>
+                            <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
+                        </env>
                         <publish>true</publish>
                     </image>
                     <docker>
