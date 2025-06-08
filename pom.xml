@@ -25,11 +25,11 @@
         <developerConnection/> 
         <tag/>
         <url/>
-    </scm>      
+    </scm>        
     <properties>
         <java.version>24</java.version>
         <spring-ai.version>1.0.0</spring-ai.version>
-        <fmt-maven-plugin.version>2.23</fmt-maven-plugin.version>
+        <fmt-maven-plugin.version>2.27</fmt-maven-plugin.version>
         
         <!-- Test execution properties -->
         <skipUTs>false</skipUTs>
