@@ -54,7 +54,8 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, MavenSearchResponse.MavenArtifact.class);
 
       // Register VersionComparator record for version parsing
-      registerRecordClass(hints, com.arvindand.mcp.maven.util.VersionComparator.VersionComponents.class);
+      registerRecordClass(
+          hints, com.arvindand.mcp.maven.util.VersionComparator.VersionComponents.class);
 
       // Register enum classes for Jackson serialization and reflection access
       registerEnumClass(hints, VersionInfo.VersionType.class);
@@ -82,7 +83,7 @@ public class NativeImageConfiguration {
     }
 
     /**
-     * Register an enum class with reflection access for Jackson serialization and native image 
+     * Register an enum class with reflection access for Jackson serialization and native image
      * compatibility.
      */
     private void registerEnumClass(RuntimeHints hints, Class<?> enumClass) {

@@ -40,7 +40,8 @@ public record BulkCheckResult(
   }
 
   public static BulkCheckResult found(String dependency, String version, String type) {
-    return new BulkCheckResult(dependency, version, type, Status.FOUND.getValue(), null, null, null);
+    return new BulkCheckResult(
+        dependency, version, type, Status.FOUND.getValue(), null, null, null);
   }
 
   public static BulkCheckResult foundStable(
@@ -56,7 +57,8 @@ public record BulkCheckResult(
   }
 
   public static BulkCheckResult notFound(String dependency) {
-    return new BulkCheckResult(dependency, null, null, Status.NOT_FOUND.getValue(), null, null, null);
+    return new BulkCheckResult(
+        dependency, null, null, Status.NOT_FOUND.getValue(), null, null, null);
   }
 
   public static BulkCheckResult noStableVersion(String dependency, int totalVersions) {
