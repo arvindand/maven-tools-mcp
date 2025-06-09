@@ -1,4 +1,4 @@
-﻿name: Build and Publish Docker Image
+﻿name: Build and Publish Native Docker Image
 
 on:
   push:
@@ -39,23 +39,23 @@ jobs:
     - name: Build with Maven (no tests for faster builds)
       run: ./mvnw clean package -DskipTests
 
-    - name: Build and push Docker image (main/develop/tags)
+    - name: Build and push Native Docker image (main/develop/tags)
       if: github.event_name != 'pull_request'
       run: |
-        # Build and push with Spring Boot plugin using pom.xml configuration
-        ./mvnw spring-boot:build-image \
+        # Build and push native image with Spring Boot plugin using pom.xml configuration
+        ./mvnw -Pnative spring-boot:build-image \
           -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
           -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
 
-    - name: Build Docker image for PR (no push)
+    - name: Build Native Docker image for PR (no push)
       if: github.event_name == 'pull_request'
       run: |
-        # For PRs, build locally without pushing (override publish setting)
-        ./mvnw spring-boot:build-image \
+        # For PRs, build native image locally without pushing (override publish setting)
+        ./mvnw -Pnative spring-boot:build-image \
           -Dspring-boot.build-image.publish=false \
           -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:pr-${{ github.event.number }}
 
-    - name: Test Docker image functionality
+    - name: Test Native Docker image functionality
       run: |
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
           IMAGE_NAME="arvindand/maven-tools-mcp:pr-${{ github.event.number }}"
@@ -65,8 +65,8 @@ jobs:
           IMAGE_NAME="arvindand/maven-tools-mcp:${PROJECT_VERSION}"
         fi
         
-        # Test that the container starts and responds with docker profile
+        # Test that the native container starts and responds with docker profile
         timeout 30s docker run --rm -e SPRING_PROFILES_ACTIVE=docker $IMAGE_NAME --help || true
         
-        # Basic health check
-        echo "Docker image built and basic tests passed"
+        # Basic health check for native image
+        echo "Native Docker image built and basic tests passed"

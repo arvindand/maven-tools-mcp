@@ -25,12 +25,13 @@ if not exist "..\mvnw.cmd" (
 echo Available commands:
 echo 1. Build JAR (skip tests)
 echo 2. Build JAR (with tests)  
-echo 3. Build Docker image with buildpacks
-echo 4. Clean build artifacts
-echo 5. Run tests only
+echo 3. Build Native Docker image (slow, optimized)
+echo 4. Build JVM Docker image (faster build)
+echo 5. Clean build artifacts
+echo 6. Run tests only
 echo.
 
-set /p choice="Choose option (1-5): "
+set /p choice="Choose option (1-6): "
 
 :process_choice
 if "%choice%"=="1" (
@@ -46,33 +47,49 @@ if "%choice%"=="2" (
 )
 
 if "%choice%"=="3" (
-    echo 🐳 Building Docker image with buildpacks...
+    echo 🐳 Building Native Docker image with buildpacks...
+    echo ⏳ This may take 10-15 minutes for native compilation...
     echo Step 1: Package application...
     call :run_maven clean package -DskipTests
     if errorlevel 1 goto :error
     
-    echo Step 2: Build Docker image...
-    call :run_maven spring-boot:build-image
+    echo Step 2: Build Native Docker image...
+    call :run_maven -Pnative spring-boot:build-image
     if errorlevel 1 goto :error
-      echo ✅ Docker image built successfully!
+    echo ✅ Native Docker image built successfully!
     echo.
-    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:0.1.2-SNAPSHOT
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:0.1.2-SNAPSHOT
     goto :end
 )
 
 if "%choice%"=="4" (
+    echo 🐳 Building JVM Docker image with buildpacks...
+    echo Step 1: Package application...
+    call :run_maven clean package -DskipTests
+    if errorlevel 1 goto :error
+    
+    echo Step 2: Build JVM Docker image...
+    call :run_maven spring-boot:build-image
+    if errorlevel 1 goto :error
+    echo ✅ JVM Docker image built successfully!
+    echo.
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:0.1.2-SNAPSHOT
+    goto :end
+)
+
+if "%choice%"=="5" (
     echo 🧹 Cleaning build artifacts...
     call :run_maven clean
     goto :show_result
 )
 
-if "%choice%"=="5" (
+if "%choice%"=="6" (
     echo 🧪 Running tests...
     call :run_maven test
     goto :show_result
 )
 
-echo ❌ Invalid option. Please choose 1-5.
+echo ❌ Invalid option. Please choose 1-6.
 exit /b 1
 
 :show_result

@@ -39,12 +39,13 @@ else
     echo "Available commands:"
     echo "1. Build JAR (skip tests)"
     echo "2. Build JAR (with tests)"
-    echo "3. Build Docker image with buildpacks"
-    echo "4. Clean build artifacts"
-    echo "5. Run tests only"
+    echo "3. Build Native Docker image (slow, optimized)"
+    echo "4. Build JVM Docker image (faster build)"
+    echo "5. Clean build artifacts"
+    echo "6. Run tests only"
     echo ""
 
-    read -p "Choose option (1-5): " choice
+    read -p "Choose option (1-6): " choice
 fi
 
 # Make mvnw executable if it isn't already
@@ -62,33 +63,50 @@ case $choice in
         show_jar_result
         ;;
     3)
-        echo "🐳 Building Docker image with buildpacks..."
+        echo "🐳 Building Native Docker image with buildpacks..."
+        echo "⏳ This may take 10-15 minutes for native compilation..."
         echo "Step 1: Package application..."
         ../mvnw clean package -DskipTests
         
-        echo "Step 2: Build Docker image..."
+        echo "Step 2: Build Native Docker image..."
+        ../mvnw -Pnative spring-boot:build-image
+        
+        # Get project version for image name
+        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.2-SNAPSHOT")
+        
+        echo "✅ Native Docker image built successfully!"
+        echo ""
+        echo "To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:${PROJECT_VERSION}"
+        exit 0
+        ;;
+    4)
+        echo "🐳 Building JVM Docker image with buildpacks..."
+        echo "Step 1: Package application..."
+        ../mvnw clean package -DskipTests
+        
+        echo "Step 2: Build JVM Docker image..."
         ../mvnw spring-boot:build-image
         
         # Get project version for image name
         PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.2-SNAPSHOT")
         
-        echo "✅ Docker image built successfully!"
+        echo "✅ JVM Docker image built successfully!"
         echo ""
-        echo "To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:${PROJECT_VERSION}"
+        echo "To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:${PROJECT_VERSION}"
         exit 0
         ;;
-    4)
+    5)
         echo "🧹 Cleaning build artifacts..."
         ../mvnw clean
         echo "✅ Clean completed successfully!"
         ;;
-    5)
+    6)
         echo "🧪 Running tests..."
         ../mvnw test
         echo "✅ Tests completed successfully!"
         ;;
     *)
-        echo "❌ Invalid option. Please choose 1-5."
+        echo "❌ Invalid option. Please choose 1-6."
         exit 1
         ;;
 esac

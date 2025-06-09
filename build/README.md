@@ -9,13 +9,15 @@ This directory contains convenient build scripts for the Maven Tools MCP Server 
 - **`build.sh`** - Complete build helper with options for:
   - Build JAR (skip tests) - Fast development builds
   - Build JAR (with tests) - Full validation builds  
-  - Build Docker image - Local Docker builds with buildpacks
+  - Build Native Docker image - Optimized native executable (slow build)
+  - Build JVM Docker image - Traditional JVM build (faster build)
   - Clean build artifacts - Reset build state
   - Run tests only - Validation without building
 
 - **`build-docker.sh`** - Docker-focused build options:
-  - Pull from Docker Hub (fastest, recommended)
-  - Build with buildpacks (optimized local build using Spring Boot buildpacks)
+  - Pull from Docker Hub (fastest, recommended) - Pre-built native images
+  - Build Native Image with buildpacks (optimized native executable, slow build)
+  - Build JVM Image with buildpacks (faster build, larger image)
 
 ### Windows Scripts
 
@@ -61,3 +63,22 @@ Scripts support non-interactive mode for CI/CD by passing the option number:
 ## Output Location
 
 Built JAR files are placed in: `target/maven-tools-mcp-0.1.2-SNAPSHOT.jar`
+
+## Native Image Builds
+
+The project now builds **Native Images** by default using GraalVM and Spring Boot 3.5.0's built-in native profile.
+
+### Build Commands
+
+```bash
+# Build native Docker image
+./mvnw -Pnative spring-boot:build-image
+
+# Build JVM Docker image 
+./mvnw spring-boot:build-image
+```
+
+### CI/CD Integration
+
+- GitHub Actions automatically builds native images on push to main/develop
+- Published to Docker Hub as `arvindand/maven-tools-mcp:latest`
