@@ -306,7 +306,7 @@ cd maven-tools-mcp
 ./mvnw spring-boot:build-image
 
 # Run the locally built image
-docker run -i maven-tools-mcp:0.1.2-SNAPSHOT
+docker run -i maven-tools-mcp:0.1.2
 ```
 
 **Traditional Java Build:**
@@ -332,7 +332,7 @@ cd maven-tools-mcp
 ./mvnw verify -Pintegration
 
 # Verify the build
-java -jar target/maven-tools-mcp-0.1.2-SNAPSHOT.jar
+java -jar target/maven-tools-mcp-0.1.2.jar
 ```
 
 **Convenient Build Scripts:**
@@ -353,7 +353,7 @@ For easier builds, use the provided scripts in the `build/` folder:
 .\build\build-docker.cmd
 ```
 
-**Output Location:** `target/maven-tools-mcp-0.1.2-SNAPSHOT.jar`
+**Output Location:** `target/maven-tools-mcp-0.1.2.jar`
 
 ## AI Assistant Integration
 
@@ -441,10 +441,9 @@ For easier builds, use the provided scripts in the `build/` folder:
 {
   "mcpServers": {
     "maven-tools": {
-      "command": "docker",
-      "args": [
+      "command": "docker",      "args": [
         "run", "-i", "--rm", "-e", "SPRING_PROFILES_ACTIVE=docker",
-        "maven-tools-mcp:0.1.2-SNAPSHOT"
+        "maven-tools-mcp:0.1.2"
       ]
     }
   }
@@ -464,10 +463,9 @@ For easier builds, use the provided scripts in the `build/` folder:
 {
   "mcpServers": {
     "maven-tools": {
-      "command": "java",
-      "args": [
+      "command": "java",      "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-0.1.2-SNAPSHOT.jar"
+        "/absolute/path/to/maven-tools-mcp-0.1.2.jar"
       ]
     }
   }
@@ -480,10 +478,9 @@ For easier builds, use the provided scripts in the `build/` folder:
 {
   "mcpServers": {
     "maven-tools": {
-      "command": "java",
-      "args": [
+      "command": "java",      "args": [
         "-jar",
-        "C:\\Users\\YourName\\Documents\\Github\\maven-tools-mcp\\target\\maven-tools-mcp-0.1.2-SNAPSHOT.jar"
+        "C:\\Users\\YourName\\Documents\\Github\\maven-tools-mcp\\target\\maven-tools-mcp-0.1.2.jar"
       ]
     }
   }
@@ -560,11 +557,10 @@ VS Code supports MCP servers in agent mode (VS Code 1.99+). Enable with `chat.mc
 ```json
 {
   "mcp": {
-    "servers": {
-      "maven-tools": {
+    "servers": {      "maven-tools": {
         "type": "stdio", 
         "command": "java",
-        "args": ["-jar", "${workspaceFolder}/target/maven-tools-mcp-0.1.2-SNAPSHOT.jar"]
+        "args": ["-jar", "${workspaceFolder}/target/maven-tools-mcp-0.1.2.jar"]
       }
     }
   }

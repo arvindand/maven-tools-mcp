@@ -52,13 +52,12 @@ if "%choice%"=="3" (
     echo Step 1: Package application...
     call :run_maven clean package -DskipTests
     if errorlevel 1 goto :error
-    
-    echo Step 2: Build Native Docker image...
+      echo Step 2: Build Native Docker image...
     call :run_maven -Pnative spring-boot:build-image
     if errorlevel 1 goto :error
     echo ✅ Native Docker image built successfully!
     echo.
-    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:0.1.2-SNAPSHOT
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:0.1.2
     goto :end
 )
 
@@ -67,13 +66,12 @@ if "%choice%"=="4" (
     echo Step 1: Package application...
     call :run_maven clean package -DskipTests
     if errorlevel 1 goto :error
-    
-    echo Step 2: Build JVM Docker image...
+      echo Step 2: Build JVM Docker image...
     call :run_maven spring-boot:build-image
     if errorlevel 1 goto :error
     echo ✅ JVM Docker image built successfully!
     echo.
-    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:0.1.2-SNAPSHOT
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:0.1.2
     goto :end
 )
 

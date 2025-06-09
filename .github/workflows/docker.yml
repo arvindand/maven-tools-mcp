@@ -59,9 +59,8 @@ jobs:
       run: |
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
           IMAGE_NAME="arvindand/maven-tools-mcp:pr-${{ github.event.number }}"
-        else
-          # Use the project version for the image name
-          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.2-SNAPSHOT")
+        else          # Use the project version for the image name
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.2")
           IMAGE_NAME="arvindand/maven-tools-mcp:${PROJECT_VERSION}"
         fi
         
