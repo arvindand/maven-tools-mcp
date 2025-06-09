@@ -5,8 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
 /**
- * Represents the response from Maven Central search API. This record encapsulates the response data
- * structure.
+ * Represents the response from Maven Central search API.
  *
  * @param response the response data containing search results
  * @author Arvind Menon

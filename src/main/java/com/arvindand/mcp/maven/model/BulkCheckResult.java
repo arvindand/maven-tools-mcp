@@ -22,37 +22,49 @@ public record BulkCheckResult(
     Integer totalVersions,
     Integer stableVersions) {
 
-  private static final String STATUS_FOUND = "found";
-  private static final String STATUS_NOT_FOUND = "not_found";
-  private static final String STATUS_NO_STABLE_VERSION = "no_stable_version";
-  private static final String STATUS_ERROR = "error";
+  public enum Status {
+    FOUND("found"),
+    NOT_FOUND("not_found"),
+    NO_STABLE_VERSION("no_stable_version"),
+    ERROR("error");
+
+    private final String value;
+
+    Status(String value) {
+      this.value = value;
+    }
+
+    public String getValue() {
+      return value;
+    }
+  }
 
   public static BulkCheckResult found(String dependency, String version, String type) {
-    return new BulkCheckResult(dependency, version, type, STATUS_FOUND, null, null, null);
+    return new BulkCheckResult(dependency, version, type, Status.FOUND.getValue(), null, null, null);
   }
 
   public static BulkCheckResult foundStable(
       String dependency, String version, String type, int totalVersions, int stableVersions) {
     return new BulkCheckResult(
-        dependency, version, type, STATUS_FOUND, null, totalVersions, stableVersions);
+        dependency, version, type, Status.FOUND.getValue(), null, totalVersions, stableVersions);
   }
 
   public static BulkCheckResult foundWithCounts(
       String dependency, String version, String type, int totalVersions, int stableVersions) {
     return new BulkCheckResult(
-        dependency, version, type, STATUS_FOUND, null, totalVersions, stableVersions);
+        dependency, version, type, Status.FOUND.getValue(), null, totalVersions, stableVersions);
   }
 
   public static BulkCheckResult notFound(String dependency) {
-    return new BulkCheckResult(dependency, null, null, STATUS_NOT_FOUND, null, null, null);
+    return new BulkCheckResult(dependency, null, null, Status.NOT_FOUND.getValue(), null, null, null);
   }
 
   public static BulkCheckResult noStableVersion(String dependency, int totalVersions) {
     return new BulkCheckResult(
-        dependency, null, null, STATUS_NO_STABLE_VERSION, null, totalVersions, null);
+        dependency, null, null, Status.NO_STABLE_VERSION.getValue(), null, totalVersions, null);
   }
 
   public static BulkCheckResult error(String dependency, String error) {
-    return new BulkCheckResult(dependency, null, null, STATUS_ERROR, error, null, null);
+    return new BulkCheckResult(dependency, null, null, Status.ERROR.getValue(), error, null, null);
   }
 }

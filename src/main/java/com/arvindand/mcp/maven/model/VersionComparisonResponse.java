@@ -16,8 +16,9 @@ public record VersionComparisonResponse(
     Instant comparisonDate,
     List<DependencyComparisonResult> dependencies,
     UpdateSummary updateSummary) {
-
-  /** Individual dependency comparison result. */
+  /**
+   * Individual dependency comparison result.
+   */
   public record DependencyComparisonResult(
       String dependency,
       String currentVersion,
@@ -62,7 +63,9 @@ public record VersionComparisonResponse(
     }
   }
 
-  /** Summary of update types. */
+  /**
+   * Summary of update types.
+   */
   public record UpdateSummary(
       int majorUpdates, int minorUpdates, int patchUpdates, int noUpdates) {}
 }

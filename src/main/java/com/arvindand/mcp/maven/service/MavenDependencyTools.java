@@ -6,356 +6,321 @@ import com.arvindand.mcp.maven.model.DetailedVersionInfo;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.VersionComparisonResponse;
 import com.arvindand.mcp.maven.model.VersionInfo;
+import com.arvindand.mcp.maven.model.VersionInfo.VersionType;
 import com.arvindand.mcp.maven.util.MavenCoordinateParser;
+import com.arvindand.mcp.maven.util.VersionComparator;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Service;
 
 /**
- * Service providing Maven dependency tools for MCP. Exposes Maven dependency lookup functionality
- * as MCP tools using @Tool annotations.
+ * Main service providing MCP tools for Maven dependency management.
  *
  * @author Arvind Menon
  * @since 0.1.0
  */
 @Service
 public class MavenDependencyTools {
+
+  private static final String UNEXPECTED_ERROR = "Unexpected error";
+  private static final String MAVEN_CENTRAL_ERROR = "Maven Central error: ";
+  private static final String INVALID_MAVEN_COORDINATE_FORMAT = "Invalid Maven coordinate format: ";
   private static final Logger logger = LoggerFactory.getLogger(MavenDependencyTools.class);
-
   private final MavenCentralService mavenCentralService;
-  private final VersionAnalysisService versionAnalysisService;
+  private final VersionComparator versionComparator;
   private final JsonResponseService jsonResponseService;
-
-  // Constants
-  private static final String INVALID_COORDINATE_ERROR = "Invalid Maven coordinate format: ";
-  private static final String VERSION_REQUIRED_ERROR =
-      "Version must be provided either in dependency string or version parameter";
-  // Version type constants
-  private static final String STABLE_TYPE = "stable";
-  private static final String RC_TYPE = "rc";
-  private static final String BETA_TYPE = "beta";
-  private static final String ALPHA_TYPE = "alpha";
-  private static final String MILESTONE_TYPE = "milestone";
-
-  private static final String STATUS_SUCCESS = "success";
 
   public MavenDependencyTools(
       MavenCentralService mavenCentralService,
-      VersionAnalysisService versionAnalysisService,
+      VersionComparator versionComparator,
       JsonResponseService jsonResponseService) {
     this.mavenCentralService = mavenCentralService;
-    this.versionAnalysisService = versionAnalysisService;
+    this.versionComparator = versionComparator;
     this.jsonResponseService = jsonResponseService;
   }
 
-  @SuppressWarnings("java:S100")
+  /**
+   * Get the latest version of a Maven dependency by type (stable, rc, beta, alpha, milestone).
+   *
+   * @param dependency the Maven dependency coordinate
+   * @return JSON response with latest versions by type
+   */
+  @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          """
-          Get the latest version of a Maven dependency from Maven Central for each version type \
-          (stable, rc, beta, alpha, milestone)\
-          """)
+          "Get the latest version of a Maven dependency by type (stable, rc, beta, alpha,"
+              + " milestone)")
   public String maven_get_latest(String dependency) {
-    logger.debug("Getting latest versions by type for dependency: {}", dependency);
-
-    return executeWithErrorHandling(
-        () -> {
-          MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-          List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
-
-          if (allVersions.isEmpty()) {
-            return createNotFoundResponse(coordinate);
-          }
-
-          VersionsByType versionsByType = categorizeVersionsByType(allVersions);
-          Map<String, Object> result =
-              buildVersionResponse(coordinate, versionsByType, allVersions.size());
-
-          return jsonResponseService.toJson(result);
-        },
-        "Error fetching latest versions: ");
-  }
-
-  @SuppressWarnings("java:S100")
-  @Tool(
-      description =
-          """
-          Check if a specific version of a Maven dependency exists in Maven Central with version \
-          type information\
-          """)
-  public String maven_check_exists(String dependency, String version) {
-    logger.debug("Checking version existence for dependency: {}, version: {}", dependency, version);
-
-    return executeWithErrorHandling(
-        () -> {
-          MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-          String versionToCheck = coordinate.version() != null ? coordinate.version() : version;
-
-          if (versionToCheck == null || versionToCheck.trim().isEmpty()) {
-            logger.error(VERSION_REQUIRED_ERROR);
-            return jsonResponseService.createErrorResponse(VERSION_REQUIRED_ERROR);
-          }
-
-          boolean exists = mavenCentralService.checkVersionExists(coordinate, versionToCheck);
-          String versionType = versionAnalysisService.getVersionType(versionToCheck);
-          DependencyExistsResponse result =
-              new DependencyExistsResponse(exists, versionToCheck, versionType);
-
-          return jsonResponseService.toJson(result);
-        },
-        "Error checking version existence: ");
-  }
-
-  @SuppressWarnings("java:S100")
-  @Tool(
-      description =
-          """
-          Get the latest stable version of a Maven dependency from Maven Central \
-          (excludes pre-release versions)\
-          """)
-  public String maven_get_stable(String dependency) {
-    logger.debug("Getting latest stable version for dependency: {}", dependency);
-
-    return executeWithErrorHandling(
-        () -> {
-          MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-          List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
-
-          if (allVersions.isEmpty()) {
-            return createNotFoundResponse(coordinate);
-          }
-
-          List<String> stableVersions =
-              allVersions.stream().filter(versionAnalysisService::isStableVersion).toList();
-
-          String latestStable = stableVersions.isEmpty() ? null : stableVersions.get(0);
-
-          if (latestStable == null) {
-            String message =
-                String.format(
-                    "No stable version found for %s:%s (found %d pre-release versions)",
-                    coordinate.groupId(), coordinate.artifactId(), allVersions.size());
-            logger.warn(message);
-            return jsonResponseService.createNotFoundResponse(message);
-          }
-
-          String versionType = versionAnalysisService.getVersionType(latestStable);
-          DetailedVersionInfo result =
-              new DetailedVersionInfo(
-                  latestStable, versionType, allVersions.size(), stableVersions.size());
-
-          return jsonResponseService.toJson(result);
-        },
-        "Error fetching latest stable version: ");
-  }
-
-  @SuppressWarnings("java:S100")
-  @Tool(
-      description =
-          """
-          Check latest versions for multiple Maven dependencies at once - optimizes bulk \
-          dependency analysis with comprehensive version information\
-          """)
-  public String maven_bulk_check_latest(String dependencies) {
-    logger.debug("Bulk checking latest versions for dependencies: {}", dependencies);
-
-    return executeWithErrorHandling(
-        () -> {
-          List<String> depList = parseDependencyList(dependencies);
-          long startTime = System.currentTimeMillis();
-
-          List<BulkCheckResult> results;
-          try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<CompletableFuture<BulkCheckResult>> futures =
-                depList.stream()
-                    .distinct()
-                    .map(
-                        dep ->
-                            CompletableFuture.supplyAsync(
-                                () -> processLatestVersionCheck(dep), executor))
-                    .toList();
-            results = futures.stream().map(CompletableFuture::join).toList();
-          }
-
-          if (logger.isDebugEnabled()) {
-            long duration = System.currentTimeMillis() - startTime;
-            logger.debug(
-                "Bulk check completed for {} dependencies in {}ms", depList.size(), duration);
-          }
-
-          return jsonResponseService.toJson(results);
-        },
-        "Error in bulk dependency check: ");
-  }
-
-  @SuppressWarnings("java:S100")
-  @Tool(
-      description =
-          """
-          Check latest stable versions for multiple Maven dependencies at once - ideal for \
-          production dependency analysis\
-          """)
-  public String maven_bulk_check_stable(String dependencies) {
-    logger.debug("Bulk checking stable versions for dependencies: {}", dependencies);
-
-    return executeWithErrorHandling(
-        () -> {
-          List<String> depList = parseDependencyList(dependencies);
-          long startTime = System.currentTimeMillis();
-
-          List<BulkCheckResult> results;
-          try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<CompletableFuture<BulkCheckResult>> futures =
-                depList.stream()
-                    .distinct()
-                    .map(
-                        dep ->
-                            CompletableFuture.supplyAsync(
-                                () -> processStableVersionCheck(dep), executor))
-                    .toList();
-            results = futures.stream().map(CompletableFuture::join).toList();
-          }
-
-          if (logger.isDebugEnabled()) {
-            long duration = System.currentTimeMillis() - startTime;
-            logger.debug(
-                "Bulk stable check completed for {} dependencies in {}ms",
-                depList.size(),
-                duration);
-          }
-
-          return jsonResponseService.toJson(results);
-        },
-        "Error in bulk stable dependency check: ");
-  }
-
-  @SuppressWarnings("java:S100")
-  @Tool(
-      description =
-          """
-          Compare current dependencies with latest versions and provide update recommendations \
-          with risk analysis\
-          """)
-  public String maven_compare_versions(String currentDependencies) {
-    logger.debug("Comparing dependency versions: {}", currentDependencies);
-
-    return executeWithErrorHandling(
-        () -> {
-          List<String> depList = parseDependencyList(currentDependencies);
-          long startTime = System.currentTimeMillis();
-
-          List<VersionComparisonResponse.DependencyComparisonResult> comparisonResults;
-          try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<CompletableFuture<VersionComparisonResponse.DependencyComparisonResult>> futures =
-                depList.stream()
-                    .distinct()
-                    .map(
-                        dep ->
-                            CompletableFuture.supplyAsync(
-                                () -> compareDependencyVersion(dep), executor))
-                    .toList();
-            comparisonResults = futures.stream().map(CompletableFuture::join).toList();
-          }
-
-          VersionComparisonResponse.UpdateSummary summary =
-              calculateComparisonSummary(comparisonResults);
-          VersionComparisonResponse response =
-              new VersionComparisonResponse(Instant.now(), comparisonResults, summary);
-
-          if (logger.isDebugEnabled()) {
-            long duration = System.currentTimeMillis() - startTime;
-            logger.debug(
-                "Version comparison completed: {} major, {} minor, {} patch updates available in"
-                    + " {}ms",
-                summary.majorUpdates(),
-                summary.minorUpdates(),
-                summary.patchUpdates(),
-                duration);
-          }
-
-          return jsonResponseService.toJson(response);
-        },
-        "Error comparing versions: ");
-  }
-
-  private String executeWithErrorHandling(
-      java.util.function.Supplier<String> operation, String errorMessagePrefix) {
     try {
-      return operation.get();
+      MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
+      List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
+
+      if (allVersions.isEmpty()) {
+        return notFoundResponse(coordinate);
+      }
+
+      return jsonResponseService.toJson(buildVersionsByType(coordinate, allVersions));
     } catch (IllegalArgumentException e) {
-      String errorMessage = INVALID_COORDINATE_ERROR + e.getMessage();
-      logger.error(errorMessage);
-      return jsonResponseService.createErrorResponse(errorMessage);
+      return jsonResponseService.createErrorResponse(
+          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
+    } catch (MavenCentralException e) {
+      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {
-      String errorMessage = errorMessagePrefix + e.getMessage();
-      logger.error(errorMessage, e);
-      return jsonResponseService.createErrorResponse(errorMessage);
+      logger.error(UNEXPECTED_ERROR, e);
+      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
     }
   }
 
-  private String createNotFoundResponse(MavenCoordinate coordinate) {
+  /**
+   * Check if a specific version of a Maven dependency exists with version type information.
+   *
+   * @param dependency the Maven dependency coordinate
+   * @param version the version to check
+   * @return JSON response with existence status and version type
+   */
+  @SuppressWarnings("java:S100") // MCP tool method naming
+  @Tool(
+      description =
+          "Check if a specific version of a Maven dependency exists with version type information")
+  public String maven_check_exists(String dependency, String version) {
+    try {
+      MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
+      String versionToCheck = coordinate.version() != null ? coordinate.version() : version;
+
+      if (versionToCheck == null || versionToCheck.trim().isEmpty()) {
+        return jsonResponseService.createErrorResponse(
+            "Version must be provided either in dependency string or version parameter");
+      }
+
+      boolean exists = mavenCentralService.checkVersionExists(coordinate, versionToCheck);
+      String versionType = versionComparator.getVersionTypeString(versionToCheck);
+
+      return jsonResponseService.toJson(
+          new DependencyExistsResponse(exists, versionToCheck, versionType));
+    } catch (IllegalArgumentException e) {
+      return jsonResponseService.createErrorResponse(
+          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
+    } catch (MavenCentralException e) {
+      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+    } catch (Exception e) {
+      logger.error(UNEXPECTED_ERROR, e);
+      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+    }
+  }
+
+  /**
+   * Get the latest stable version of a Maven dependency (excludes pre-release versions).
+   *
+   * @param dependency the Maven dependency coordinate
+   * @return JSON response with latest stable version details
+   */
+  @SuppressWarnings("java:S100") // MCP tool method naming
+  @Tool(
+      description =
+          "Get the latest stable version of a Maven dependency (excludes pre-release versions)")
+  public String maven_get_stable(String dependency) {
+    try {
+      MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
+      List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
+
+      if (allVersions.isEmpty()) {
+        return notFoundResponse(coordinate);
+      }
+
+      List<String> stableVersions =
+          allVersions.stream().filter(versionComparator::isStableVersion).toList();
+
+      if (stableVersions.isEmpty()) {
+        return jsonResponseService.createNotFoundResponse(
+            "No stable version found for %s:%s (found %d pre-release versions)"
+                .formatted(coordinate.groupId(), coordinate.artifactId(), allVersions.size()));
+      }
+
+      String latestStable = stableVersions.get(0);
+      VersionType versionType = versionComparator.getVersionType(latestStable);
+
+      return jsonResponseService.toJson(
+          new DetailedVersionInfo(
+              latestStable, versionType, allVersions.size(), stableVersions.size()));
+    } catch (IllegalArgumentException e) {
+      return jsonResponseService.createErrorResponse(
+          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
+    } catch (MavenCentralException e) {
+      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+    } catch (Exception e) {
+      logger.error(UNEXPECTED_ERROR, e);
+      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+    }
+  }
+
+  /**
+   * Check latest versions for multiple Maven dependencies with comprehensive version information.
+   *
+   * @param dependencies comma or newline separated list of Maven coordinates
+   * @return JSON response with bulk check results
+   */
+  @SuppressWarnings("java:S100") // MCP tool method naming
+  @Tool(
+      description =
+          "Check latest versions for multiple Maven dependencies with comprehensive version"
+              + " information")
+  public String maven_bulk_check_latest(String dependencies) {
+    try {
+      List<String> depList = parseDependencies(dependencies);
+
+      List<BulkCheckResult> results;
+      try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        List<CompletableFuture<BulkCheckResult>> futures =
+            depList.stream()
+                .distinct()
+                .map(
+                    dep ->
+                        CompletableFuture.supplyAsync(
+                            () -> processLatestVersionCheck(dep), executor))
+                .toList();
+        results = futures.stream().map(CompletableFuture::join).toList();
+      }
+
+      return jsonResponseService.toJson(results);
+    } catch (IllegalArgumentException e) {
+      return jsonResponseService.createErrorResponse(
+          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
+    } catch (MavenCentralException e) {
+      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+    } catch (Exception e) {
+      logger.error(UNEXPECTED_ERROR, e);
+      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+    }
+  }
+
+  /**
+   * Check latest stable versions for multiple Maven dependencies.
+   *
+   * @param dependencies comma or newline separated list of Maven coordinates
+   * @return JSON response with bulk stable version check results
+   */
+  @SuppressWarnings("java:S100") // MCP tool method naming
+  @Tool(description = "Check latest stable versions for multiple Maven dependencies")
+  public String maven_bulk_check_stable(String dependencies) {
+    try {
+      List<String> depList = parseDependencies(dependencies);
+
+      List<BulkCheckResult> results;
+      try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        List<CompletableFuture<BulkCheckResult>> futures =
+            depList.stream()
+                .distinct()
+                .map(
+                    dep ->
+                        CompletableFuture.supplyAsync(
+                            () -> processStableVersionCheck(dep), executor))
+                .toList();
+        results = futures.stream().map(CompletableFuture::join).toList();
+      }
+
+      return jsonResponseService.toJson(results);
+    } catch (IllegalArgumentException e) {
+      return jsonResponseService.createErrorResponse(
+          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
+    } catch (MavenCentralException e) {
+      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+    } catch (Exception e) {
+      logger.error(UNEXPECTED_ERROR, e);
+      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+    }
+  }
+
+  /**
+   * Compare current dependencies with latest versions and provide update recommendations.
+   *
+   * @param currentDependencies comma or newline separated list of Maven coordinates with versions
+   * @return JSON response with version comparison and update recommendations
+   */
+  @SuppressWarnings("java:S100") // MCP tool method naming
+  @Tool(
+      description =
+          "Compare current dependencies with latest versions and provide update recommendations")
+  public String maven_compare_versions(String currentDependencies) {
+    try {
+      List<String> depList = parseDependencies(currentDependencies);
+
+      List<VersionComparisonResponse.DependencyComparisonResult> results;
+      try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        List<CompletableFuture<VersionComparisonResponse.DependencyComparisonResult>> futures =
+            depList.stream()
+                .distinct()
+                .map(
+                    dep ->
+                        CompletableFuture.supplyAsync(
+                            () -> compareDependencyVersion(dep), executor))
+                .toList();
+        results = futures.stream().map(CompletableFuture::join).toList();
+      }
+
+      VersionComparisonResponse.UpdateSummary summary = calculateUpdateSummary(results);
+      VersionComparisonResponse response =
+          new VersionComparisonResponse(Instant.now(), results, summary);
+
+      return jsonResponseService.toJson(response);
+    } catch (IllegalArgumentException e) {
+      return jsonResponseService.createErrorResponse(
+          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
+    } catch (MavenCentralException e) {
+      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+    } catch (Exception e) {
+      logger.error(UNEXPECTED_ERROR, e);
+      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+    }
+  }
+
+  private String notFoundResponse(MavenCoordinate coordinate) {
     String message =
-        String.format(
-            "No Maven dependency found for %s:%s%s",
-            coordinate.groupId(),
-            coordinate.artifactId(),
-            coordinate.packaging() != null ? ":" + coordinate.packaging() : "");
-    logger.warn(message);
+        "No Maven dependency found for %s:%s%s"
+            .formatted(
+                coordinate.groupId(),
+                coordinate.artifactId(),
+                coordinate.packaging() != null ? ":" + coordinate.packaging() : "");
     return jsonResponseService.createNotFoundResponse(message);
   }
 
-  private record VersionsByType(
-      String stable, String rc, String beta, String alpha, String milestone) {}
-
-  private VersionsByType categorizeVersionsByType(List<String> allVersions) {
-    Map<String, String> firstOfType = HashMap.newHashMap(5);
+  private Map<String, Object> buildVersionsByType(
+      MavenCoordinate coordinate, List<String> allVersions) {
+    Map<VersionType, String> versionsByType = HashMap.newHashMap(5);
 
     for (String version : allVersions) {
-      String type = versionAnalysisService.getVersionType(version);
-      firstOfType.putIfAbsent(type, version);
-
-      // Early exit once we have all 5 types (versions are already sorted, so these are the latest)
-      if (firstOfType.size() == 5) break;
+      VersionType type = versionComparator.getVersionType(version);
+      versionsByType.putIfAbsent(type, version);
+      if (versionsByType.size() == 5) break;
     }
 
-    return new VersionsByType(
-        firstOfType.get(STABLE_TYPE),
-        firstOfType.get(RC_TYPE),
-        firstOfType.get(BETA_TYPE),
-        firstOfType.get(ALPHA_TYPE),
-        firstOfType.get(MILESTONE_TYPE));
-  }
-
-  private Map<String, Object> buildVersionResponse(
-      MavenCoordinate coordinate, VersionsByType versions, int totalVersions) {
     Map<String, Object> result = new java.util.LinkedHashMap<>();
     result.put("dependency", coordinate.toCoordinateString());
 
-    addVersionIfPresent(result, "latest_stable", versions.stable(), STABLE_TYPE);
-    addVersionIfPresent(result, "latest_rc", versions.rc(), RC_TYPE);
-    addVersionIfPresent(result, "latest_beta", versions.beta(), BETA_TYPE);
-    addVersionIfPresent(result, "latest_alpha", versions.alpha(), ALPHA_TYPE);
-    addVersionIfPresent(result, "latest_milestone", versions.milestone(), MILESTONE_TYPE);
+    addVersionIfPresent(result, "latest_stable", versionsByType.get(VersionType.STABLE));
+    addVersionIfPresent(result, "latest_rc", versionsByType.get(VersionType.RC));
+    addVersionIfPresent(result, "latest_beta", versionsByType.get(VersionType.BETA));
+    addVersionIfPresent(result, "latest_alpha", versionsByType.get(VersionType.ALPHA));
+    addVersionIfPresent(result, "latest_milestone", versionsByType.get(VersionType.MILESTONE));
 
-    result.put("total_versions", totalVersions);
+    result.put("total_versions", allVersions.size());
     return result;
   }
 
-  private void addVersionIfPresent(
-      Map<String, Object> result, String key, String version, String type) {
+  private void addVersionIfPresent(Map<String, Object> result, String key, String version) {
     if (version != null) {
-      result.put(key, new VersionInfo(version, type));
+      result.put(key, new VersionInfo(version, versionComparator.getVersionType(version)));
     }
   }
 
-  private List<String> parseDependencyList(String dependencies) {
+  private List<String> parseDependencies(String dependencies) {
     if (dependencies == null || dependencies.trim().isEmpty()) {
       return List.of();
     }
@@ -378,9 +343,9 @@ public class MavenDependencyTools {
       }
 
       String latestVersion = allVersions.get(0);
-      String versionType = versionAnalysisService.getVersionType(latestVersion);
+      String versionType = versionComparator.getVersionTypeString(latestVersion);
       int stableVersionCount =
-          (int) allVersions.stream().filter(versionAnalysisService::isStableVersion).count();
+          (int) allVersions.stream().filter(versionComparator::isStableVersion).count();
 
       return BulkCheckResult.foundWithCounts(
           coordinate.toCoordinateString(),
@@ -403,7 +368,7 @@ public class MavenDependencyTools {
       }
 
       List<String> stableVersions =
-          allVersions.stream().filter(versionAnalysisService::isStableVersion).toList();
+          allVersions.stream().filter(versionComparator::isStableVersion).toList();
 
       String latestStable = stableVersions.isEmpty() ? null : stableVersions.get(0);
 
@@ -411,7 +376,7 @@ public class MavenDependencyTools {
           ? BulkCheckResult.foundStable(
               coordinate.toCoordinateString(),
               latestStable,
-              STABLE_TYPE,
+              VersionType.STABLE.getDisplayName(),
               allVersions.size(),
               stableVersions.size())
           : BulkCheckResult.noStableVersion(coordinate.toCoordinateString(), allVersions.size());
@@ -437,8 +402,8 @@ public class MavenDependencyTools {
             coordinate.toCoordinateString());
       }
 
-      String latestType = versionAnalysisService.getVersionType(latestVersion);
-      String updateType = versionAnalysisService.determineUpdateType(currentVersion, latestVersion);
+      String latestType = versionComparator.getVersionTypeString(latestVersion);
+      String updateType = versionComparator.determineUpdateType(currentVersion, latestVersion);
       boolean updateAvailable = !currentVersion.equals(latestVersion);
 
       return VersionComparisonResponse.DependencyComparisonResult.success(
@@ -453,16 +418,16 @@ public class MavenDependencyTools {
     }
   }
 
-  private VersionComparisonResponse.UpdateSummary calculateComparisonSummary(
+  private VersionComparisonResponse.UpdateSummary calculateUpdateSummary(
       List<VersionComparisonResponse.DependencyComparisonResult> results) {
 
     Map<String, Long> counts =
         results.stream()
-            .filter(result -> STATUS_SUCCESS.equals(result.status()))
+            .filter(result -> "success".equals(result.status()))
             .collect(
-                java.util.stream.Collectors.groupingBy(
+                Collectors.groupingBy(
                     VersionComparisonResponse.DependencyComparisonResult::updateType,
-                    java.util.stream.Collectors.counting()));
+                    Collectors.counting()));
 
     return new VersionComparisonResponse.UpdateSummary(
         counts.getOrDefault("major", 0L).intValue(),

@@ -52,6 +52,13 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, MavenSearchResponse.class);
       registerRecordClass(hints, MavenSearchResponse.ResponseData.class);
       registerRecordClass(hints, MavenSearchResponse.MavenArtifact.class);
+
+      // Register VersionComparator record for version parsing
+      registerRecordClass(hints, com.arvindand.mcp.maven.util.VersionComparator.VersionComponents.class);
+
+      // Register enum classes for Jackson serialization and reflection access
+      registerEnumClass(hints, VersionInfo.VersionType.class);
+      registerEnumClass(hints, BulkCheckResult.Status.class);
     }
 
     /**
@@ -70,6 +77,23 @@ public class NativeImageConfiguration {
                       MemberCategory.DECLARED_FIELDS,
                       MemberCategory.PUBLIC_FIELDS,
                       MemberCategory.INTROSPECT_PUBLIC_CONSTRUCTORS,
+                      MemberCategory.INTROSPECT_PUBLIC_METHODS,
+                      MemberCategory.INTROSPECT_DECLARED_METHODS));
+    }
+
+    /**
+     * Register an enum class with reflection access for Jackson serialization and native image 
+     * compatibility.
+     */
+    private void registerEnumClass(RuntimeHints hints, Class<?> enumClass) {
+      hints
+          .reflection()
+          .registerType(
+              enumClass,
+              typeHint ->
+                  typeHint.withMembers(
+                      MemberCategory.PUBLIC_FIELDS,
+                      MemberCategory.INVOKE_PUBLIC_METHODS,
                       MemberCategory.INTROSPECT_PUBLIC_METHODS,
                       MemberCategory.INTROSPECT_DECLARED_METHODS));
     }

@@ -58,38 +58,42 @@ class VersionComparatorTest {
 
         // Multi-digit versions
         Arguments.of("1.2.3", "1.2.10", -1, "1.2.3 < 1.2.10"),
-        Arguments.of("11.0.0", "2.0.0", 1, "11.0.0 > 2.0.0"),
-
-        // Qualifier comparisons (release > rc > beta > alpha > milestone)
+        Arguments.of(
+            "11.0.0",
+            "2.0.0",
+            1,
+            "11.0.0 > 2.0.0"), // Qualifier comparisons (release > rc > milestone > beta > alpha)
         Arguments.of("1.0.0", "1.0.0-RC1", 1, "release > rc"),
-        Arguments.of("1.0.0-RC1", "1.0.0-BETA1", 1, "rc > beta"),
+        Arguments.of("1.0.0-RC1", "1.0.0-M1", 1, "rc > milestone"),
+        Arguments.of("1.0.0-M1", "1.0.0-BETA1", 1, "milestone > beta"),
         Arguments.of("1.0.0-BETA1", "1.0.0-ALPHA1", 1, "beta > alpha"),
-        Arguments.of("1.0.0-ALPHA1", "1.0.0-M1", 1, "alpha > milestone"),
 
         // Same qualifier with different numbers
         Arguments.of("1.0.0-RC1", "1.0.0-RC2", -1, "RC1 < RC2"),
         Arguments.of("1.0.0-BETA2", "1.0.0-BETA1", 1, "BETA2 > BETA1"),
-        Arguments.of("1.0.0-M2", "1.0.0-M1", 1, "M2 > M1"),
-
-        // Different separators
+        Arguments.of("1.0.0-M2", "1.0.0-M1", 1, "M2 > M1"), // Different separators
         Arguments.of("1.0.0", "1-0-0", 0, "Different separators treated equally"),
-        Arguments.of("1.0.0", "1_0_0", 0, "Underscore separators"),
-        Arguments.of("1.0.0-RC1", "1.0.0.RC1", 0, "Different qualifier separators"),
+        Arguments.of("1.0.0", "1_0_0", -1, "Underscore separators (Maven treats differently)"),
+        Arguments.of(
+            "1.0.0-RC1",
+            "1.0.0.RC1",
+            0,
+            "Different qualifier separators (Maven treats as equivalent)"),
 
         // Case insensitive qualifiers
         Arguments.of("1.0.0-rc1", "1.0.0-RC1", 0, "Case insensitive RC"),
         Arguments.of("1.0.0-beta", "1.0.0-BETA", 0, "Case insensitive BETA"),
         Arguments.of("1.0.0-alpha", "1.0.0-ALPHA", 0, "Case insensitive ALPHA"),
 
-        // Special qualifiers - should be equal to or slightly less than plain release
-        Arguments.of("1.0.0.RELEASE", "1.0.0", -1, "RELEASE qualifier comparison"),
-        Arguments.of("1.0.0.Final", "1.0.0", -1, "Final qualifier comparison"),
-        Arguments.of("1.0.0.GA", "1.0.0", -1, "GA qualifier comparison"),
+        // Special qualifiers - Maven's official behavior
+        Arguments.of("1.0.0.RELEASE", "1.0.0", 0, "RELEASE qualifier equivalent to plain"),
+        Arguments.of("1.0.0.Final", "1.0.0", 0, "Final qualifier equivalent to plain"),
+        Arguments.of("1.0.0.GA", "1.0.0", 0, "GA qualifier equivalent to plain"),
 
         // Complex real-world examples
         Arguments.of("3.2.0", "3.2.0-RC1", 1, "Spring Boot style"),
         Arguments.of("2.15.2", "2.16.0-SNAPSHOT", -1, "Jackson style with snapshot"),
-        Arguments.of("6.1.4", "6.1.4.RELEASE", 1, "Spring Framework style"));
+        Arguments.of("6.1.4", "6.1.4.RELEASE", 0, "Spring Framework style"));
   }
 
   @ParameterizedTest(name = "{3}")
@@ -242,11 +246,12 @@ class VersionComparatorTest {
         Arrays.asList("1.0.0-M1", "1.0.0-ALPHA", "1.0.0-BETA", "1.0.0-RC1", "1.0.0");
 
     // When - Sort in ascending order
-    List<String> sorted = versions.stream().sorted(versionComparator).toList();
-
-    // Then - Should be in order: milestone < alpha < beta < rc < release
+    List<String> sorted =
+        versions.stream()
+            .sorted(versionComparator)
+            .toList(); // Then - Should be in Maven order: alpha < beta < milestone < rc < release
     assertThat(sorted)
-        .containsExactly("1.0.0-M1", "1.0.0-ALPHA", "1.0.0-BETA", "1.0.0-RC1", "1.0.0");
+        .containsExactly("1.0.0-ALPHA", "1.0.0-BETA", "1.0.0-M1", "1.0.0-RC1", "1.0.0");
   }
 
   @Test
@@ -326,5 +331,120 @@ class VersionComparatorTest {
 
     // Then - Should handle leading zeros correctly (01 should equal 1)
     assertThat(result).isZero();
+  }
+
+  @ParameterizedTest
+  @MethodSource("updateTypeTestData")
+  void testDetermineUpdateType(
+      String current, String latest, String expectedUpdateType, String description) {
+    // When
+    String updateType = versionComparator.determineUpdateType(current, latest);
+
+    // Then
+    assertThat(updateType).as(description).isEqualTo(expectedUpdateType);
+  }
+
+  @SuppressWarnings("unused")
+  private static Stream<Arguments> updateTypeTestData() {
+    return Stream.of(
+        // Major updates
+        Arguments.of("1.0.0", "2.0.0", "major", "Major version update"),
+        Arguments.of("1.5.3", "2.0.0", "major", "Major version update with minor/patch"),
+        Arguments.of("1.0.0-alpha", "2.0.0", "major", "Major update from alpha"),
+
+        // Minor updates
+        Arguments.of("1.0.0", "1.1.0", "minor", "Minor version update"),
+        Arguments.of("1.0.5", "1.2.0", "minor", "Minor update with patch difference"),
+        Arguments.of("1.0.0-beta", "1.1.0", "minor", "Minor update from beta"),
+
+        // Patch updates
+        Arguments.of("1.0.0", "1.0.1", "patch", "Patch version update"),
+        Arguments.of("1.2.3", "1.2.4", "patch", "Simple patch update"),
+        Arguments.of("1.0.0-rc", "1.0.1", "patch", "Patch update from RC"),
+
+        // No updates / equal versions
+        Arguments.of("1.0.0", "1.0.0", "none", "Same version"),
+        Arguments.of("1.0.0-alpha", "1.0.0-alpha", "none", "Same alpha version"),
+
+        // Unknown/downgrade scenarios
+        Arguments.of("2.0.0", "1.0.0", "unknown", "Downgrade scenario"),
+        Arguments.of("1.1.0", "1.0.0", "unknown", "Minor downgrade"),
+        Arguments.of(null, "1.0.0", "unknown", "Null current version"),
+        Arguments.of("1.0.0", null, "unknown", "Null latest version"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("stableVersionTestData")
+  void testIsStableVersion(String version, boolean expectedStable, String description) {
+    // When
+    boolean isStable = versionComparator.isStableVersion(version);
+
+    // Then
+    assertThat(isStable).as(description).isEqualTo(expectedStable);
+  }
+
+  @SuppressWarnings("unused")
+  private static Stream<Arguments> stableVersionTestData() {
+    return Stream.of(
+        // Stable versions
+        Arguments.of("1.0.0", true, "Plain numeric version is stable"),
+        Arguments.of("2.1.5", true, "Multi-component numeric version is stable"),
+        Arguments.of("1.0.0-final", true, "Final qualifier is stable"),
+        Arguments.of("1.0.0-ga", true, "GA qualifier is stable"),
+        Arguments.of("1.0.0-release", true, "Release qualifier is stable"),
+        Arguments.of("1.0.0-sp1", true, "Service pack is stable"),
+
+        // Pre-release versions
+        Arguments.of("1.0.0-alpha", false, "Alpha version is not stable"),
+        Arguments.of("1.0.0-beta", false, "Beta version is not stable"),
+        Arguments.of("1.0.0-rc", false, "RC version is not stable"),
+        Arguments.of("1.0.0-snapshot", false, "Snapshot version is not stable"),
+        Arguments.of("1.0.0-milestone", false, "Milestone version is not stable"),
+
+        // Edge cases
+        Arguments.of(null, false, "Null version is not stable"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("versionTypeTestData")
+  void testGetVersionType(String version, String expectedType, String description) {
+    // When
+    String versionType = versionComparator.getVersionTypeString(version);
+
+    // Then
+    assertThat(versionType).as(description).isEqualTo(expectedType);
+  }
+
+  @SuppressWarnings("unused")
+  private static Stream<Arguments> versionTypeTestData() {
+    return Stream.of(
+        // Stable versions
+        Arguments.of("1.0.0", "stable", "Plain numeric version is stable"),
+        Arguments.of("1.0.0-final", "stable", "Final qualifier is stable"),
+        Arguments.of("1.0.0-ga", "stable", "GA qualifier is stable"),
+        Arguments.of("1.0.0-release", "stable", "Release qualifier is stable"),
+
+        // Alpha versions
+        Arguments.of("1.0.0-alpha", "alpha", "Alpha version"),
+        Arguments.of("1.0.0-a1", "alpha", "Alpha with number"),
+        Arguments.of("1.0.0-dev", "alpha", "Dev version treated as alpha"),
+        Arguments.of("1.0.0-preview", "alpha", "Preview version treated as alpha"),
+
+        // Beta versions
+        Arguments.of("1.0.0-beta", "beta", "Beta version"),
+        Arguments.of("1.0.0-b1", "beta", "Beta with number"),
+
+        // RC versions
+        Arguments.of("1.0.0-rc", "rc", "RC version"),
+        Arguments.of("1.0.0-cr", "rc", "CR version treated as RC"),
+        Arguments.of("1.0.0-candidate", "rc", "Candidate version treated as RC"),
+
+        // Milestone versions
+        Arguments.of("1.0.0-milestone", "milestone", "Milestone version"),
+        Arguments.of("1.0.0-m1", "milestone", "Milestone with number"),
+
+        // Edge cases
+        Arguments.of(null, "unknown", "Null version returns unknown"),
+        Arguments.of("1.0.0-custom", "stable", "Unknown qualifier defaults to stable"));
   }
 }

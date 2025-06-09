@@ -3,17 +3,14 @@ package com.arvindand.mcp.maven.util;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 
 /**
- * Utility class for parsing Maven coordinates from strings. Provides static methods to parse and
- * validate Maven coordinate strings.
+ * Utility class for parsing Maven coordinates from strings.
  *
  * @author Arvind Menon
  * @since 0.1.0
  */
 public final class MavenCoordinateParser {
 
-  private MavenCoordinateParser() {
-    // Prevent instantiation
-  }
+  private MavenCoordinateParser() {}
 
   /**
    * Parses a Maven coordinate string in the format:
@@ -29,31 +26,18 @@ public final class MavenCoordinateParser {
     }
 
     String[] parts = dependency.split(":");
-    if (parts.length < 2) {
-      throw new IllegalArgumentException(
-          "Invalid Maven coordinate format. Minimum format is 'groupId:artifactId'. Got: "
-              + dependency);
-    }
-
-    if (parts.length > 5) {
-      throw new IllegalArgumentException(
-          "Invalid Maven coordinate format. Maximum format is 'groupId:artifactId:version:packaging:classifier'. Got: "
-              + dependency);
-    }
-
-    String groupId = parts[0].trim();
-    String artifactId = parts[1].trim();
-
-    if (groupId.isEmpty() || artifactId.isEmpty()) {
-      throw new IllegalArgumentException(
-          "GroupId and artifactId cannot be empty. Got: " + dependency);
-    }
-
-    String version = parts.length > 2 && !parts[2].trim().isEmpty() ? parts[2].trim() : null;
-    String packaging = parts.length > 3 && !parts[3].trim().isEmpty() ? parts[3].trim() : null;
-    String classifier = parts.length > 4 && !parts[4].trim().isEmpty() ? parts[4].trim() : null;
-
-    return new MavenCoordinate(groupId, artifactId, version, packaging, classifier);
+    return switch (parts.length) {
+      case 0, 1 ->
+          throw new IllegalArgumentException(
+              "Invalid Maven coordinate format. Minimum format is 'groupId:artifactId'. Got: "
+                  + dependency);
+      case 2, 3, 4, 5 -> parseValidCoordinate(parts, dependency);
+      default ->
+          throw new IllegalArgumentException(
+              "Invalid Maven coordinate format. Maximum format is"
+                  + " 'groupId:artifactId:version:packaging:classifier'. Got: "
+                  + dependency);
+    };
   }
 
   /**
@@ -63,6 +47,28 @@ public final class MavenCoordinateParser {
    * @throws IllegalArgumentException if the format is invalid
    */
   public static void validate(String dependency) {
-    parse(dependency); // This will throw if invalid
+    parse(dependency);
+  }
+
+  private static MavenCoordinate parseValidCoordinate(String[] parts, String original) {
+    String groupId = parts[0].trim();
+    String artifactId = parts[1].trim();
+
+    if (groupId.isEmpty() || artifactId.isEmpty()) {
+      throw new IllegalArgumentException(
+          "GroupId and artifactId cannot be empty. Got: " + original);
+    }
+
+    String version = getPartOrNull(parts, 2);
+    String packaging = getPartOrNull(parts, 3);
+    String classifier = getPartOrNull(parts, 4);
+
+    return new MavenCoordinate(groupId, artifactId, version, packaging, classifier);
+  }
+
+  private static String getPartOrNull(String[] parts, int index) {
+    if (index >= parts.length) return null;
+    String part = parts[index].trim();
+    return part.isEmpty() ? null : part;
   }
 }

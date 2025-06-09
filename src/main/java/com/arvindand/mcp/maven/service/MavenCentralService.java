@@ -13,8 +13,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 /**
- * Service for interacting with Maven Central search API. Provides cached methods for retrieving
- * Maven artifact information.
+ * Service for interacting with Maven Central search API.
  *
  * @author Arvind Menon
  * @since 0.1.0
@@ -23,37 +22,19 @@ import org.springframework.web.client.RestClientResponseException;
 public class MavenCentralService {
 
   private static final Logger logger = LoggerFactory.getLogger(MavenCentralService.class);
-
   private final RestClient restClient;
   private final MavenCentralProperties properties;
 
-  /**
-   * Constructs a new MavenCentralService with the specified properties.
-   *
-   * @param properties the Maven Central API configuration properties
-   */
   public MavenCentralService(MavenCentralProperties properties) {
     this.properties = properties;
-
-    // Configure timeouts for better performance
-    var requestFactory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
-    requestFactory.setConnectTimeout((int) properties.timeout().toMillis());
-    requestFactory.setReadTimeout((int) properties.timeout().toMillis());
-
-    this.restClient =
-        RestClient.builder()
-            .baseUrl(properties.baseUrl())
-            .defaultHeader("User-Agent", "Maven-Tools-MCP/0.1.0 (https://github.com/arvindand)")
-            .requestFactory(requestFactory)
-            .build();
+    this.restClient = createRestClient();
   }
 
   /**
-   * Gets the latest version of a Maven artifact. Results are cached for improved performance.
+   * Gets the latest version for a Maven coordinate.
    *
-   * @param coordinate the Maven coordinate to search for
-   * @return the latest version string, or null if not found
-   * @throws MavenCentralException if there's an error communicating with Maven Central
+   * @param coordinate the Maven coordinate
+   * @return the latest version or null if not found
    */
   @Cacheable(
       value = "maven-latest-versions",
@@ -61,56 +42,16 @@ public class MavenCentralService {
           "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + (#coordinate.packaging()"
               + " ?: 'jar')")
   public String getLatestVersion(MavenCoordinate coordinate) {
-    logger.debug(
-        "Fetching latest version for {}:{}", coordinate.groupId(), coordinate.artifactId());
-    try {
-      String query = buildQuery(coordinate, null);
-      MavenSearchResponse response =
-          restClient
-              .get()
-              .uri(
-                  uriBuilder ->
-                      uriBuilder
-                          .queryParam("q", query)
-                          .queryParam("core", "gav")
-                          .queryParam("rows", properties.maxResults())
-                          .queryParam("wt", "json")
-                          .build())
-              .retrieve()
-              .body(MavenSearchResponse.class);
-      if (response == null || response.response().docs().isEmpty()) {
-        String errorMessage =
-            String.format(
-                "No versions found for artifact %s:%s",
-                coordinate.groupId(), coordinate.artifactId());
-        logger.warn(errorMessage);
-        throw new MavenCentralException(errorMessage);
-      }
-      List<String> versions =
-          response.response().docs().stream()
-              .map(MavenSearchResponse.MavenArtifact::version)
-              .distinct()
-              .sorted(new VersionComparator().reversed())
-              .toList();
-
-      String latest = versions.isEmpty() ? null : versions.get(0);
-      logger.debug(
-          "Latest version for {}:{} is {}", coordinate.groupId(), coordinate.artifactId(), latest);
-      return latest;
-
-    } catch (RestClientResponseException e) {
-      throw new MavenCentralException("Maven Central API error: " + e.getMessage(), e);
-    }
+    List<String> versions = fetchVersions(coordinate, null, properties.maxResults());
+    return versions.isEmpty() ? null : versions.get(0);
   }
 
   /**
-   * Checks if a specific version of a Maven artifact exists. Results are cached for improved
-   * performance.
+   * Checks if a specific version exists for a Maven coordinate.
    *
-   * @param coordinate the Maven coordinate to search for
-   * @param version the specific version to check
-   * @return true if the version exists, false otherwise
-   * @throws MavenCentralException if there's an error communicating with Maven Central
+   * @param coordinate the Maven coordinate
+   * @param version the version to check
+   * @return true if the version exists
    */
   @Cacheable(
       value = "maven-version-checks",
@@ -118,50 +59,19 @@ public class MavenCentralService {
           "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + #version + ':' +"
               + " (#coordinate.packaging() ?: 'jar')")
   public boolean checkVersionExists(MavenCoordinate coordinate, String version) {
-    logger.debug(
-        "Checking if version {} exists for {}:{}",
-        version,
-        coordinate.groupId(),
-        coordinate.artifactId());
-
     try {
-      String query = buildQuery(coordinate, version);
-      MavenSearchResponse response =
-          restClient
-              .get()
-              .uri(
-                  uriBuilder ->
-                      uriBuilder
-                          .queryParam("q", query)
-                          .queryParam("core", "gav")
-                          .queryParam("rows", 1)
-                          .queryParam("wt", "json")
-                          .build())
-              .retrieve()
-              .body(MavenSearchResponse.class);
-      boolean exists = response != null && !response.response().docs().isEmpty();
-      logger.debug(
-          "Version {} for {}:{} exists: {}",
-          version,
-          coordinate.groupId(),
-          coordinate.artifactId(),
-          exists);
-
-      return exists;
-
+      MavenSearchResponse response = searchMavenCentral(coordinate, version, 1);
+      return response != null && !response.response().docs().isEmpty();
     } catch (RestClientResponseException e) {
       throw new MavenCentralException("Maven Central API error: " + e.getMessage(), e);
-    } catch (RuntimeException e) {
-      throw new MavenCentralException("Failed to check version existence: " + e.getMessage(), e);
     }
   }
 
   /**
-   * Gets all available versions for a Maven artifact. Results are cached for improved performance.
+   * Gets all available versions for a Maven coordinate.
    *
-   * @param coordinate the Maven coordinate to search for
-   * @return list of all available versions, sorted by version comparator
-   * @throws MavenCentralException if there's an error communicating with Maven Central
+   * @param coordinate the Maven coordinate
+   * @return list of all versions, sorted by version descending
    */
   @Cacheable(
       value = "maven-all-versions",
@@ -169,54 +79,53 @@ public class MavenCentralService {
           "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + (#coordinate.packaging()"
               + " ?: 'jar')")
   public List<String> getAllVersions(MavenCoordinate coordinate) {
-    logger.debug("Fetching all versions for {}:{}", coordinate.groupId(), coordinate.artifactId());
+    return fetchVersions(coordinate, null, properties.maxResults());
+  }
+
+  private List<String> fetchVersions(
+      MavenCoordinate coordinate, String specificVersion, int maxResults) {
     try {
-      String query = buildQuery(coordinate, null);
-      MavenSearchResponse response =
-          restClient
-              .get()
-              .uri(
-                  uriBuilder ->
-                      uriBuilder
-                          .queryParam("q", query)
-                          .queryParam("core", "gav")
-                          .queryParam("rows", properties.maxResults())
-                          .queryParam("wt", "json")
-                          .build())
-              .retrieve()
-              .body(MavenSearchResponse.class);
+      MavenSearchResponse response = searchMavenCentral(coordinate, specificVersion, maxResults);
+
       if (response == null || response.response().docs().isEmpty()) {
         String errorMessage =
-            String.format(
-                "No versions found for artifact %s:%s",
-                coordinate.groupId(), coordinate.artifactId());
+            "No versions found for artifact %s:%s"
+                .formatted(coordinate.groupId(), coordinate.artifactId());
         logger.warn(errorMessage);
         throw new MavenCentralException(errorMessage);
       }
-      List<String> versions =
-          response.response().docs().stream()
-              .map(MavenSearchResponse.MavenArtifact::version)
-              .distinct()
-              .sorted(new VersionComparator().reversed())
-              .toList();
 
-      logger.debug(
-          "Found {} versions for {}:{}",
-          versions.size(),
-          coordinate.groupId(),
-          coordinate.artifactId());
-      return versions;
+      return response.response().docs().stream()
+          .map(MavenSearchResponse.MavenArtifact::version)
+          .distinct()
+          .sorted(new VersionComparator().reversed())
+          .toList();
 
     } catch (RestClientResponseException e) {
       throw new MavenCentralException("Maven Central API error: " + e.getMessage(), e);
-    } catch (RuntimeException e) {
-      throw new MavenCentralException("Failed to fetch all versions: " + e.getMessage(), e);
     }
   }
 
-  /** Builds a Solr query string for Maven Central search. */
+  private MavenSearchResponse searchMavenCentral(
+      MavenCoordinate coordinate, String version, int rows) {
+    String query = buildQuery(coordinate, version);
+
+    return restClient
+        .get()
+        .uri(
+            uriBuilder ->
+                uriBuilder
+                    .queryParam("q", query)
+                    .queryParam("core", "gav")
+                    .queryParam("rows", rows)
+                    .queryParam("wt", "json")
+                    .build())
+        .retrieve()
+        .body(MavenSearchResponse.class);
+  }
+
   private String buildQuery(MavenCoordinate coordinate, String version) {
-    var query =
+    StringBuilder query =
         new StringBuilder()
             .append("g:\"")
             .append(coordinate.groupId())
@@ -229,11 +138,23 @@ public class MavenCentralService {
       query.append(" AND v:\"").append(version).append("\"");
     }
 
-    String packaging = coordinate.packaging();
-    if (packaging != null) {
-      query.append(" AND p:\"").append(packaging).append("\"");
+    if (coordinate.packaging() != null) {
+      query.append(" AND p:\"").append(coordinate.packaging()).append("\"");
     }
 
     return query.toString();
+  }
+
+  private RestClient createRestClient() {
+    var requestFactory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+    int timeoutMs = (int) properties.timeout().toMillis();
+    requestFactory.setConnectTimeout(timeoutMs);
+    requestFactory.setReadTimeout(timeoutMs);
+
+    return RestClient.builder()
+        .baseUrl(properties.baseUrl())
+        .defaultHeader("User-Agent", "Maven-Tools-MCP/0.1.0")
+        .requestFactory(requestFactory)
+        .build();
   }
 }

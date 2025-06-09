@@ -17,7 +17,7 @@
     <licenses>
         <license>
             <name>MIT License</name>
-            <url>https://opensource.org/licenses/MIT</url>
+            <url>https://opensource.org/licenses/MIT</url> 
         </license>
     </licenses>
     <developers>
@@ -36,7 +36,7 @@
         <java.version>24</java.version>
         <spring-ai.version>1.0.0</spring-ai.version>
         <fmt-maven-plugin.version>2.27</fmt-maven-plugin.version>
-        
+        <maven-artifact.version>3.9.9</maven-artifact.version>
         <!-- Test execution properties -->
         <skipUTs>false</skipUTs>
         <skipITs>false</skipITs>
@@ -55,12 +55,19 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-cache</artifactId>
-        </dependency>
+        </dependency>        
 
         <!-- Caffeine cache implementation -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!-- Maven version comparison library -->
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-artifact</artifactId>
+            <version>${maven-artifact.version}</version>
         </dependency>
 
         <!-- Jackson for JSON processing -->
