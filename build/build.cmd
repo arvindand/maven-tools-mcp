@@ -47,31 +47,31 @@ if "%choice%"=="2" (
 )
 
 if "%choice%"=="3" (
-    echo 🐳 Building Native Docker image with buildpacks...
-    echo ⏳ This may take 10-15 minutes for native compilation...
+    echo 🐳 Building Native Docker image with buildpacks...    echo ⏳ This may take 10-15 minutes for native compilation...
     echo Step 1: Package application...
     call :run_maven clean package -DskipTests
     if errorlevel 1 goto :error
-      echo Step 2: Build Native Docker image...
+    echo Step 2: Build Native Docker image...
     call :run_maven -Pnative spring-boot:build-image
     if errorlevel 1 goto :error
     echo ✅ Native Docker image built successfully!
     echo.
-    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:0.1.2
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:0.1.3-SNAPSHOT
     goto :end
 )
 
-if "%choice%"=="4" (
-    echo 🐳 Building JVM Docker image with buildpacks...
+if "%choice%"=="4" (    echo 🐳 Building JVM Docker image with buildpacks...
     echo Step 1: Package application...
     call :run_maven clean package -DskipTests
     if errorlevel 1 goto :error
-      echo Step 2: Build JVM Docker image...
+    echo Step 2: Build JVM Docker image...
     call :run_maven spring-boot:build-image
     if errorlevel 1 goto :error
     echo ✅ JVM Docker image built successfully!
     echo.
-    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:0.1.2
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:0.1.3-SNAPSHOT
+    goto :end
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:0.1.3-SNAPSHOT
     goto :end
 )
 

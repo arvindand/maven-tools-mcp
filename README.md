@@ -292,7 +292,7 @@ docker compose down
 docker run -i arvindand/maven-tools-mcp:latest
 
 # Or use a specific version
-docker run -i arvindand/maven-tools-mcp:0.1.2
+docker run -i arvindand/maven-tools-mcp:0.1.3-SNAPSHOT
 ```
 
 ### Build from Source (Optional)
@@ -306,7 +306,7 @@ cd maven-tools-mcp
 ./mvnw spring-boot:build-image
 
 # Run the locally built image
-docker run -i maven-tools-mcp:0.1.2
+docker run -i maven-tools-mcp:0.1.3-SNAPSHOT
 ```
 
 **Traditional Java Build:**
@@ -332,7 +332,7 @@ cd maven-tools-mcp
 ./mvnw verify -Pintegration
 
 # Verify the build
-java -jar target/maven-tools-mcp-0.1.2.jar
+java -jar target/maven-tools-mcp-0.1.3-SNAPSHOT.jar
 ```
 
 **Convenient Build Scripts:**
@@ -353,7 +353,7 @@ For easier builds, use the provided scripts in the `build/` folder:
 .\build\build-docker.cmd
 ```
 
-**Output Location:** `target/maven-tools-mcp-0.1.2.jar`
+**Output Location:** `target/maven-tools-mcp-0.1.3-SNAPSHOT.jar`
 
 ## AI Assistant Integration
 
@@ -443,7 +443,7 @@ For easier builds, use the provided scripts in the `build/` folder:
     "maven-tools": {
       "command": "docker",      "args": [
         "run", "-i", "--rm", "-e", "SPRING_PROFILES_ACTIVE=docker",
-        "maven-tools-mcp:0.1.2"
+        "maven-tools-mcp:0.1.3-SNAPSHOT"
       ]
     }
   }
@@ -465,7 +465,7 @@ For easier builds, use the provided scripts in the `build/` folder:
     "maven-tools": {
       "command": "java",      "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-0.1.2.jar"
+        "/absolute/path/to/maven-tools-mcp-0.1.3-SNAPSHOT.jar"
       ]
     }
   }
@@ -480,7 +480,7 @@ For easier builds, use the provided scripts in the `build/` folder:
     "maven-tools": {
       "command": "java",      "args": [
         "-jar",
-        "C:\\Users\\YourName\\Documents\\Github\\maven-tools-mcp\\target\\maven-tools-mcp-0.1.2.jar"
+        "C:\\Users\\YourName\\Documents\\Github\\maven-tools-mcp\\target\\maven-tools-mcp-0.1.3-SNAPSHOT.jar"
       ]
     }
   }
@@ -560,7 +560,7 @@ VS Code supports MCP servers in agent mode (VS Code 1.99+). Enable with `chat.mc
     "servers": {      "maven-tools": {
         "type": "stdio", 
         "command": "java",
-        "args": ["-jar", "${workspaceFolder}/target/maven-tools-mcp-0.1.2.jar"]
+        "args": ["-jar", "${workspaceFolder}/target/maven-tools-mcp-0.1.3-SNAPSHOT.jar"]
       }
     }
   }
@@ -747,4 +747,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 0.1.0
+- Version: 0.1.3-SNAPSHOT
