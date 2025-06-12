@@ -58,7 +58,8 @@ public class MavenDependencyTools {
       description =
           "Get the latest version of a Maven dependency by type (stable, rc, beta, alpha,"
               + " milestone). Use this when you want to discover what versions are available."
-              + " Format: 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
+              + " Format: 'groupId:artifactId' (NO version). Example:"
+              + " 'org.springframework:spring-core'")
   public String maven_get_latest(String dependency) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
@@ -91,7 +92,8 @@ public class MavenDependencyTools {
   @Tool(
       description =
           "Check if a specific version of a Maven dependency exists with version type information."
-              + " Format: 'groupId:artifactId' + version. Example: dependency='org.springframework:spring-core', version='6.1.4'")
+              + " Format: 'groupId:artifactId' + version. Example:"
+              + " dependency='org.springframework:spring-core', version='6.1.4'")
   public String maven_check_exists(String dependency, String version) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
@@ -176,8 +178,9 @@ public class MavenDependencyTools {
       description =
           "Check latest versions for multiple Maven dependencies with comprehensive version"
               + " information. Use when you want to discover latest versions for many dependencies."
-              + " Format: 'groupId:artifactId' (NO versions). Example: 'org.springframework:spring-core,junit:junit'"
-              + " DO NOT include version numbers in the coordinates.")
+              + " Format: 'groupId:artifactId' (NO versions). Example:"
+              + " 'org.springframework:spring-core,junit:junit' DO NOT include version numbers in"
+              + " the coordinates.")
   public String maven_bulk_check_latest(String dependencies) {
     try {
       List<String> depList = parseDependencies(dependencies);
@@ -217,8 +220,8 @@ public class MavenDependencyTools {
   @Tool(
       description =
           "Check latest stable versions for multiple Maven dependencies. Use for production"
-              + " dependency updates. Format: 'groupId:artifactId' (NO versions)."
-              + " Example: 'org.springframework:spring-boot-starter,com.fasterxml.jackson.core:jackson-core'"
+              + " dependency updates. Format: 'groupId:artifactId' (NO versions). Example:"
+              + " 'org.springframework:spring-boot-starter,com.fasterxml.jackson.core:jackson-core'"
               + " DO NOT include version numbers in the coordinates.")
   public String maven_bulk_check_stable(String dependencies) {
     try {
@@ -259,9 +262,10 @@ public class MavenDependencyTools {
   @Tool(
       description =
           "Compare current dependencies with latest versions and provide update recommendations."
-              + " IMPORTANT: Use this when you have CURRENT versions to compare. Format: 'groupId:artifactId:version'"
-              + " (MUST include versions). Example: 'org.springframework:spring-core:6.0.0,junit:junit:4.12'"
-              + " This tool analyzes your current versions vs latest available.")
+              + " IMPORTANT: Use this when you have CURRENT versions to compare. Format:"
+              + " 'groupId:artifactId:version' (MUST include versions). Example:"
+              + " 'org.springframework:spring-core:6.0.0,junit:junit:4.12' This tool analyzes your"
+              + " current versions vs latest available.")
   public String maven_compare_versions(String currentDependencies) {
     try {
       List<String> depList = parseDependencies(currentDependencies);
