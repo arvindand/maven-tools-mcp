@@ -56,10 +56,15 @@ jobs:
 
     - name: Build and push AMD64 Native Docker image
       if: github.event_name != 'pull_request'
+      env:
+        DOCKER_PUBLISHREGISTRY_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+        DOCKER_PUBLISHREGISTRY_PASSWORD: ${{ secrets.DOCKER_HUB_TOKEN }}
       run: |
         # Build AMD64 image (native on GitHub Actions runner)
         ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imagePlatform=linux/amd64
+          -Dspring-boot.build-image.imagePlatform=linux/amd64 \
+          -Ddocker.publishRegistry.username="${DOCKER_PUBLISHREGISTRY_USERNAME}" \
+          -Ddocker.publishRegistry.password="${DOCKER_PUBLISHREGISTRY_PASSWORD}"
         
         # Tag and push architecture-specific image
         PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
@@ -72,10 +77,15 @@ jobs:
 
     - name: Build and push ARM64 Native Docker image with emulation
       if: github.event_name != 'pull_request'
+      env:
+        DOCKER_PUBLISHREGISTRY_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+        DOCKER_PUBLISHREGISTRY_PASSWORD: ${{ secrets.DOCKER_HUB_TOKEN }}
       run: |
         # Build ARM64 image using QEMU emulation
         ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imagePlatform=linux/arm64
+          -Dspring-boot.build-image.imagePlatform=linux/arm64 \
+          -Ddocker.publishRegistry.username="${DOCKER_PUBLISHREGISTRY_USERNAME}" \
+          -Ddocker.publishRegistry.password="${DOCKER_PUBLISHREGISTRY_PASSWORD}"
         
         # Tag and push architecture-specific image
         PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
