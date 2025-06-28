@@ -143,9 +143,7 @@
                         <env>
                             <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
                         </env>
-                        <imagePlatform architecture="amd64" os="linux"/>
-                        <imagePlatform architecture="arm64" os="linux"/>
-                        <publish>true</publish>
+                        <publish>true</publish>s
                     </image>
                     <docker>
                         <publishRegistry>

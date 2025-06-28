@@ -39,13 +39,50 @@ jobs:
     - name: Build with Maven (no tests for faster builds)
       run: ./mvnw clean package -DskipTests
 
-    - name: Build and push Native Docker image (main/develop/tags)
+    - name: Set up Docker Buildx for multi-platform builds
+      if: github.event_name != 'pull_request'
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+    - name: Build and push multi-platform Native Docker images
       if: github.event_name != 'pull_request'
       run: |
-        # Build and push native image with Spring Boot plugin using pom.xml configuration
+        # Build ARM64 image
         ./mvnw -Pnative spring-boot:build-image \
+          -Dspring-boot.build-image.imagePlatform=linux/arm64 \
+          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:arm64 \
           -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
           -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
+        
+        # Build AMD64 image  
+        ./mvnw -Pnative spring-boot:build-image \
+          -Dspring-boot.build-image.imagePlatform=linux/amd64 \
+          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:amd64 \
+          -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
+          -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
+
+    - name: Create and push multi-architecture manifest
+      if: github.event_name != 'pull_request'
+      run: |
+        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
+        
+        # Create multi-architecture manifest for version tag
+        docker manifest create arvindand/maven-tools-mcp:${PROJECT_VERSION} \
+          --amend arvindand/maven-tools-mcp:arm64 \
+          --amend arvindand/maven-tools-mcp:amd64
+        docker manifest push arvindand/maven-tools-mcp:${PROJECT_VERSION}
+        
+        # Create multi-architecture manifest for latest tag
+        docker manifest create arvindand/maven-tools-mcp:latest \
+          --amend arvindand/maven-tools-mcp:arm64 \
+          --amend arvindand/maven-tools-mcp:amd64
+        docker manifest push arvindand/maven-tools-mcp:latest
 
     - name: Build Native Docker image for PR (no push)
       if: github.event_name == 'pull_request'
@@ -59,13 +96,13 @@ jobs:
       run: |
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
           IMAGE_NAME="arvindand/maven-tools-mcp:pr-${{ github.event.number }}"
-        else          # Use the project version for the image name
-          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
-          IMAGE_NAME="arvindand/maven-tools-mcp:${PROJECT_VERSION}"
+        else
+          # Test the multi-arch latest image 
+          IMAGE_NAME="arvindand/maven-tools-mcp:latest"
         fi
         
         # Test that the native container starts and responds with docker profile
         timeout 30s docker run --rm -e SPRING_PROFILES_ACTIVE=docker $IMAGE_NAME --help || true
         
         # Basic health check for native image
-        echo "Native Docker image built and basic tests passed"
+        echo "Multi-architecture Docker image built and basic tests passed"
