@@ -151,6 +151,10 @@
                             <password>${docker.publishRegistry.password}</password>
                             <url>https://index.docker.io/v1/</url>
                         </publishRegistry>
+                        <builderPlatforms>
+                            <platform>linux/amd64</platform>
+                            <platform>linux/arm64</platform>
+                        </builderPlatforms>
                     </docker>
                 </configuration>
             </plugin>
