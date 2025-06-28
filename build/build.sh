@@ -54,25 +54,25 @@ chmod +x ../mvnw
 case $choice in
     1)
         echo "📦 Building JAR without tests..."
-        ../mvnw clean package -DskipTests
+        (cd .. && ./mvnw clean package -DskipTests)
         show_jar_result
         ;;
     2)
         echo "📦 Building JAR with tests..."
-        ../mvnw clean package
+        (cd .. && ./mvnw clean package)
         show_jar_result
         ;;
     3)
         echo "🐳 Building Native Docker image with buildpacks..."
         echo "⏳ This may take 10-15 minutes for native compilation..."
         echo "Step 1: Package application..."
-        ../mvnw clean package -DskipTests
+        (cd .. && ./mvnw clean package -DskipTests)
         
         echo "Step 2: Build Native Docker image..."
-        ../mvnw -Pnative spring-boot:build-image
+        (cd .. && ./mvnw -Pnative spring-boot:build-image)
         
         # Get project version for image name
-        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
         
         echo "✅ Native Docker image built successfully!"
         echo ""
@@ -82,13 +82,13 @@ case $choice in
     4)
         echo "🐳 Building JVM Docker image with buildpacks..."
         echo "Step 1: Package application..."
-        ../mvnw clean package -DskipTests
+        (cd .. && ./mvnw clean package -DskipTests)
         
         echo "Step 2: Build JVM Docker image..."
-        ../mvnw spring-boot:build-image
+        (cd .. && ./mvnw spring-boot:build-image)
         
         # Get project version for image name
-        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
         
         echo "✅ JVM Docker image built successfully!"
         echo ""
@@ -97,12 +97,12 @@ case $choice in
         ;;
     5)
         echo "🧹 Cleaning build artifacts..."
-        ../mvnw clean
+        (cd .. && ./mvnw clean)
         echo "✅ Clean completed successfully!"
         ;;
     6)
         echo "🧪 Running tests..."
-        ../mvnw test
+        (cd .. && ./mvnw test)
         echo "✅ Tests completed successfully!"
         ;;
     *)
@@ -112,5 +112,3 @@ case $choice in
 esac
 
 exit 0
-
-# Function definition moved to top of file for better organization

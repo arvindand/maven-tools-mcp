@@ -143,6 +143,8 @@
                         <env>
                             <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
                         </env>
+                        <imagePlatform architecture="amd64" os="linux"/>
+                        <imagePlatform architecture="arm64" os="linux"/>
                         <publish>true</publish>
                     </image>
                     <docker>
@@ -151,10 +153,6 @@
                             <password>${docker.publishRegistry.password}</password>
                             <url>https://index.docker.io/v1/</url>
                         </publishRegistry>
-                        <builderPlatforms>
-                            <platform>linux/amd64</platform>
-                            <platform>linux/arm64</platform>
-                        </builderPlatforms>
                     </docker>
                 </configuration>
             </plugin>
