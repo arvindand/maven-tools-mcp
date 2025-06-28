@@ -39,6 +39,10 @@ jobs:
     - name: Build with Maven (no tests for faster builds)
       run: ./mvnw clean package -DskipTests
 
+    - name: Set up QEMU for multi-platform builds
+      if: github.event_name != 'pull_request'
+      uses: docker/setup-qemu-action@v3
+
     - name: Set up Docker Buildx for multi-platform builds
       if: github.event_name != 'pull_request'
       uses: docker/setup-buildx-action@v3
@@ -50,20 +54,23 @@ jobs:
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-    - name: Build and push multi-platform Native Docker images
+    - name: Build and push AMD64 Native Docker image
       if: github.event_name != 'pull_request'
       run: |
-        # Build ARM64 image
-        ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imagePlatform=linux/arm64 \
-          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:arm64 \
-          -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
-          -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
-        
-        # Build AMD64 image  
+        # Build AMD64 image (native on GitHub Actions runner)
         ./mvnw -Pnative spring-boot:build-image \
           -Dspring-boot.build-image.imagePlatform=linux/amd64 \
           -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:amd64 \
+          -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
+          -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
+
+    - name: Build and push ARM64 Native Docker image with emulation
+      if: github.event_name != 'pull_request'
+      run: |
+        # Build ARM64 image using QEMU emulation
+        ./mvnw -Pnative spring-boot:build-image \
+          -Dspring-boot.build-image.imagePlatform=linux/arm64 \
+          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:arm64 \
           -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
           -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
 
