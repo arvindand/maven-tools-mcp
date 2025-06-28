@@ -59,20 +59,32 @@ jobs:
       run: |
         # Build AMD64 image (native on GitHub Actions runner)
         ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imagePlatform=linux/amd64 \
-          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:amd64 \
-          -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
-          -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
+          -Dspring-boot.build-image.imagePlatform=linux/amd64
+        
+        # Tag and push architecture-specific image
+        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
+        docker tag arvindand/maven-tools-mcp:${PROJECT_VERSION} arvindand/maven-tools-mcp:amd64
+        docker push arvindand/maven-tools-mcp:amd64
+        
+        # Verify AMD64 image was pushed
+        echo "Verifying AMD64 image was pushed..."
+        docker manifest inspect arvindand/maven-tools-mcp:amd64
 
     - name: Build and push ARM64 Native Docker image with emulation
       if: github.event_name != 'pull_request'
       run: |
         # Build ARM64 image using QEMU emulation
         ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imagePlatform=linux/arm64 \
-          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:arm64 \
-          -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
-          -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
+          -Dspring-boot.build-image.imagePlatform=linux/arm64
+        
+        # Tag and push architecture-specific image
+        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
+        docker tag arvindand/maven-tools-mcp:${PROJECT_VERSION} arvindand/maven-tools-mcp:arm64
+        docker push arvindand/maven-tools-mcp:arm64
+        
+        # Verify ARM64 image was pushed
+        echo "Verifying ARM64 image was pushed..."
+        docker manifest inspect arvindand/maven-tools-mcp:arm64
 
     - name: Create and push multi-architecture manifest
       if: github.event_name != 'pull_request'
