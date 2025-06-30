@@ -14,6 +14,8 @@ A Model Context Protocol (MCP) server that supercharges AI assistants with real-
 
 ## ⚡ Quick Demo
 
+<img src="assets/demo.gif" alt="Demo GIF"/>
+
 Ask your AI assistant:
 - *"Check all dependencies in this pom.xml for latest versions"* (paste your pom.xml)
 - *"What's the latest Spring Boot version and all available types?"*
