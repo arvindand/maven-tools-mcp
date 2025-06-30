@@ -1,4 +1,4 @@
-﻿name: Build and Publish Native Docker Image
+name: Build and Publish Native Docker Image
 
 on:
   push:
@@ -39,14 +39,6 @@ jobs:
     - name: Build with Maven (no tests for faster builds)
       run: ./mvnw clean package -DskipTests
 
-    - name: Set up QEMU for multi-platform builds
-      if: github.event_name != 'pull_request'
-      uses: docker/setup-qemu-action@v3
-
-    - name: Set up Docker Buildx for multi-platform builds
-      if: github.event_name != 'pull_request'
-      uses: docker/setup-buildx-action@v3
-
     - name: Log in to Docker Hub
       if: github.event_name != 'pull_request'
       uses: docker/login-action@v3
@@ -54,71 +46,27 @@ jobs:
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-    - name: Build and push AMD64 Native Docker image
+    - name: Build and push Docker image
       if: github.event_name != 'pull_request'
-      env:
-        DOCKER_PUBLISHREGISTRY_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-        DOCKER_PUBLISHREGISTRY_PASSWORD: ${{ secrets.DOCKER_HUB_TOKEN }}
       run: |
-        # Build AMD64 image (native on GitHub Actions runner)
+        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
+        
+        # Build native image using Spring Boot buildpack (builds for current platform)
         ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imagePlatform=linux/amd64 \
-          -Ddocker.publishRegistry.username="${DOCKER_PUBLISHREGISTRY_USERNAME}" \
-          -Ddocker.publishRegistry.password="${DOCKER_PUBLISHREGISTRY_PASSWORD}"
+          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION} \
+          -Dspring-boot.build-image.publish=true \
+          -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
+          -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
         
-        # Tag and push architecture-specific image
-        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
-        docker tag arvindand/maven-tools-mcp:${PROJECT_VERSION} arvindand/maven-tools-mcp:amd64
-        docker push arvindand/maven-tools-mcp:amd64
-        
-        # Verify AMD64 image was pushed
-        echo "Verifying AMD64 image was pushed..."
-        docker manifest inspect arvindand/maven-tools-mcp:amd64
-
-    - name: Build and push ARM64 Native Docker image with emulation
-      if: github.event_name != 'pull_request'
-      env:
-        DOCKER_PUBLISHREGISTRY_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-        DOCKER_PUBLISHREGISTRY_PASSWORD: ${{ secrets.DOCKER_HUB_TOKEN }}
-      run: |
-        # Build ARM64 image using QEMU emulation
-        ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imagePlatform=linux/arm64 \
-          -Ddocker.publishRegistry.username="${DOCKER_PUBLISHREGISTRY_USERNAME}" \
-          -Ddocker.publishRegistry.password="${DOCKER_PUBLISHREGISTRY_PASSWORD}"
-        
-        # Tag and push architecture-specific image
-        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
-        docker tag arvindand/maven-tools-mcp:${PROJECT_VERSION} arvindand/maven-tools-mcp:arm64
-        docker push arvindand/maven-tools-mcp:arm64
-        
-        # Verify ARM64 image was pushed
-        echo "Verifying ARM64 image was pushed..."
-        docker manifest inspect arvindand/maven-tools-mcp:arm64
-
-    - name: Create and push multi-architecture manifest
-      if: github.event_name != 'pull_request'
-      run: |
-        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
-        
-        # Create multi-architecture manifest for version tag
-        docker manifest create arvindand/maven-tools-mcp:${PROJECT_VERSION} \
-          --amend arvindand/maven-tools-mcp:arm64 \
-          --amend arvindand/maven-tools-mcp:amd64
-        docker manifest push arvindand/maven-tools-mcp:${PROJECT_VERSION}
-        
-        # Create multi-architecture manifest for latest tag
-        docker manifest create arvindand/maven-tools-mcp:latest \
-          --amend arvindand/maven-tools-mcp:arm64 \
-          --amend arvindand/maven-tools-mcp:amd64
-        docker manifest push arvindand/maven-tools-mcp:latest
+        # Tag as latest
+        docker tag arvindand/maven-tools-mcp:${PROJECT_VERSION} arvindand/maven-tools-mcp:latest
+        docker push arvindand/maven-tools-mcp:latest
 
     - name: Build Native Docker image for PR (no push)
       if: github.event_name == 'pull_request'
       run: |
-        # For PRs, build native image locally without pushing (override publish setting)
+        # For PRs, build native image locally without pushing
         ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.publish=false \
           -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:pr-${{ github.event.number }}
 
     - name: Test Native Docker image functionality
@@ -126,15 +74,10 @@ jobs:
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
           IMAGE_NAME="arvindand/maven-tools-mcp:pr-${{ github.event.number }}"
         else
-          # Test the AMD64 image (compatible with Intel GitHub runners)
-          IMAGE_NAME="arvindand/maven-tools-mcp:amd64"
+          IMAGE_NAME="arvindand/maven-tools-mcp:latest"
         fi
         
-        # Test that the native container starts and responds with docker profile
+        # Test that the native container starts and responds
         timeout 30s docker run --rm -e SPRING_PROFILES_ACTIVE=docker $IMAGE_NAME --help || true
         
-        # Verify multi-arch manifest exists and contains both platforms
-        echo "Verifying multi-architecture manifest..."
-        docker manifest inspect arvindand/maven-tools-mcp:latest | grep -E "(amd64|arm64)" || echo "Platform verification completed"
-        
-        echo "Multi-architecture Docker image built and tested successfully!"
+        echo "Docker image built and tested successfully!"
