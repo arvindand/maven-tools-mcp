@@ -121,16 +121,16 @@ jobs:
       run: |
         PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.3-SNAPSHOT")
         
-        # Create multi-architecture manifest for version tag
+        # Create multi-architecture manifest for version tag using the architecture tags
         docker manifest create arvindand/maven-tools-mcp:${PROJECT_VERSION} \
-          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64 \
-          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64
+          --amend arvindand/maven-tools-mcp:amd64 \
+          --amend arvindand/maven-tools-mcp:arm64
         docker manifest push arvindand/maven-tools-mcp:${PROJECT_VERSION}
         
         # Create multi-architecture manifest for latest tag
         docker manifest create arvindand/maven-tools-mcp:latest \
-          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64 \
-          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64
+          --amend arvindand/maven-tools-mcp:amd64 \
+          --amend arvindand/maven-tools-mcp:arm64
         docker manifest push arvindand/maven-tools-mcp:latest
 
   test-pr:
