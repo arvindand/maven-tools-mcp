@@ -87,7 +87,7 @@ REM Get project version
 for /f "tokens=*" %%i in ('call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul') do set PROJECT_VERSION=%%i
 
 REM Fallback to default version if Maven command failed
-if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=0.1.3
+if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=0.1.4-SNAPSHOT
 
 echo Built native image: arvindand/maven-tools-mcp:%PROJECT_VERSION%
 echo Run with: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:%PROJECT_VERSION%
@@ -116,7 +116,7 @@ REM Get project version
 for /f "tokens=*" %%i in ('call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul') do set PROJECT_VERSION=%%i
 
 REM Fallback to default version if Maven command failed
-if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=0.1.3
+if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=0.1.4-SNAPSHOT
 
 echo Built JVM image: arvindand/maven-tools-mcp:%PROJECT_VERSION%
 echo Run with: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:%PROJECT_VERSION%

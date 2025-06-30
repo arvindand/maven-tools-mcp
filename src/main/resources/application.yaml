@@ -8,7 +8,7 @@ spring:
     mcp:
       server:
         name: maven-tools-mcp
-        version: 0.1.3
+        version: 0.1.4-SNAPSHOT
         type: SYNC
         instructions: "This server provides comprehensive Maven dependency analysis tools including latest version lookup, version existence checks, bulk dependency analysis, POM file analysis, and version comparison with intelligent caching support"
   cache:
