@@ -53,6 +53,8 @@ Ask your AI assistant:
 
 **Prerequisites:** Docker installed and running
 
+**Note:** The Docker image supports both AMD64 (Intel/AMD) and ARM64 (Apple Silicon) architectures. Docker automatically selects the correct version for your platform.
+
 ## Setup for VS Code with GitHub Copilot
 
 **Option 1: Workspace Configuration** - Create `.vscode/mcp.json`:

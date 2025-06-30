@@ -32,7 +32,7 @@ public class JsonResponseService {
    */
   public String toJson(Object object) {
     try {
-      return objectMapper.writeValueAsString(object);
+      return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(object);
     } catch (JsonProcessingException e) {
       logger.error("Error serializing object to JSON: {}", e.getMessage(), e);
       return createErrorResponse("Error serializing response: " + e.getMessage());

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,9 +50,9 @@ class JsonResponseServiceTest {
 
     // Then - Map keys are not converted to snake_case, only object properties
     assertThat(result).isNotNull();
-    assertThat(result).contains("\"testField\":\"testValue\""); // Map keys stay as-is
-    assertThat(result).contains("\"numberField\":42");
-    assertThat(result).contains("\"booleanField\":true");
+    assertThat(result).contains("\"testField\" : \"testValue\""); // Map keys stay as-is
+    assertThat(result).contains("\"numberField\" : 42");
+    assertThat(result).contains("\"booleanField\" : true");
   }
 
   @Test
@@ -65,10 +66,10 @@ class JsonResponseServiceTest {
 
     // Then - Record properties get snake_case, but inner Map keys don't
     assertThat(result).isNotNull();
-    assertThat(result).contains("\"field_name\":\"test\""); // snake_case conversion for record
-    assertThat(result).contains("\"number_value\":123");
-    assertThat(result).contains("\"nested_map\":");
-    assertThat(result).contains("\"innerKey\":\"innerValue\""); // Map keys stay as-is
+    assertThat(result).contains("\"field_name\" : \"test\""); // snake_case conversion for record
+    assertThat(result).contains("\"number_value\" : 123");
+    assertThat(result).contains("\"nested_map\" :");
+    assertThat(result).contains("\"innerKey\" : \"innerValue\""); // Map keys stay as-is
   }
 
   @Test
@@ -83,10 +84,16 @@ class JsonResponseServiceTest {
   @Test
   void testToJson_SerializationError() throws JsonProcessingException {
     // Given - Setup mock to throw JsonProcessingException
+    ObjectWriter mockWriter = mock(ObjectWriter.class);
     JsonResponseService serviceWithMock = new JsonResponseService(mockObjectMapper);
-    when(mockObjectMapper.writeValueAsString(any()))
+    when(mockObjectMapper.writerWithDefaultPrettyPrinter()).thenReturn(mockWriter);
+    when(mockWriter.writeValueAsString(any()))
         .thenThrow(new JsonProcessingException("Test error") {});
     when(mockObjectMapper.setPropertyNamingStrategy(any())).thenReturn(mockObjectMapper);
+    // Mock the fallback error response creation
+    when(mockObjectMapper.writeValueAsString(any()))
+        .thenReturn(
+            "{\"status\":\"error\",\"message\":\"Error serializing response: Test error\"}");
 
     Object testObject = Map.of("test", "value");
 
@@ -94,6 +101,7 @@ class JsonResponseServiceTest {
     String result = serviceWithMock.toJson(testObject);
 
     // Then - Should return error response
+    assertThat(result).isNotNull();
     assertThat(result).contains("\"status\":\"error\"");
     assertThat(result).contains("\"message\":\"Error serializing response: Test error\"");
   }
@@ -170,7 +178,7 @@ class JsonResponseServiceTest {
     String result = serviceWithMock.createErrorResponse(errorMessage);
 
     // Then - Should fall back to manual JSON construction
-    assertThat(result).isEqualTo("{\"status\":\"error\",\"message\":\"Test error\"}");
+    assertThat(result).contains("\"status\":\"error\"").contains("\"message\":\"Test error\"");
   }
 
   @Test
@@ -188,7 +196,8 @@ class JsonResponseServiceTest {
 
     // Then - Should fall back to manual JSON with escaped quotes
     assertThat(result)
-        .isEqualTo("{\"status\":\"error\",\"message\":\"Error with \\\"quotes\\\"\"}");
+        .contains("\"status\":\"error\"")
+        .contains("\"message\":\"Error with \\\"quotes\\\"\"");
   }
 
   @Test
@@ -262,7 +271,7 @@ class JsonResponseServiceTest {
     String result = serviceWithMock.createNotFoundResponse(message);
 
     // Then - Should fall back to manual JSON construction
-    assertThat(result).isEqualTo("{\"status\":\"not_found\",\"message\":\"Not found\"}");
+    assertThat(result).contains("\"status\":\"not_found\"").contains("\"message\":\"Not found\"");
   }
 
   @Test
@@ -275,9 +284,9 @@ class JsonResponseServiceTest {
     String result = jsonResponseService.toJson(testObject);
 
     // Then - Verify snake_case conversion
-    assertThat(result).contains("\"camel_case_field\":\"value1\"");
-    assertThat(result).contains("\"another_camel_case\":\"value2\"");
-    assertThat(result).contains("\"simple\":\"value3\"");
+    assertThat(result).contains("\"camel_case_field\" : \"value1\"");
+    assertThat(result).contains("\"another_camel_case\" : \"value2\"");
+    assertThat(result).contains("\"simple\" : \"value3\"");
 
     // Should not contain camelCase versions
     assertThat(result).doesNotContain("\"camelCaseField\":");

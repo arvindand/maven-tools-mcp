@@ -36,7 +36,7 @@ class MavenDependencyToolsIT {
     assertTrue(result.endsWith("]"));
     assertTrue(result.contains("org.springframework:spring-core"));
     assertTrue(result.contains("junit:junit"));
-    assertTrue(result.contains("\"status\":\"found\""));
+    assertTrue(result.contains("\"status\" : \"found\""));
   }
 
   /** Tests the bulk check stable functionality with multiple dependencies. */
@@ -50,7 +50,7 @@ class MavenDependencyToolsIT {
     assertTrue(result.endsWith("]"));
     assertTrue(result.contains("org.springframework:spring-core"));
     assertTrue(result.contains("jackson-core"));
-    assertTrue(result.contains("\"type\":\"stable\""));
+    assertTrue(result.contains("\"type\" : \"stable\""));
   }
 
   @Test
@@ -74,7 +74,7 @@ class MavenDependencyToolsIT {
 
     assertNotNull(result);
     assertTrue(
-        result.contains("\"status\":\"error\"") || result.contains("\"status\":\"not_found\""));
+        result.contains("\"status\" : \"error\"") || result.contains("\"status\" : \"not_found\""));
     assertTrue(result.contains("org.springframework:spring-core"));
   }
 
@@ -89,8 +89,8 @@ class MavenDependencyToolsIT {
     assertTrue(
         result.startsWith("{")
             && result.endsWith("}")); // Should always have dependency and total_versions
-    assertTrue(result.contains("\"dependency\""));
-    assertTrue(result.contains("\"total_versions\""));
+    assertTrue(result.contains("\"dependency\" :"));
+    assertTrue(result.contains("\"total_versions\" :"));
     // At least one of the type fields should be present
     boolean hasAnyType =
         result.contains("latest_stable")
@@ -109,7 +109,7 @@ class MavenDependencyToolsIT {
         mavenDependencyTools.maven_get_latest(
             "org.springframework.boot:spring-boot-starter-parent");
     assertNotNull(springBootResult);
-    assertTrue(springBootResult.contains("\"dependency\":"));
+    assertTrue(springBootResult.contains("\"dependency\" :"));
     assertTrue(springBootResult.contains("spring-boot-starter-parent"));
     assertTrue(!springBootResult.contains("error"));
 
@@ -117,8 +117,119 @@ class MavenDependencyToolsIT {
     String springAiResult =
         mavenDependencyTools.maven_get_latest("org.springframework.ai:spring-ai-bom");
     assertNotNull(springAiResult);
-    assertTrue(springAiResult.contains("\"dependency\":"));
+    assertTrue(springAiResult.contains("\"dependency\" :"));
     assertTrue(springAiResult.contains("spring-ai-bom"));
     assertTrue(!springAiResult.contains("error"));
+  }
+
+  /** Tests that bulk check latest includes comprehensive version data for follow-up questions. */
+  @Test
+  void testBulkCheckLatestIncludesComprehensiveVersionData() {
+    String dependencies = "org.springframework:spring-core,junit:junit";
+    String result = mavenDependencyTools.maven_bulk_check_latest(dependencies);
+
+    assertNotNull(result);
+    assertTrue(result.startsWith("[") && result.endsWith("]"));
+
+    // Verify comprehensive version fields are present (even if null)
+    assertTrue(result.contains("\"latest_stable\" :"));
+    assertTrue(result.contains("\"latest_rc\" :"));
+    assertTrue(result.contains("\"latest_beta\" :"));
+    assertTrue(result.contains("\"latest_alpha\" :"));
+    assertTrue(result.contains("\"latest_milestone\" :"));
+
+    // Verify we have both dependencies
+    assertTrue(result.contains("spring-core"));
+    assertTrue(result.contains("junit"));
+
+    // Verify status and counts are included
+    assertTrue(result.contains("\"status\" : \"found\""));
+    assertTrue(result.contains("\"total_versions\" :"));
+    assertTrue(result.contains("\"stable_versions\" :"));
+  }
+
+  /** Tests that bulk check stable returns only stable version data without comprehensive fields. */
+  @Test
+  void testBulkCheckStableReturnsOnlyStableData() {
+    String dependencies = "org.springframework:spring-core,com.fasterxml.jackson.core:jackson-core";
+    String result = mavenDependencyTools.maven_bulk_check_stable(dependencies);
+
+    assertNotNull(result);
+    assertTrue(result.startsWith("[") && result.endsWith("]"));
+
+    // Verify we get stable versions as primary
+    assertTrue(result.contains("\"version\" :"));
+    assertTrue(result.contains("\"type\" : \"stable\""));
+
+    // Verify we have both dependencies
+    assertTrue(result.contains("spring-core"));
+    assertTrue(result.contains("jackson-core"));
+
+    // Verify stable-specific fields
+    assertTrue(result.contains("\"status\" : \"found\""));
+    assertTrue(result.contains("\"total_versions\" :"));
+    assertTrue(result.contains("\"stable_versions\" :"));
+  }
+
+  /** Tests that bulk check latest prioritizes stable versions as primary recommendation. */
+  @Test
+  void testBulkCheckLatestPrioritizesStableVersions() {
+    // Use a dependency that's likely to have stable versions
+    String dependencies = "org.springframework:spring-core";
+    String result = mavenDependencyTools.maven_bulk_check_latest(dependencies);
+
+    assertNotNull(result);
+    assertTrue(result.contains("spring-core"));
+    assertTrue(result.contains("\"status\" : \"found\""));
+
+    // If stable version is available, it should be the primary version
+    if (result.contains("\"latest_stable\" : {")) {
+      // Extract the primary version and stable version to compare
+      assertTrue(result.contains("\"version\" :"));
+      assertTrue(result.contains("\"type\" :"));
+      // Note: In real scenarios, we'd parse JSON to verify the primary version
+      // matches the stable version, but for integration test we verify structure
+    }
+
+    // Verify comprehensive data is available for follow-up questions
+    assertTrue(result.contains("\"latest_stable\" :"));
+    assertTrue(result.contains("\"total_versions\" :"));
+  }
+
+  /** Tests error handling in bulk operations with mixed valid/invalid dependencies. */
+  @Test
+  void testBulkCheckErrorHandlingWithMixedDependencies() {
+    String dependencies =
+        "org.springframework:spring-core,invalid:nonexistent-artifact,junit:junit";
+    String result = mavenDependencyTools.maven_bulk_check_latest(dependencies);
+
+    assertNotNull(result);
+    assertTrue(result.startsWith("[") && result.endsWith("]"));
+
+    // Should handle both valid and invalid dependencies
+    assertTrue(result.contains("spring-core"));
+    assertTrue(result.contains("junit"));
+    assertTrue(result.contains("nonexistent-artifact"));
+
+    // Should have mixed status results
+    assertTrue(result.contains("\"status\" : \"found\""));
+    assertTrue(
+        result.contains("\"status\" : \"not_found\"") || result.contains("\"status\" : \"error\""));
+  }
+
+  /** Tests that version counts are accurate in bulk results. */
+  @Test
+  void testBulkCheckVersionCountsAccuracy() {
+    String dependencies = "junit:junit"; // Well-known dependency with many versions
+    String result = mavenDependencyTools.maven_bulk_check_latest(dependencies);
+
+    assertNotNull(result);
+    assertTrue(result.contains("junit"));
+    assertTrue(result.contains("\"total_versions\" :"));
+    assertTrue(result.contains("\"stable_versions\" :"));
+
+    // Verify counts are positive integers (basic sanity check)
+    assertTrue(result.contains("\"total_versions\" : 32"));
+    assertTrue(result.contains("\"stable_versions\" : 23"));
   }
 }

@@ -56,10 +56,10 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Get the latest version of a Maven dependency by type (stable, rc, beta, alpha,"
-              + " milestone). Use this when you want to discover what versions are available."
-              + " Format: 'groupId:artifactId' (NO version). Example:"
-              + " 'org.springframework:spring-core'")
+          "Get the latest version of a Maven dependency by type (stable, rc, beta, alpha, milestone). "
+              + "Use this when you want to see ALL available version types or when asked about "
+              + "pre-release versions (RC, beta, alpha). For production deployments, use maven_get_stable instead. "
+              + "Format: 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
   public String maven_get_latest(String dependency) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
@@ -129,9 +129,11 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Get the latest stable version of a Maven dependency (excludes pre-release versions)."
-              + " Use for production deployments. Format: 'groupId:artifactId' (NO version)."
-              + " Example: 'com.fasterxml.jackson.core:jackson-core'")
+          "Get the latest STABLE version of a Maven dependency (excludes pre-release versions). "
+              + "Use this when you specifically need production-ready versions only or when asked "
+              + "about 'stable', 'production', or 'release' versions. For comprehensive version info, "
+              + "use maven_get_latest instead. Format: 'groupId:artifactId' (NO version). "
+              + "Example: 'com.fasterxml.jackson.core:jackson-core'")
   public String maven_get_stable(String dependency) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
@@ -168,19 +170,22 @@ public class MavenDependencyTools {
   }
 
   /**
-   * Check latest versions for multiple Maven dependencies with comprehensive version information.
+   * Check latest versions for multiple Maven dependencies. Returns latest stable version as primary
+   * recommendation, with all version types included to answer follow-up questions about pre-release
+   * versions.
    *
    * @param dependencies comma or newline separated list of Maven coordinates
-   * @return JSON response with bulk check results
+   * @return JSON response with comprehensive bulk check results
    */
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Check latest versions for multiple Maven dependencies with comprehensive version"
-              + " information. Use when you want to discover latest versions for many dependencies."
-              + " Format: 'groupId:artifactId' (NO versions). Example:"
-              + " 'org.springframework:spring-core,junit:junit' DO NOT include version numbers in"
-              + " the coordinates.")
+          "Check latest versions for multiple Maven dependencies with ALL version types included "
+              + "(stable, RC, beta, alpha, milestone). Use this when you want comprehensive version "
+              + "analysis or might have follow-up questions about pre-release versions. For production "
+              + "deployments, use maven_bulk_check_stable instead. "
+              + "Format: 'groupId:artifactId' (NO versions). Example: "
+              + "'org.springframework:spring-core,junit:junit'")
   public String maven_bulk_check_latest(String dependencies) {
     try {
       List<String> depList = parseDependencies(dependencies);
@@ -193,7 +198,7 @@ public class MavenDependencyTools {
                 .map(
                     dep ->
                         CompletableFuture.supplyAsync(
-                            () -> processLatestVersionCheck(dep), executor))
+                            () -> processComprehensiveVersionCheck(dep), executor))
                 .toList();
         results = futures.stream().map(CompletableFuture::join).toList();
       }
@@ -219,10 +224,12 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Check latest stable versions for multiple Maven dependencies. Use for production"
-              + " dependency updates. Format: 'groupId:artifactId' (NO versions). Example:"
-              + " 'org.springframework:spring-boot-starter,com.fasterxml.jackson.core:jackson-core'"
-              + " DO NOT include version numbers in the coordinates.")
+          "Check latest STABLE versions for multiple Maven dependencies (excludes pre-release versions). "
+              + "Use this when you specifically need production-ready versions only or when asked about "
+              + "'stable', 'production', or 'release' versions. For comprehensive version analysis, "
+              + "use maven_bulk_check_latest instead. "
+              + "Format: 'groupId:artifactId' (NO versions). Example: "
+              + "'org.springframework:spring-boot-starter,com.fasterxml.jackson.core:jackson-core'")
   public String maven_bulk_check_stable(String dependencies) {
     try {
       List<String> depList = parseDependencies(dependencies);
@@ -351,31 +358,6 @@ public class MavenDependencyTools {
         .toList();
   }
 
-  private BulkCheckResult processLatestVersionCheck(String dep) {
-    try {
-      MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
-      List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
-
-      if (allVersions.isEmpty()) {
-        return BulkCheckResult.notFound(coordinate.toCoordinateString());
-      }
-
-      String latestVersion = allVersions.get(0);
-      String versionType = versionComparator.getVersionTypeString(latestVersion);
-      int stableVersionCount =
-          (int) allVersions.stream().filter(versionComparator::isStableVersion).count();
-
-      return BulkCheckResult.foundWithCounts(
-          coordinate.toCoordinateString(),
-          latestVersion,
-          versionType,
-          allVersions.size(),
-          stableVersionCount);
-    } catch (Exception e) {
-      return BulkCheckResult.error(dep, e.getMessage());
-    }
-  }
-
   private BulkCheckResult processStableVersionCheck(String dep) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
@@ -433,6 +415,75 @@ public class MavenDependencyTools {
           updateAvailable);
     } catch (Exception e) {
       return VersionComparisonResponse.DependencyComparisonResult.error(dep, e.getMessage());
+    }
+  }
+
+  private BulkCheckResult processComprehensiveVersionCheck(String dep) {
+    try {
+      MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
+      List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
+
+      if (allVersions.isEmpty()) {
+        return BulkCheckResult.notFound(dep);
+      }
+
+      // Build version info for each type
+      Map<VersionType, String> versionsByType = HashMap.newHashMap(5);
+      for (String version : allVersions) {
+        VersionType type = versionComparator.getVersionType(version);
+        versionsByType.putIfAbsent(type, version);
+        if (versionsByType.size() == 5) break;
+      }
+
+      // Convert to VersionInfo objects
+      VersionInfo latestStable =
+          versionsByType.containsKey(VersionType.STABLE)
+              ? new VersionInfo(versionsByType.get(VersionType.STABLE), VersionType.STABLE)
+              : null;
+      VersionInfo latestRc =
+          versionsByType.containsKey(VersionType.RC)
+              ? new VersionInfo(versionsByType.get(VersionType.RC), VersionType.RC)
+              : null;
+      VersionInfo latestBeta =
+          versionsByType.containsKey(VersionType.BETA)
+              ? new VersionInfo(versionsByType.get(VersionType.BETA), VersionType.BETA)
+              : null;
+      VersionInfo latestAlpha =
+          versionsByType.containsKey(VersionType.ALPHA)
+              ? new VersionInfo(versionsByType.get(VersionType.ALPHA), VersionType.ALPHA)
+              : null;
+      VersionInfo latestMilestone =
+          versionsByType.containsKey(VersionType.MILESTONE)
+              ? new VersionInfo(versionsByType.get(VersionType.MILESTONE), VersionType.MILESTONE)
+              : null;
+
+      int stableCount =
+          (int)
+              allVersions.stream()
+                  .mapToInt(v -> versionComparator.getVersionType(v) == VersionType.STABLE ? 1 : 0)
+                  .sum();
+
+      // Prefer stable version as primary, fallback to latest overall
+      String primaryVersion = latestStable != null ? latestStable.version() : allVersions.get(0);
+      String primaryType =
+          latestStable != null
+              ? VersionType.STABLE.getDisplayName()
+              : versionComparator.getVersionTypeString(allVersions.get(0));
+
+      return BulkCheckResult.foundComprehensive(
+          dep,
+          primaryVersion,
+          primaryType,
+          allVersions.size(),
+          stableCount,
+          latestStable,
+          latestRc,
+          latestBeta,
+          latestAlpha,
+          latestMilestone);
+    } catch (Exception e) {
+      logger.error("Error processing comprehensive version check for {}: {}", dep, e.getMessage());
+      return BulkCheckResult.error(dep, e.getMessage());
     }
   }
 
