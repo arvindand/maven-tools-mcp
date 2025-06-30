@@ -102,19 +102,19 @@ Ask your AI assistant:
 
 | Tool | Purpose | Example |
 |------|---------|---------|
-| `maven_get_latest` | Get newest version by type | Latest Spring Boot with all release types |
-| `maven_get_stable` | Get latest stable only | Production-ready Jackson version |
-| `maven_check_exists` | Verify specific version | Does Spring Boot 3.5.0 exist? |
-| `maven_bulk_check_latest` | Check multiple at once | Update status for entire project |
-| `maven_bulk_check_stable` | Stable versions for many | Production update candidates |
-| `maven_compare_versions` | Upgrade analysis | Compare current vs available versions |
+| `maven_get_latest` | Get newest version by type (stable, rc, beta, alpha, milestone) | Latest Spring Boot with all release types |
+| `maven_get_stable` | Get latest stable only (production-ready) | Production-ready Jackson version |
+| `maven_check_exists` | Verify if a specific version exists, with type | Does Spring Boot 3.5.0 exist? |
+| `maven_bulk_check_latest` | Check multiple dependencies for all version types | Update status for entire project |
+| `maven_bulk_check_stable` | Stable versions for many dependencies | Production update candidates |
+| `maven_compare_versions` | Compare current vs latest, get update recommendations | Compare current vs available versions |
 
 ### `maven_get_latest`
 
 Retrieves the latest available version of a Maven dependency from Maven Central for each version type (stable, rc, beta, alpha, milestone).
 
 **Parameters:**
-- `dependency` (string, required): Maven coordinate in format `groupId:artifactId`
+- `dependency` (string, required): Maven coordinate in format `groupId:artifactId` (NO version)
 
 **Example:**
 ```json
@@ -128,6 +128,9 @@ Retrieves the latest available version of a Maven dependency from Maven Central 
 {
   "dependency": "org.springframework:spring-core",
   "latest_stable": { "version": "6.2.7", "type": "stable" },
+  "latest_rc": { "version": "7.0.0-RC1", "type": "rc" },
+  "latest_beta": { "version": "7.0.0-beta1", "type": "beta" },
+  "latest_alpha": { "version": "7.0.0-alpha1", "type": "alpha" },
   "latest_milestone": { "version": "7.0.0-M5", "type": "milestone" },
   "total_versions": 100
 }
@@ -135,10 +138,10 @@ Retrieves the latest available version of a Maven dependency from Maven Central 
 
 ### `maven_check_exists`
 
-Checks if a specific version of a Maven dependency exists in Maven Central with version type information.
+Checks if a specific version of a Maven dependency exists in Maven Central, with version type information.
 
 **Parameters:**
-- `dependency` (string, required): Maven coordinate in format `groupId:artifactId`
+- `dependency` (string, required): Maven coordinate in format `groupId:artifactId` (NO version)
 - `version` (string, required): Version to check
 
 **Example:**
@@ -163,7 +166,7 @@ Checks if a specific version of a Maven dependency exists in Maven Central with 
 Retrieves the latest stable version of a Maven dependency (excludes RCs, alphas, betas, milestones).
 
 **Parameters:**
-- `dependency` (string, required): Maven coordinate in format `groupId:artifactId`
+- `dependency` (string, required): Maven coordinate in format `groupId:artifactId` (NO version)
 
 **Example:**
 ```json
@@ -184,31 +187,71 @@ Retrieves the latest stable version of a Maven dependency (excludes RCs, alphas,
 
 ### `maven_bulk_check_latest`
 
-Checks latest versions for multiple dependencies in a single call.
+Checks latest versions for multiple dependencies in a single call, returning all version types (stable, rc, beta, alpha, milestone).
 
 **Parameters:**
-- `dependencies` (string, required): Comma-separated list of Maven coordinates
+- `dependencies` (string, required): Comma- or newline-separated list of Maven coordinates (NO versions)
 
 **Example:**
 ```json
 {
-  "dependencies": "org.springframework:spring-core,com.fasterxml.jackson.core:jackson-core,junit:junit"
+  "dependencies": "org.springframework:spring-core,com.fasterxml.jackson.core:jackson-core\njunit:junit"
 }
+```
+
+**Response (array):**
+```json
+[
+  {
+    "dependency": "org.springframework:spring-core",
+    "primary_version": "6.2.7",
+    "primary_type": "stable",
+    "total_versions": 100,
+    "stable_versions": 82,
+    "latest_stable": { "version": "6.2.7", "type": "stable" },
+    "latest_rc": { "version": "7.0.0-RC1", "type": "rc" },
+    "latest_beta": null,
+    "latest_alpha": null,
+    "latest_milestone": { "version": "7.0.0-M5", "type": "milestone" }
+  },
+  // ...more results
+]
 ```
 
 ### `maven_bulk_check_stable`
 
-Checks latest stable versions for multiple dependencies.
+Checks latest stable versions for multiple dependencies (excludes pre-release versions).
 
 **Parameters:**
-- `dependencies` (string, required): Comma-separated list of Maven coordinates
+- `dependencies` (string, required): Comma- or newline-separated list of Maven coordinates (NO versions)
+
+**Example:**
+```json
+{
+  "dependencies": "org.springframework:spring-boot-starter,com.fasterxml.jackson.core:jackson-core"
+}
+```
+
+**Response (array):**
+```json
+[
+  {
+    "dependency": "org.springframework:spring-boot-starter",
+    "primary_version": "3.5.3",
+    "primary_type": "stable",
+    "total_versions": 50,
+    "stable_versions": 40
+  },
+  // ...more results
+]
+```
 
 ### `maven_compare_versions`
 
-Compares current dependencies with their latest versions and provides update recommendations.
+Compares current dependencies (with versions) to the latest available, and provides update recommendations (major, minor, patch, none).
 
 **Parameters:**
-- `currentDependencies` (string, required): Comma-separated list of current dependencies with versions
+- `currentDependencies` (string, required): Comma- or newline-separated list of Maven coordinates with versions (`groupId:artifactId:version`)
 
 **Example:**
 ```json
