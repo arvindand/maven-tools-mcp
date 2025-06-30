@@ -15,6 +15,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [0.1.3] - 2025-06-30
+
+### Added
+
+- Comprehensive version info in dependency check results and improved JSON serialization
+- Support for multiple builder platforms in Docker configuration (native AMD64 and ARM64 builds)
+- Helpful hints and format examples in tool descriptions for better LLM guidance
+- Demo GIF and improved documentation for setup and usage
+
+### Changed
+
+- Refactored and clarified README with detailed command descriptions, examples, and improved user guidance
+- Upgraded Spring Boot to 3.5.3
+- Internal refactoring for maintainability and clarity
+- Improved formatting and readability of tool descriptions
+
+### Fixed
+
+- Docker build and manifest creation for multi-architecture images
+- Build scripts and Docker image configuration for reliability and compatibility
+- Response structure for bulk and compare tools
+
 ## [0.1.2] - 2025-06-09
 
 ### Added in 0.1.2
@@ -67,7 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/arvindand/maven-tools-mcp/releases/tag/v0.1.0
