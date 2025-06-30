@@ -1,7 +1,7 @@
 # Maven Tools MCP Server
 
 [![Java](https://img.shields.io/badge/Java-24-orange.svg)](https://openjdk.java.net/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.0-green.svg)](https://spring.io/projects/spring-boot)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.3-green.svg)](https://spring.io/projects/spring-boot)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -15,10 +15,10 @@ A Model Context Protocol (MCP) server that supercharges AI assistants with real-
 ## ⚡ Quick Demo
 
 Ask your AI assistant:
-- *"What's the latest Spring Boot version and compatible Spring Framework version?"*
-- *"I'm using Spring Boot 3.1.0, Jackson 2.15.0, JUnit 5.9.3 - what updates are available?"*
-- *"Help me migrate from Spring Boot 2.7.18 to the latest 3.x version"*
-- *"We got a security alert for Jackson 2.15.0 - what's the latest safe version?"*
+- *"Check all dependencies in this pom.xml for latest versions"* (paste your pom.xml)
+- *"What's the latest Spring Boot version and all available types?"*
+- *"Which dependencies in my project need updates?"* (paste pom.xml)
+- *"Are there any beta or RC versions I should consider?"*
 
 **vs Web Search:**
 - ✅ **100ms response** (cached) vs 3-5 seconds
@@ -244,45 +244,38 @@ Compares current dependencies with their latest versions and provides update rec
 
 ### Getting Started Examples
 
-**Beginner:**
-- "What's the latest version of Jackson?"
+**Simple Questions:**
+- "What's the latest Spring Boot version?"
+- "Show me all version types for Jackson"
 - "Is Spring Boot 3.5.0 available?"
-- "Find the current stable version of JUnit"
 
-**Intermediate:**
-- "Compare my current Spring dependencies with latest stable versions"
-- "What's the latest version of each: Spring Boot, Jackson, Hibernate?"
-- "Check if org.springframework:spring-core:6.0.0 should be updated"
+**Paste Your pom.xml:**
+- "Check all dependencies in this pom.xml for latest versions" 
+- "Which dependencies need updates?" (paste pom.xml)
+- "Are there any pre-release versions I should consider?"
 
-**Advanced:**
-- "Analyze these dependencies for updates: Spring Boot 3.1.0, Jackson 2.15.0, JUnit 4.13.2"
-- "Show me version comparison with update recommendations for my project dependencies"
+**Follow-up Intelligence:**
+- "What type of updates would these be - major, minor, or patch?"
+- "Should I use the RC version of Spring Boot?"
+- "Compare my current versions with what's available"
 
 ## 🚀 Real-World Use Cases
 
-### Spring Boot 2.7 → 3.x Migration
-```
-"I'm upgrading from Spring Boot 2.7.18. Show me the migration path to latest stable Spring Boot 3.x and compatible Spring Framework versions."
-```
-**Result:** Get exact version compatibility matrix and upgrade sequence
+### Project Dependency Audit
+**Action:** Paste your pom.xml and ask: *"Which dependencies are outdated and what updates are available?"*  
+**Result:** Complete project analysis in 2 seconds vs 10+ minutes manually
 
-### Emergency Security Response  
-```
-"We got a security alert for Jackson 2.15.0. What's the latest stable version and what other Jackson modules need updating?"
-```
-**Result:** Instant security patch identification with bulk dependency analysis
+### Security Response  
+**Action:** Paste affected pom.xml: *"We got a security alert - show me latest versions for all dependencies"*  
+**Result:** Instant security patch identification with comprehensive analysis
 
 ### New Project Setup
-```
-"I'm starting a new Spring Boot project. What are the current stable versions for Spring Boot, Spring Security, Spring Data JPA, and Jackson?"
-```
-**Result:** Complete tech stack with verified stable versions
+**Action:** *"What are the latest stable versions for Spring Boot, Spring Security, and Jackson?"*  
+**Result:** Current tech stack recommendations with version compatibility
 
-### Legacy Project Audit
-```
-"Analyze these legacy dependencies for updates: Spring Boot 2.3.0, Jackson 2.11.0, JUnit 4.12, Hibernate 5.4.0"
-```
-**Result:** Comprehensive update roadmap with breaking change alerts
+### Migration Planning
+**Action:** Paste current pom.xml: *"I'm upgrading to Spring Boot 3.x - what's the migration path?"*  
+**Result:** Step-by-step upgrade analysis with compatibility matrix
 
 ## 🆚 Why Not Just Web Search?
 
