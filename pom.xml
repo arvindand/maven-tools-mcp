@@ -36,7 +36,7 @@
         <java.version>24</java.version>
         <spring-ai.version>1.0.0</spring-ai.version>
         <fmt-maven-plugin.version>2.27</fmt-maven-plugin.version>
-        <maven-artifact.version>3.9.9</maven-artifact.version>
+        <maven-artifact.version>3.9.11</maven-artifact.version>
         <!-- Test execution properties -->
         <skipUTs>false</skipUTs>
         <skipITs>false</skipITs>
