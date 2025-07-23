@@ -46,67 +46,44 @@ jobs:
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-    - name: Build AMD64 native image
+    - name: Get project version
+      id: version
       run: |
         PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
-        
-        # Build AMD64 native image and save as tar
+        echo "version=${PROJECT_VERSION}" >> $GITHUB_OUTPUT
+
+    - name: Build and push AMD64 image
+      run: |
         ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imageName=temp-amd64:latest \
-          -Dspring-boot.build-image.env.BP_NATIVE_IMAGE_BUILD_ARGUMENTS="--no-fallback"
-        
-        # Save the image as a tar file
-        docker save temp-amd64:latest > amd64-image.tar
+          -Dspring-boot.build-image.imageName=${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}-amd64 \
+          -Dspring-boot.build-image.publish=true \
+          -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
+          -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
 
-    - name: Set up QEMU for ARM64 emulation
-      uses: docker/setup-qemu-action@v3
-      with:
-        platforms: arm64
-
-    - name: Build ARM64 native image
+    - name: Build and push ARM64 image  
       run: |
-        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
-        
-        # Build ARM64 native image with platform specification
+        docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
         ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imageName=temp-arm64:latest \
-          -Dspring-boot.build-image.env.BP_NATIVE_IMAGE_BUILD_ARGUMENTS="--no-fallback" \
-          -Dspring-boot.build-image.builder=paketobuildpacks/builder-jammy-buildpack-deps:0.4.10
-        
-        # Save the image as a tar file
-        docker save temp-arm64:latest > arm64-image.tar
+          -Dspring-boot.build-image.imageName=${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}-arm64 \
+          -Dspring-boot.build-image.publish=true \
+          -Dspring-boot.build-image.builder=paketobuildpacks/builder-jammy-buildpack-deps:0.4.10 \
+          -Dspring-boot.build-image.env.BP_ARCH=arm64 \
+          -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
+          -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
 
-    - name: Create and push multi-architecture manifest
+    - name: Create and push multi-arch manifest
       run: |
-        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
-        
-        # Load images and tag them for pushing
-        docker load < amd64-image.tar
-        docker load < arm64-image.tar
-        
-        # Tag and push AMD64 image
-        docker tag temp-amd64:latest arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64
-        docker tag temp-amd64:latest arvindand/maven-tools-mcp:amd64
-        docker push arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64
-        docker push arvindand/maven-tools-mcp:amd64
-        
-        # Tag and push ARM64 image
-        docker tag temp-arm64:latest arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64
-        docker tag temp-arm64:latest arvindand/maven-tools-mcp:arm64
-        docker push arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64
-        docker push arvindand/maven-tools-mcp:arm64
-        
-        # Create multi-architecture manifest for version tag
-        docker manifest create arvindand/maven-tools-mcp:${PROJECT_VERSION} \
-          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64 \
-          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64
-        docker manifest push arvindand/maven-tools-mcp:${PROJECT_VERSION}
-        
-        # Create multi-architecture manifest for latest tag
-        docker manifest create arvindand/maven-tools-mcp:latest \
-          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64 \
-          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64
-        docker manifest push arvindand/maven-tools-mcp:latest
+        # Create manifest for version tag
+        docker manifest create ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }} \
+          --amend ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}-amd64 \
+          --amend ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}-arm64
+        docker manifest push ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}
+
+        # Create manifest for latest tag
+        docker manifest create ${{ env.DOCKER_HUB_REPOSITORY }}:latest \
+          --amend ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}-amd64 \
+          --amend ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}-arm64
+        docker manifest push ${{ env.DOCKER_HUB_REPOSITORY }}:latest
 
   test-pr:
     runs-on: ubuntu-latest
