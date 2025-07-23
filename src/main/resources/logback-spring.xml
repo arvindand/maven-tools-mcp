@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<configuration>    <!-- Console appender that writes to STDERR to avoid interfering with MCP JSON-RPC on STDOUT -->
+<configuration>
+    <!-- Console appender that writes to STDERR to avoid interfering with MCP JSON-RPC on STDOUT -->
     <appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.err</target>
         <encoder>
@@ -7,41 +8,15 @@
         </encoder>
     </appender>
 
-    <!-- File appender for debugging (only enabled for non-docker profiles) -->
-    <springProfile name="!docker">
-        <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-            <file>logs/maven-mcp-server.log</file>
-            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-                <fileNamePattern>logs/maven-mcp-server.%d{yyyy-MM-dd}.%i.gz</fileNamePattern>
-                <maxFileSize>10MB</maxFileSize>
-                <maxHistory>7</maxHistory> 
-                <totalSizeCap>100MB</totalSizeCap>
-            </rollingPolicy>
-            <encoder>
-                <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p --- [%15.15t] %-40.40logger{39} : %m%n</pattern>
-            </encoder>
-        </appender>
-    </springProfile>
-
     <!-- Root logger configuration -->
     <root level="ERROR">
         <appender-ref ref="STDERR" />
     </root>
 
-    <!-- Application-specific loggers - allow INFO level for your app -->
-    <springProfile name="!docker">
-        <logger name="com.arvindand.mcp.maven" level="INFO" additivity="false">
-            <appender-ref ref="STDERR" />
-            <appender-ref ref="FILE" />
-        </logger>
-    </springProfile>
-    
-    <!-- For docker profile, only use console logging -->
-    <springProfile name="docker">
-        <logger name="com.arvindand.mcp.maven" level="INFO" additivity="false">
-            <appender-ref ref="STDERR" />
-        </logger>
-    </springProfile>
+    <!-- Application-specific logger -->
+    <logger name="com.arvindand.mcp.maven" level="INFO" additivity="false">
+        <appender-ref ref="STDERR" />
+    </logger>
 
     <!-- Spring Framework loggers -->
     <logger name="org.springframework" level="ERROR" additivity="false">
