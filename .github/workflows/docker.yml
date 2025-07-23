@@ -54,12 +54,11 @@ jobs:
 
     - name: Build and push AMD64 image
       run: |
-        # Build AMD64 image locally
-        ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imageName=temp-amd64:${{ steps.version.outputs.version }}
+        # Build AMD64 image locally (Spring Boot ignores imageName and uses POM defaults)
+        ./mvnw -Pnative spring-boot:build-image
         
         # Tag and push with architecture-specific name
-        docker tag temp-amd64:${{ steps.version.outputs.version }} ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}-amd64
+        docker tag ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }} ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}-amd64
         docker push ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}-amd64
 
     - name: Build and push ARM64 image  
@@ -67,13 +66,12 @@ jobs:
         # Set up QEMU for ARM64 emulation
         docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
         
-        # Build ARM64 image locally
+        # Build ARM64 image locally (Spring Boot ignores imageName and uses POM defaults)
         ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imageName=temp-arm64:${{ steps.version.outputs.version }} \
           -Dspring-boot.build-image.env.BP_ARCH=arm64
         
         # Tag and push with architecture-specific name
-        docker tag temp-arm64:${{ steps.version.outputs.version }} ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}-arm64
+        docker tag ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }} ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}-arm64
         docker push ${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.version.outputs.version }}-arm64
 
     - name: Create and push multi-arch manifest
