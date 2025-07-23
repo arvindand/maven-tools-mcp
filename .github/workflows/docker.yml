@@ -45,7 +45,7 @@ jobs:
 
     - name: Build and push AMD64 image
       run: |
-        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.0")
+        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
         
         # Build AMD64 native image with conservative CPU features for Rosetta compatibility
         ./mvnw -Pnative spring-boot:build-image \
@@ -90,7 +90,7 @@ jobs:
 
     - name: Build and push ARM64 image
       run: |
-        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.0")
+        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
         
         # Build ARM64 native image (native build, no emulation needed)
         ./mvnw -Pnative spring-boot:build-image \
@@ -119,7 +119,7 @@ jobs:
 
     - name: Create and push multi-architecture manifest
       run: |
-        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.0")
+        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
         
         # Create multi-architecture manifest for version tag using the architecture tags
         docker manifest create arvindand/maven-tools-mcp:${PROJECT_VERSION} \

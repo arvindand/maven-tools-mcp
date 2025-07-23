@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [1.1.1] - 2025-07-23
+
+### Fixed
+- Native image configuration for analytical intelligence models
+- Added reflection hints for all v1.1.0 analytical model classes (DependencyAgeAnalysis, ReleasePatternAnalysis, VersionTimelineAnalysis)
+- Proper native image compatibility for new analytical features
+
 ## [1.1.0] - 2025-07-23
 
 ### Added
