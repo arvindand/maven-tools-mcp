@@ -137,9 +137,6 @@
                 <configuration>
                     <image>
                         <name>arvindand/maven-tools-mcp:${project.version}</name>
-                        <tags>
-                            <tag>arvindand/maven-tools-mcp:latest</tag>
-                        </tags>
                         <env>
                             <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
                         </env>
