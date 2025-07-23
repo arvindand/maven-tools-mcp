@@ -15,15 +15,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-## [1.1.0] - TBD
+## [1.1.0] - 2025-07-23
 
 ### Added
+- **Analytical Intelligence Tools**: Four new MCP tools for advanced dependency analysis
+  - `analyze_dependency_age` - Classify dependencies as fresh/current/aging/stale with actionable insights
+  - `analyze_release_patterns` - Analyze maintenance activity, release velocity, and predict next releases
+  - `get_version_timeline` - Enhanced version timeline with temporal analysis and release gap detection
+  - `analyze_project_health` - Comprehensive health scoring for multiple dependencies with risk assessment
+- **Enhanced MavenCentralService**: Added timestamp-aware methods for age analysis (`getAllVersionsWithTimestamps`, `getRecentVersionsWithTimestamps`)
+- **New Model Classes**: Added comprehensive analytical data structures (`DependencyAgeAnalysis`, `ReleasePatternAnalysis`, `VersionTimelineAnalysis`)
+- **Virtual Thread Support**: Concurrent bulk analysis for improved performance
+- **New Parameters**: Added analytical parameters (`maxAgeInDays`, `monthsToAnalyze`, `versionCount`)
 
 ### Changed
+- **Enhanced Tool Descriptions**: Updated existing tool descriptions for better clarity and universal JVM build tool support
+- **Improved Documentation**: Updated README.md and CLAUDE.md with analytical intelligence examples and scope decisions
+- **User-Agent Header**: Updated to Maven-Tools-MCP/1.1.0
 
-### Fixed
-
-### Removed
+### Performance
+- **Bulk Analysis**: Added concurrent processing for multiple dependency health analysis
+- **Caching**: Analytical tools leverage existing 24-hour cache infrastructure
+- **Memory Optimization**: Efficient data structures for timeline and pattern analysis
 
 ## [1.0.0] - 2025-07-23
 

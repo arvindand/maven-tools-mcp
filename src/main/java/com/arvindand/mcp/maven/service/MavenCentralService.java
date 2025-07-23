@@ -82,6 +82,38 @@ public class MavenCentralService {
     return fetchVersions(coordinate, null, properties.maxResults());
   }
 
+  /**
+   * Gets all available versions with their timestamps for enhanced analysis.
+   *
+   * @param coordinate the Maven coordinate
+   * @return list of artifacts with version and timestamp information
+   */
+  @Cacheable(
+      value = "maven-versions-with-timestamps",
+      key =
+          "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + (#coordinate.packaging()"
+              + " ?: 'jar')")
+  public List<MavenSearchResponse.MavenArtifact> getAllVersionsWithTimestamps(MavenCoordinate coordinate) {
+    return fetchVersionsWithTimestamps(coordinate, null, properties.maxResults());
+  }
+
+  /**
+   * Gets version information with timestamps for the specified number of recent versions.
+   *
+   * @param coordinate the Maven coordinate
+   * @param maxVersions maximum number of versions to retrieve
+   * @return list of artifacts with version and timestamp information
+   */
+  @Cacheable(
+      value = "maven-recent-versions-with-timestamps",
+      key =
+          "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + #maxVersions + ':' + (#coordinate.packaging()"
+              + " ?: 'jar')")
+  public List<MavenSearchResponse.MavenArtifact> getRecentVersionsWithTimestamps(
+      MavenCoordinate coordinate, int maxVersions) {
+    return fetchVersionsWithTimestamps(coordinate, null, maxVersions);
+  }
+
   private List<String> fetchVersions(
       MavenCoordinate coordinate, String specificVersion, int maxResults) {
     try {
@@ -99,6 +131,28 @@ public class MavenCentralService {
           .map(MavenSearchResponse.MavenArtifact::version)
           .distinct()
           .sorted(new VersionComparator().reversed())
+          .toList();
+
+    } catch (RestClientResponseException e) {
+      throw new MavenCentralException("Maven Central API error: " + e.getMessage(), e);
+    }
+  }
+
+  private List<MavenSearchResponse.MavenArtifact> fetchVersionsWithTimestamps(
+      MavenCoordinate coordinate, String specificVersion, int maxResults) {
+    try {
+      MavenSearchResponse response = searchMavenCentral(coordinate, specificVersion, maxResults);
+
+      if (response == null || response.response().docs().isEmpty()) {
+        String errorMessage =
+            "No versions found for artifact %s:%s"
+                .formatted(coordinate.groupId(), coordinate.artifactId());
+        logger.warn(errorMessage);
+        throw new MavenCentralException(errorMessage);
+      }
+
+      return response.response().docs().stream()
+          .sorted((a, b) -> new VersionComparator().reversed().compare(a.version(), b.version()))
           .toList();
 
     } catch (RestClientResponseException e) {
@@ -153,7 +207,7 @@ public class MavenCentralService {
 
     return RestClient.builder()
         .baseUrl(properties.baseUrl())
-        .defaultHeader("User-Agent", "Maven-Tools-MCP/0.1.0")
+        .defaultHeader("User-Agent", "Maven-Tools-MCP/1.1.0")
         .requestFactory(requestFactory)
         .build();
   }

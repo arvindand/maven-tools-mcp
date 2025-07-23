@@ -23,6 +23,9 @@ Ask your AI assistant:
 - *"What's the latest Spring Boot version?"*
 - *"Which dependencies in my project need updates?"* (any build tool)
 - *"Show me only stable versions for production deployment"*
+- *"How old are my dependencies and which ones need attention?"* (new in v1.1.0)
+- *"Analyze the release patterns for my key dependencies"* (new in v1.1.0)
+- *"Give me a health check for all my project dependencies"* (new in v1.1.0)
 
 ## 🔧 Supported Build Tools
 
@@ -44,11 +47,13 @@ Working with **any build tool** that uses Maven Central Repository:
 - ✅ **Version Comparison** - Understand upgrade impact (major/minor/patch)
 - ✅ **Stability Filtering** - Choose stable-only or include pre-release versions
 - ✅ **Enterprise Performance** - <100ms cached responses, native images
+- ✅ **Analytical Intelligence** - Age analysis, release patterns, project health scoring (v1.1.0)
 
 ### vs Manual Dependency Management
 - ✅ **Risk Assessment** - Identify breaking changes before upgrading
 - ✅ **Universal Support** - Works with any JVM build tool
 - ✅ **Complete Analysis** - All version types with intelligent prioritization
+- ✅ **Maintenance Intelligence** - Predict maintenance activity and sustainability (v1.1.0)
 
 ## Setup for Claude Desktop
 
@@ -115,12 +120,21 @@ Working with **any build tool** that uses Maven Central Repository:
 
 ## What it does
 
+**Core Dependency Intelligence:**
 - Get latest or stable versions of Maven dependencies
 - Check if specific versions exist
 - Bulk version checking for multiple dependencies
 - Compare versions and get update recommendations
 
+**Advanced Analytics (v1.1.0):**
+- Analyze dependency age and freshness (fresh/current/aging/stale)
+- Assess maintenance activity and release patterns
+- Predict next release timeframes
+- Comprehensive project health scoring with risk assessment
+
 ## Available Tools
+
+### Core Dependency Tools (v1.0.0)
 
 | Tool | Purpose | Key Features |
 |------|---------|--------------|
@@ -131,12 +145,27 @@ Working with **any build tool** that uses Maven Central Repository:
 | `check_multiple_stable_versions` | Stable versions for many dependencies | Perfect for production updates |
 | `compare_dependency_versions` | Compare current vs latest with upgrade recommendations | onlyStableTargets parameter, risk assessment |
 
+### Analytical Intelligence Tools (v1.1.0)
+
+| Tool | Purpose | Key Features |
+|------|---------|--------------|
+| `analyze_dependency_age` | Classify dependencies as fresh/current/aging/stale | maxAgeInDays parameter, actionable insights |
+| `analyze_release_patterns` | Analyze maintenance activity and predict releases | monthsToAnalyze parameter, velocity trends |
+| `get_version_timeline` | Enhanced version timeline with temporal analysis | versionCount parameter, release gap detection |
+| `analyze_project_health` | Comprehensive health analysis for multiple dependencies | Health scoring, bulk analysis, recommendations |
+
 ### Tool Parameters
 
-**New Stability Controls:**
+**Core Parameters:**
 - `preferStable` - Prioritize stable versions in analysis
 - `stableOnly` - Filter to production-ready versions only
 - `onlyStableTargets` - Only suggest upgrades to stable versions
+
+**Analytical Parameters (v1.1.0):**
+- `maxAgeInDays` - Set acceptable age threshold for dependencies
+- `monthsToAnalyze` - Specify analysis period for release patterns (default: 24)
+- `versionCount` - Number of recent versions to analyze in timeline (default: 20)
+- `includeRecommendations` - Include detailed recommendations in health analysis
 
 **Universal Compatibility:**
 All tools work with standard Maven coordinates (`groupId:artifactId`) and support any JVM build tool.
@@ -393,12 +422,62 @@ Compare current dependency versions with latest available and show upgrade recom
 | Stability filtering | Not available | Built-in (stableOnly, preferStable) |
 | Build tool compatibility | Tool-specific searches | Universal JVM support |
 
+## ✨ New Analytical Intelligence Examples (v1.1.0)
+
+### Dependency Age Analysis
+**Usage:** *"How old is my Spring Boot dependency and should I update it?"*  
+**Tool:** `analyze_dependency_age`
+```json
+{
+  "dependency": "org.springframework.boot:spring-boot-starter",
+  "age_classification": "current",
+  "days_since_release": 45,
+  "recommendation": "Actively maintained - consider updating if needed"
+}
+```
+
+### Release Pattern Analysis  
+**Usage:** *"What's the maintenance pattern for Jackson? When might the next release be?"*  
+**Tool:** `analyze_release_patterns`
+```json
+{
+  "dependency": "com.fasterxml.jackson.core:jackson-core",
+  "maintenance_level": "active",
+  "release_velocity": 1.2,
+  "next_release_prediction": "Expected in 3 weeks"
+}
+```
+
+### Project Health Check
+**Usage:** *"Give me a health assessment for all my key dependencies"*  
+**Tool:** `analyze_project_health`
+```json
+{
+  "overall_health": "good",
+  "average_health_score": 78,
+  "age_distribution": {"fresh": 2, "current": 8, "aging": 3, "stale": 1}
+}
+```
+
+### Version Timeline Intelligence
+**Usage:** *"Show me the recent release timeline for JUnit with gap analysis"*  
+**Tool:** `get_version_timeline`
+```json
+{
+  "insights": ["High release frequency indicates active development"],
+  "recent_activity": {"activity_level": "active", "releases_last_quarter": 4}
+}
+```
+
 ## Features
 
 - Version lookup (latest, stable, or specific versions)
 - Version type classification (stable, RC, beta, alpha, milestone)
 - Bulk operations for multiple dependencies
 - Version comparison tools
+- **Dependency age analysis with actionable insights** (v1.1.0)
+- **Maintenance pattern analysis and predictions** (v1.1.0)
+- **Project health scoring and recommendations** (v1.1.0)
 - Caching for better performance
 - Works with MCP-compatible AI assistants
 
