@@ -552,7 +552,7 @@ cd maven-tools-mcp
 ./mvnw clean package -Pfull
 
 # Run the JAR
-java -jar target/maven-tools-mcp-1.1.0-SNAPSHOT.jar
+java -jar target/maven-tools-mcp-1.1.0.jar
 ```
 
 **Claude Desktop configuration for JAR:**
@@ -563,7 +563,7 @@ java -jar target/maven-tools-mcp-1.1.0-SNAPSHOT.jar
       "command": "java",
       "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-1.1.0-SNAPSHOT.jar"
+        "/absolute/path/to/maven-tools-mcp-1.1.0.jar"
       ]
     }
   }
@@ -645,4 +645,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 1.1.0-SNAPSHOT
+- Version: 1.1.0
