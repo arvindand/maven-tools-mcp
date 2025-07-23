@@ -50,7 +50,6 @@ jobs:
         # Build AMD64 native image with conservative CPU features for Rosetta compatibility
         ./mvnw -Pnative spring-boot:build-image \
           -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64 \
-          -Dspring-boot.build-image.tags=arvindand/maven-tools-mcp:amd64 \
           -Dspring-boot.build-image.env.BP_NATIVE_IMAGE_BUILD_ARGUMENTS="-march=x86-64-v2 --no-fallback" \
           -Dspring-boot.build-image.publish=true \
           -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
@@ -95,7 +94,6 @@ jobs:
         # Build ARM64 native image (native build, no emulation needed)
         ./mvnw -Pnative spring-boot:build-image \
           -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64 \
-          -Dspring-boot.build-image.tags=arvindand/maven-tools-mcp:arm64 \
           -Dspring-boot.build-image.publish=true \
           -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
           -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
@@ -121,16 +119,16 @@ jobs:
       run: |
         PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
         
-        # Create multi-architecture manifest for version tag using the architecture tags
+        # Create multi-architecture manifest for version tag using the versioned architecture tags
         docker manifest create arvindand/maven-tools-mcp:${PROJECT_VERSION} \
-          --amend arvindand/maven-tools-mcp:amd64 \
-          --amend arvindand/maven-tools-mcp:arm64
+          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64 \
+          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64
         docker manifest push arvindand/maven-tools-mcp:${PROJECT_VERSION}
         
-        # Create multi-architecture manifest for latest tag
+        # Create multi-architecture manifest for latest tag using the versioned architecture tags
         docker manifest create arvindand/maven-tools-mcp:latest \
-          --amend arvindand/maven-tools-mcp:amd64 \
-          --amend arvindand/maven-tools-mcp:arm64
+          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64 \
+          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64
         docker manifest push arvindand/maven-tools-mcp:latest
 
   test-pr:
