@@ -56,7 +56,7 @@ if "%choice%"=="3" (
     if errorlevel 1 goto :error
     echo ✅ Native Docker image built successfully!
     echo.
-    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:1.0.0
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:1.1.0-SNAPSHOT
     goto :end
 )
 
@@ -69,9 +69,9 @@ if "%choice%"=="4" (    echo 🐳 Building JVM Docker image with buildpacks...
     if errorlevel 1 goto :error
     echo ✅ JVM Docker image built successfully!
     echo.
-    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:1.0.0
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:1.1.0-SNAPSHOT
     goto :end
-    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:1.0.0
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:1.1.0-SNAPSHOT
     goto :end
 )
 
