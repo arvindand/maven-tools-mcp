@@ -1,12 +1,15 @@
 package com.arvindand.mcp.maven.config;
 
 import com.arvindand.mcp.maven.model.BulkCheckResult;
+import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
 import com.arvindand.mcp.maven.model.DependencyExistsResponse;
 import com.arvindand.mcp.maven.model.DetailedVersionInfo;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.MavenSearchResponse;
+import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
 import com.arvindand.mcp.maven.model.VersionComparisonResponse;
 import com.arvindand.mcp.maven.model.VersionInfo;
+import com.arvindand.mcp.maven.model.VersionTimelineAnalysis;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
@@ -57,9 +60,27 @@ public class NativeImageConfiguration {
       registerRecordClass(
           hints, com.arvindand.mcp.maven.util.VersionComparator.VersionComponents.class);
 
+      // Register new analytical intelligence record classes (v1.1.0)
+      registerRecordClass(hints, DependencyAgeAnalysis.class);
+      registerRecordClass(hints, ReleasePatternAnalysis.class);
+      registerRecordClass(hints, ReleasePatternAnalysis.ReleaseInfo.class);
+      registerRecordClass(hints, VersionTimelineAnalysis.class);
+      registerRecordClass(hints, VersionTimelineAnalysis.TimelineEntry.class);
+      registerRecordClass(hints, VersionTimelineAnalysis.VelocityTrend.class);
+      registerRecordClass(hints, VersionTimelineAnalysis.StabilityPattern.class);
+      registerRecordClass(hints, VersionTimelineAnalysis.RecentActivity.class);
+
       // Register enum classes for Jackson serialization and reflection access
       registerEnumClass(hints, VersionInfo.VersionType.class);
       registerEnumClass(hints, BulkCheckResult.Status.class);
+      
+      // Register new analytical intelligence enum classes (v1.1.0)
+      registerEnumClass(hints, DependencyAgeAnalysis.AgeClassification.class);
+      registerEnumClass(hints, ReleasePatternAnalysis.MaintenanceLevel.class);
+      registerEnumClass(hints, ReleasePatternAnalysis.ReleaseConsistency.class);
+      registerEnumClass(hints, VersionTimelineAnalysis.TimelineEntry.ReleaseGap.class);
+      registerEnumClass(hints, VersionTimelineAnalysis.VelocityTrend.TrendDirection.class);
+      registerEnumClass(hints, VersionTimelineAnalysis.RecentActivity.ActivityLevel.class);
     }
 
     /**
