@@ -11,7 +11,7 @@ env:
   DOCKER_HUB_REPOSITORY: arvindand/maven-tools-mcp
 
 jobs:
-  build-amd64:
+  build-and-push:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
     steps:
@@ -28,8 +28,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.m2
-        key: ${{ runner.os }}-amd64-m2-${{ hashFiles('**/pom.xml') }}
-        restore-keys: ${{ runner.os }}-amd64-m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
 
     - name: Make mvnw executable
       run: chmod +x ./mvnw
@@ -43,93 +43,17 @@ jobs:
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-    - name: Build and push AMD64 image
+    - name: Build and push image
       run: |
         PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
         
-        # Build AMD64 native image with conservative CPU features for Rosetta compatibility
+        # Build and push multi-architecture native image
         ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64 \
-          -Dspring-boot.build-image.env.BP_NATIVE_IMAGE_BUILD_ARGUMENTS="-march=x86-64-v2 --no-fallback" \
+          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION} \
+          -Dspring-boot.build-image.tags=arvindand/maven-tools-mcp:latest \
           -Dspring-boot.build-image.publish=true \
           -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
           -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
-
-  build-arm64:
-    runs-on: ubuntu-24.04-arm  # Free ARM64 runners for public repos
-    if: github.event_name != 'pull_request'
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Set up Java 24
-      uses: actions/setup-java@v4
-      with:
-        java-version: '24'
-        distribution: 'temurin'
-
-    - name: Cache Maven dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.m2
-        key: ${{ runner.os }}-arm64-m2-${{ hashFiles('**/pom.xml') }}
-        restore-keys: ${{ runner.os }}-arm64-m2
-
-    - name: Make mvnw executable
-      run: chmod +x ./mvnw
-
-    - name: Build with Maven
-      run: ./mvnw clean package -DskipTests
-
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_HUB_USERNAME }}
-        password: ${{ secrets.DOCKER_HUB_TOKEN }}
-
-    - name: Build and push ARM64 image
-      run: |
-        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
-        
-        # Build ARM64 native image (native build, no emulation needed)
-        ./mvnw -Pnative spring-boot:build-image \
-          -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64 \
-          -Dspring-boot.build-image.publish=true \
-          -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
-          -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
-
-  create-manifest:
-    runs-on: ubuntu-latest
-    needs: [build-amd64, build-arm64]
-    if: github.event_name != 'pull_request'
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Make mvnw executable
-      run: chmod +x ./mvnw
-
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_HUB_USERNAME }}
-        password: ${{ secrets.DOCKER_HUB_TOKEN }}
-
-    - name: Create and push multi-architecture manifest
-      run: |
-        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
-        
-        # Create multi-architecture manifest for version tag using the versioned architecture tags
-        docker manifest create arvindand/maven-tools-mcp:${PROJECT_VERSION} \
-          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64 \
-          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64
-        docker manifest push arvindand/maven-tools-mcp:${PROJECT_VERSION}
-        
-        # Create multi-architecture manifest for latest tag using the versioned architecture tags
-        docker manifest create arvindand/maven-tools-mcp:latest \
-          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64 \
-          --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64
-        docker manifest push arvindand/maven-tools-mcp:latest
 
   test-pr:
     runs-on: ubuntu-latest
