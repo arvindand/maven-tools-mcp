@@ -165,7 +165,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/arvindand/maven-tools-mcp/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.3...v1.0.0
 [0.1.3]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.1...v0.1.2
