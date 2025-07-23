@@ -10,9 +10,9 @@
     </parent>      
     <groupId>com.arvindand.mcp</groupId>
     <artifactId>maven-tools-mcp</artifactId>
-    <version>0.1.4-SNAPSHOT</version>
+    <version>1.0.0</version>
     <name>maven-tools-mcp</name>
-    <description>A Model Context Protocol (MCP) server for Maven dependency management. Works with Claude Desktop, GitHub Copilot, and other MCP clients.</description>
+    <description>Maven Tools MCP server with universal JVM dependency intelligence. Provides comprehensive dependency analysis for any build tool (Maven, Gradle, SBT, Mill) using Maven Central Repository. Works with Claude Desktop, GitHub Copilot, and other MCP clients.</description>
     <url>https://github.com/arvindand/maven-tools-mcp</url>
     <licenses>
         <license>

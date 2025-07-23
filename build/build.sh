@@ -72,7 +72,7 @@ case $choice in
         (cd .. && ./mvnw -Pnative spring-boot:build-image)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.4-SNAPSHOT")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.0.0")
         
         echo "✅ Native Docker image built successfully!"
         echo ""
@@ -88,7 +88,7 @@ case $choice in
         (cd .. && ./mvnw spring-boot:build-image)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "0.1.4-SNAPSHOT")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.0.0")
         
         echo "✅ JVM Docker image built successfully!"
         echo ""

@@ -5,28 +5,50 @@
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A Model Context Protocol (MCP) server that supercharges AI assistants with real-time Maven Central intelligence. Get instant, accurate dependency information that's faster and more reliable than web searches.
+**Universal JVM dependency intelligence for any build tool using Maven Central Repository**
+
+A Model Context Protocol (MCP) server that provides AI assistants with dependency analysis. Get instant, accurate dependency information for Maven, Gradle, SBT, Mill, and any JVM build tool that's faster and more reliable than web searches.
 
 ## 🎯 Why This Matters
 
-**Problem:** AI assistants get outdated or inaccurate Maven dependency info from web searches
-**Solution:** Direct Maven Central API access with intelligent caching and bulk operations
+**Problem:** Managing dependencies across complex projects requires deep analysis beyond simple version lookups
+**Solution:** Dependency intelligence with bulk operations, trend analysis, and risk assessment for any JVM build tool
 
 ## ⚡ Quick Demo
 
 <img src="assets/demo.gif" alt="Demo GIF"/>
 
 Ask your AI assistant:
-- *"Check all dependencies in this pom.xml for latest versions"* (paste your pom.xml)
-- *"What's the latest Spring Boot version and all available types?"*
-- *"Which dependencies in my project need updates?"* (paste pom.xml)
-- *"Are there any beta or RC versions I should consider?"*
+- *"Check all dependencies in this build file for latest versions"* (paste your build.gradle, pom.xml, build.sbt)
+- *"What's the latest Spring Boot version?"*
+- *"Which dependencies in my project need updates?"* (any build tool)
+- *"Show me only stable versions for production deployment"*
 
-**vs Web Search:**
-- ✅ **100ms response** (cached) vs 3-5 seconds
-- ✅ **Bulk operations** (20 deps at once) vs individual lookups  
-- ✅ **Structured JSON** vs parsing web content
-- ✅ **Always current** vs outdated search results
+## 🔧 Supported Build Tools
+
+Working with **any build tool** that uses Maven Central Repository:
+
+| Build Tool | Dependency Format | Example Usage |
+|------------|------------------|---------------|
+| **Maven** | `groupId:artifactId:version` | `org.springframework:spring-core:6.2.8` |
+| **Gradle** | `implementation("group:artifact:version")` | Uses same Maven coordinates |
+| **SBT** | `libraryDependencies += "group" % "artifact" % "version"` | Same groupId:artifactId format |
+| **Mill** | `ivy"group:artifact:version"` | Same Maven Central lookup |
+
+**All tools use standard Maven coordinates** - just provide `groupId:artifactId` and we handle the rest.
+
+## ⚡ Competitive Advantages
+
+### vs Simple Lookup Tools
+- ✅ **Bulk Operations** - Analyze 20+ dependencies in one call
+- ✅ **Version Comparison** - Understand upgrade impact (major/minor/patch)
+- ✅ **Stability Filtering** - Choose stable-only or include pre-release versions
+- ✅ **Enterprise Performance** - <100ms cached responses, native images
+
+### vs Manual Dependency Management
+- ✅ **Risk Assessment** - Identify breaking changes before upgrading
+- ✅ **Universal Support** - Works with any JVM build tool
+- ✅ **Complete Analysis** - All version types with intelligent prioritization
 
 ## Setup for Claude Desktop
 
@@ -100,26 +122,45 @@ Ask your AI assistant:
 
 ## Available Tools
 
-| Tool | Purpose | Example |
-|------|---------|---------|
-| `maven_get_latest` | Get newest version by type (stable, rc, beta, alpha, milestone) | Latest Spring Boot with all release types |
-| `maven_get_stable` | Get latest stable only (production-ready) | Production-ready Jackson version |
-| `maven_check_exists` | Verify if a specific version exists, with type | Does Spring Boot 3.5.0 exist? |
-| `maven_bulk_check_latest` | Check multiple dependencies for all version types | Update status for entire project |
-| `maven_bulk_check_stable` | Stable versions for many dependencies | Production update candidates |
-| `maven_compare_versions` | Compare current vs latest, get update recommendations | Compare current vs available versions |
+| Tool | Purpose | Key Features |
+|------|---------|--------------|
+| `get_latest_version` | Get newest version by type with stability preferences | preferStable parameter, all version types |
+| `get_stable_version` | Get latest stable only (production-ready) | Production-safe, excludes pre-release |
+| `check_version_exists` | Verify if specific version exists with type info | Works with any JVM build tool |
+| `check_multiple_dependencies` | Check multiple dependencies with filtering | stableOnly parameter, bulk operations |
+| `check_multiple_stable_versions` | Stable versions for many dependencies | Perfect for production updates |
+| `compare_dependency_versions` | Compare current vs latest with upgrade recommendations | onlyStableTargets parameter, risk assessment |
 
-### `maven_get_latest`
+### Tool Parameters
 
-Retrieves the latest available version of a Maven dependency from Maven Central for each version type (stable, rc, beta, alpha, milestone).
+**New Stability Controls:**
+- `preferStable` - Prioritize stable versions in analysis
+- `stableOnly` - Filter to production-ready versions only
+- `onlyStableTargets` - Only suggest upgrades to stable versions
+
+**Universal Compatibility:**
+All tools work with standard Maven coordinates (`groupId:artifactId`) and support any JVM build tool.
+
+### `get_latest_version`
+
+Get latest version of any dependency from Maven Central (works with Maven, Gradle, SBT, Mill) with stability preferences.
 
 **Parameters:**
 - `dependency` (string, required): Maven coordinate in format `groupId:artifactId` (NO version)
+- `preferStable` (boolean, optional): When true, prioritizes stable version in response (default: false)
 
-**Example:**
+**Examples:**
 ```json
 {
-  "dependency": "org.springframework:spring-core"
+  "dependency": "org.springframework:spring-core",
+  "preferStable": false
+}
+```
+
+```json
+{
+  "dependency": "org.springframework:spring-boot",
+  "preferStable": true
 }
 ```
 
@@ -136,9 +177,9 @@ Retrieves the latest available version of a Maven dependency from Maven Central 
 }
 ```
 
-### `maven_check_exists`
+### `check_version_exists`
 
-Checks if a specific version of a Maven dependency exists in Maven Central, with version type information.
+Check if specific dependency version exists and identify its stability type. Works with any JVM build tool.
 
 **Parameters:**
 - `dependency` (string, required): Maven coordinate in format `groupId:artifactId` (NO version)
@@ -147,8 +188,8 @@ Checks if a specific version of a Maven dependency exists in Maven Central, with
 **Example:**
 ```json
 {
-  "dependency": "org.springframework:spring-core",
-  "version": "6.0.0"
+  "dependency": "org.jetbrains.kotlin:kotlin-stdlib",
+  "version": "1.9.0"
 }
 ```
 
@@ -161,9 +202,9 @@ Checks if a specific version of a Maven dependency exists in Maven Central, with
 }
 ```
 
-### `maven_get_stable`
+### `get_stable_version`
 
-Retrieves the latest stable version of a Maven dependency (excludes RCs, alphas, betas, milestones).
+Get latest stable version only - excludes alpha, beta, RC, milestone versions. Perfect for production deployments.
 
 **Parameters:**
 - `dependency` (string, required): Maven coordinate in format `groupId:artifactId` (NO version)
@@ -171,7 +212,7 @@ Retrieves the latest stable version of a Maven dependency (excludes RCs, alphas,
 **Example:**
 ```json
 {
-  "dependency": "com.fasterxml.jackson.core:jackson-core"
+  "dependency": "com.squareup.retrofit2:retrofit"
 }
 ```
 
@@ -185,17 +226,26 @@ Retrieves the latest stable version of a Maven dependency (excludes RCs, alphas,
 }
 ```
 
-### `maven_bulk_check_latest`
+### `check_multiple_dependencies`
 
-Checks latest versions for multiple dependencies in a single call, returning all version types (stable, rc, beta, alpha, milestone).
+Check latest versions for multiple dependencies with filtering options. Works with any JVM build tool.
 
 **Parameters:**
 - `dependencies` (string, required): Comma- or newline-separated list of Maven coordinates (NO versions)
+- `stableOnly` (boolean, optional): When true, filters to production-ready versions only (default: false)
 
-**Example:**
+**Examples:**
 ```json
 {
-  "dependencies": "org.springframework:spring-core,com.fasterxml.jackson.core:jackson-core\njunit:junit"
+  "dependencies": "org.jetbrains.kotlin:kotlin-stdlib,com.squareup.retrofit2:retrofit,org.apache.spark:spark-core_2.13",
+  "stableOnly": false
+}
+```
+
+```json
+{
+  "dependencies": "org.springframework:spring-boot,com.fasterxml.jackson.core:jackson-core",
+  "stableOnly": true
 }
 ```
 
@@ -218,9 +268,9 @@ Checks latest versions for multiple dependencies in a single call, returning all
 ]
 ```
 
-### `maven_bulk_check_stable`
+### `check_multiple_stable_versions`
 
-Checks latest stable versions for multiple dependencies (excludes pre-release versions).
+Get latest stable versions for multiple dependencies - perfect for production updates.
 
 **Parameters:**
 - `dependencies` (string, required): Comma- or newline-separated list of Maven coordinates (NO versions)
@@ -228,7 +278,7 @@ Checks latest stable versions for multiple dependencies (excludes pre-release ve
 **Example:**
 ```json
 {
-  "dependencies": "org.springframework:spring-boot-starter,com.fasterxml.jackson.core:jackson-core"
+  "dependencies": "org.scala-lang:scala-library,org.apache.kafka:kafka_2.13,io.vertx:vertx-core"
 }
 ```
 
@@ -246,17 +296,26 @@ Checks latest stable versions for multiple dependencies (excludes pre-release ve
 ]
 ```
 
-### `maven_compare_versions`
+### `compare_dependency_versions`
 
-Compares current dependencies (with versions) to the latest available, and provides update recommendations (major, minor, patch, none).
+Compare current dependency versions with latest available and show upgrade recommendations with safety controls.
 
 **Parameters:**
 - `currentDependencies` (string, required): Comma- or newline-separated list of Maven coordinates with versions (`groupId:artifactId:version`)
+- `onlyStableTargets` (boolean, optional): When true, only suggests upgrades to stable versions (default: false)
 
-**Example:**
+**Examples:**
 ```json
 {
-  "currentDependencies": "org.springframework:spring-core:6.0.0,junit:junit:4.12"
+  "currentDependencies": "org.jetbrains.kotlin:kotlin-stdlib:1.8.0,com.squareup.retrofit2:retrofit:2.9.0",
+  "onlyStableTargets": false
+}
+```
+
+```json
+{
+  "currentDependencies": "org.springframework:spring-boot:2.7.0,org.hibernate:hibernate-core:5.6.0",
+  "onlyStableTargets": true
 }
 ```
 
@@ -290,48 +349,49 @@ Compares current dependencies (with versions) to the latest available, and provi
 ### Getting Started Examples
 
 **Simple Questions:**
-- "What's the latest Spring Boot version?"
-- "Show me all version types for Jackson"
-- "Is Spring Boot 3.5.0 available?"
+- "Get latest Spring Boot version but prioritize stable releases"
+- "Check if Kotlin 1.9.0 exists and what stability type it is"
+- "Show me latest stable version of Retrofit for production deployment"
 
-**Paste Your pom.xml:**
-- "Check all dependencies in this pom.xml for latest versions" 
-- "Which dependencies need updates?" (paste pom.xml)
-- "Are there any pre-release versions I should consider?"
+**Multi-Build Tool Support:**
+- "Check these Gradle dependencies: org.jetbrains.kotlin:kotlin-stdlib,com.squareup.retrofit2:retrofit"
+- "I need stable versions only for my SBT project dependencies" 
+- "Compare my Maven versions but only suggest stable upgrades for production"
 
-**Follow-up Intelligence:**
-- "What type of updates would these be - major, minor, or patch?"
-- "Should I use the RC version of Spring Boot?"
-- "Compare my current versions with what's available"
+**Advanced Stability Controls:**
+- "Check multiple dependencies but filter to stable versions only"
+- "Compare my current versions with onlyStableTargets=true for safety"
+- "Get complete analysis but prefer stable versions in results"
 
 ## 🚀 Real-World Use Cases
 
-### Project Dependency Audit
-**Action:** Paste your pom.xml and ask: *"Which dependencies are outdated and what updates are available?"*  
-**Result:** Complete project analysis in 2 seconds vs 10+ minutes manually
+### Gradle Project Analysis
+**Action:** Paste your build.gradle: *"Analyze my Gradle dependencies for outdated versions"*  
+**Result:** Universal dependency analysis in seconds across any build tool
 
 ### Security Response  
-**Action:** Paste affected pom.xml: *"We got a security alert - show me latest versions for all dependencies"*  
-**Result:** Instant security patch identification with comprehensive analysis
+**Action:** *"Show me latest stable versions for these affected dependencies"*  
+**Result:** Instant security patch identification with production-safe recommendations
 
-### New Project Setup
-**Action:** *"What are the latest stable versions for Spring Boot, Spring Security, and Jackson?"*  
-**Result:** Current tech stack recommendations with version compatibility
+### Multi-Build Tool Projects
+**Action:** *"What are the latest stable versions for Spring Boot, Spring Security, and Jackson for both Maven and Gradle?"*  
+**Result:** Universal dependency intelligence across all JVM build tools
 
-### Migration Planning
-**Action:** Paste current pom.xml: *"I'm upgrading to Spring Boot 3.x - what's the migration path?"*  
-**Result:** Step-by-step upgrade analysis with compatibility matrix
+### Migration Planning with Risk Assessment
+**Action:** *"Compare my current versions but only suggest stable upgrades for production safety"*  
+**Result:** Risk-assessed upgrade recommendations with stability filtering
 
 ## 🆚 Why Not Just Web Search?
 
 | Scenario | Web Search | Maven Tools MCP |
-|----------|------------|-----------------|
+|----------|------------|------------------|
 | Single dependency lookup | 3-5 seconds | <100ms (cached) |
-| 20 dependencies | 60+ seconds | <500ms |
+| 20 dependencies across build tools | 60+ seconds | <500ms |
 | Data accuracy | Variable/outdated | 100% current |
 | Bulk operations | Manual, error-prone | Native support |
 | Version classification | Manual parsing | Automatic (stable/RC/beta) |
-| Semantic analysis | Not available | Major/minor/patch detection |
+| Stability filtering | Not available | Built-in (stableOnly, preferStable) |
+| Build tool compatibility | Tool-specific searches | Universal JVM support |
 
 ## Features
 
@@ -413,7 +473,7 @@ cd maven-tools-mcp
 ./mvnw clean package -Pfull
 
 # Run the JAR
-java -jar target/maven-tools-mcp-0.1.4-SNAPSHOT.jar
+java -jar target/maven-tools-mcp-1.0.0.jar
 ```
 
 **Claude Desktop configuration for JAR:**
@@ -424,7 +484,7 @@ java -jar target/maven-tools-mcp-0.1.4-SNAPSHOT.jar
       "command": "java",
       "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-0.1.4-SNAPSHOT.jar"
+        "/absolute/path/to/maven-tools-mcp-1.0.0.jar"
       ]
     }
   }
@@ -506,4 +566,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 0.1.4-SNAPSHOT
+- Version: 1.0.0

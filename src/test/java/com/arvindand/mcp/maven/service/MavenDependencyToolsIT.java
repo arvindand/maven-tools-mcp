@@ -29,7 +29,7 @@ class MavenDependencyToolsIT {
   @Test
   void testMavenBulkCheckLatest() {
     String dependencies = "org.springframework:spring-core,junit:junit";
-    String result = mavenDependencyTools.maven_bulk_check_latest(dependencies);
+    String result = mavenDependencyTools.check_multiple_dependencies(dependencies, false);
 
     assertNotNull(result);
     assertTrue(result.startsWith("["));
@@ -43,7 +43,7 @@ class MavenDependencyToolsIT {
   @Test
   void testMavenBulkCheckStable() {
     String dependencies = "org.springframework:spring-core,com.fasterxml.jackson.core:jackson-core";
-    String result = mavenDependencyTools.maven_bulk_check_stable(dependencies);
+    String result = mavenDependencyTools.check_multiple_stable_versions(dependencies);
 
     assertNotNull(result);
     assertTrue(result.startsWith("["));
@@ -56,7 +56,7 @@ class MavenDependencyToolsIT {
   @Test
   void testMavenCompareVersions() {
     String currentDependencies = "org.springframework:spring-core:6.0.0,junit:junit:4.12";
-    String result = mavenDependencyTools.maven_compare_versions(currentDependencies);
+    String result = mavenDependencyTools.compare_dependency_versions(currentDependencies, false);
 
     assertNotNull(result);
     assertTrue(result.startsWith("{"));
@@ -70,7 +70,7 @@ class MavenDependencyToolsIT {
   @Test
   void testBulkCheckWithInvalidDependency() {
     String dependencies = "invalid:dependency,org.springframework:spring-core";
-    String result = mavenDependencyTools.maven_bulk_check_latest(dependencies);
+    String result = mavenDependencyTools.check_multiple_dependencies(dependencies, false);
 
     assertNotNull(result);
     assertTrue(
@@ -78,12 +78,12 @@ class MavenDependencyToolsIT {
     assertTrue(result.contains("org.springframework:spring-core"));
   }
 
-  /** Tests maven_get_latest returns all version types in the response. */
+  /** Tests get_latest_version returns all version types in the response. */
   @Test
   void testMavenGetLatestAllTypes() {
     // This dependency is likely to have multiple release types (adjust as needed)
     String dependency = "org.springframework:spring-core";
-    String result = mavenDependencyTools.maven_get_latest(dependency);
+    String result = mavenDependencyTools.get_latest_version(dependency, false);
 
     assertNotNull(result);
     assertTrue(
@@ -106,8 +106,8 @@ class MavenDependencyToolsIT {
   void testPomArtifactsCanBeFound() {
     // Test Spring Boot starter parent POM
     String springBootResult =
-        mavenDependencyTools.maven_get_latest(
-            "org.springframework.boot:spring-boot-starter-parent");
+        mavenDependencyTools.get_latest_version(
+            "org.springframework.boot:spring-boot-starter-parent", false);
     assertNotNull(springBootResult);
     assertTrue(springBootResult.contains("\"dependency\" :"));
     assertTrue(springBootResult.contains("spring-boot-starter-parent"));
@@ -115,7 +115,7 @@ class MavenDependencyToolsIT {
 
     // Test Spring AI BOM
     String springAiResult =
-        mavenDependencyTools.maven_get_latest("org.springframework.ai:spring-ai-bom");
+        mavenDependencyTools.get_latest_version("org.springframework.ai:spring-ai-bom", false);
     assertNotNull(springAiResult);
     assertTrue(springAiResult.contains("\"dependency\" :"));
     assertTrue(springAiResult.contains("spring-ai-bom"));
@@ -126,7 +126,7 @@ class MavenDependencyToolsIT {
   @Test
   void testBulkCheckLatestIncludesComprehensiveVersionData() {
     String dependencies = "org.springframework:spring-core,junit:junit";
-    String result = mavenDependencyTools.maven_bulk_check_latest(dependencies);
+    String result = mavenDependencyTools.check_multiple_dependencies(dependencies, false);
 
     assertNotNull(result);
     assertTrue(result.startsWith("[") && result.endsWith("]"));
@@ -152,7 +152,7 @@ class MavenDependencyToolsIT {
   @Test
   void testBulkCheckStableReturnsOnlyStableData() {
     String dependencies = "org.springframework:spring-core,com.fasterxml.jackson.core:jackson-core";
-    String result = mavenDependencyTools.maven_bulk_check_stable(dependencies);
+    String result = mavenDependencyTools.check_multiple_stable_versions(dependencies);
 
     assertNotNull(result);
     assertTrue(result.startsWith("[") && result.endsWith("]"));
@@ -176,7 +176,7 @@ class MavenDependencyToolsIT {
   void testBulkCheckLatestPrioritizesStableVersions() {
     // Use a dependency that's likely to have stable versions
     String dependencies = "org.springframework:spring-core";
-    String result = mavenDependencyTools.maven_bulk_check_latest(dependencies);
+    String result = mavenDependencyTools.check_multiple_dependencies(dependencies, false);
 
     assertNotNull(result);
     assertTrue(result.contains("spring-core"));
@@ -201,7 +201,7 @@ class MavenDependencyToolsIT {
   void testBulkCheckErrorHandlingWithMixedDependencies() {
     String dependencies =
         "org.springframework:spring-core,invalid:nonexistent-artifact,junit:junit";
-    String result = mavenDependencyTools.maven_bulk_check_latest(dependencies);
+    String result = mavenDependencyTools.check_multiple_dependencies(dependencies, false);
 
     assertNotNull(result);
     assertTrue(result.startsWith("[") && result.endsWith("]"));
@@ -221,7 +221,7 @@ class MavenDependencyToolsIT {
   @Test
   void testBulkCheckVersionCountsAccuracy() {
     String dependencies = "junit:junit"; // Well-known dependency with many versions
-    String result = mavenDependencyTools.maven_bulk_check_latest(dependencies);
+    String result = mavenDependencyTools.check_multiple_dependencies(dependencies, false);
 
     assertNotNull(result);
     assertTrue(result.contains("junit"));

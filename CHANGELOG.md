@@ -15,6 +15,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [1.0.0] - 2025-07-23
+
+### Breaking Changes
+
+This major release updates tool names and adds stability parameters while maintaining compatibility with all JVM build tools.
+
+### ⚠️ BREAKING CHANGES
+
+**Tool Renaming for Universal Appeal:**
+- `maven_get_latest` → `get_latest_version`
+- `maven_get_stable` → `get_stable_version`
+- `maven_check_exists` → `check_version_exists`
+- `maven_bulk_check_latest` → `check_multiple_dependencies`
+- `maven_bulk_check_stable` → `check_multiple_stable_versions`
+- `maven_compare_versions` → `compare_dependency_versions`
+
+### Added
+
+**New Tool Parameters:**
+- `preferStable` parameter for `get_latest_version` - prioritizes stable versions in comprehensive analysis
+- `stableOnly` parameter for `check_multiple_dependencies` - filters to production-ready versions only
+- `onlyStableTargets` parameter for `compare_dependency_versions` - only suggests stable upgrades for production safety
+
+**JVM Build Tool Support:**
+- Support for Maven, Gradle, SBT, Mill, and any JVM build tool
+- Standard Maven coordinate format for all tools
+- Cross-platform examples and documentation
+
+**Stability Controls:**
+- Stability preference controls across all tools
+- Filtering options for production deployments
+- Upgrade safety controls
+
+### Changed
+
+**Documentation Updates:**
+- Application name remains `maven-tools-mcp` for consistency
+- Tool descriptions updated for JVM ecosystem support
+- Multi-build tool examples and scenarios
+- Examples include Kotlin, Scala, Retrofit, Spark dependencies
+
+**README Updates:**
+- Build tool support matrix
+- Usage examples with stability controls
+- Multi-build tool use cases
+- Production deployment examples
+
+**Technical:**
+- Updated tool method names and parameters
+- Version updated to 1.0.0
+- Test suite updated for new signatures
+
+
 ## [0.1.3] - 2025-06-30
 
 ### Added
@@ -89,7 +142,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.3...v1.0.0
 [0.1.3]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/arvindand/maven-tools-mcp/compare/v0.1.0...v0.1.1

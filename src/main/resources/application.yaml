@@ -8,9 +8,9 @@ spring:
     mcp:
       server:
         name: maven-tools-mcp
-        version: 0.1.4-SNAPSHOT
+        version: 1.0.0
         type: SYNC
-        instructions: "This server provides comprehensive Maven dependency analysis tools including latest version lookup, version existence checks, bulk dependency analysis, POM file analysis, and version comparison with intelligent caching support"
+        instructions: "Universal JVM dependency intelligence server for any build tool using Maven Central Repository. Provides comprehensive dependency analysis, latest version lookup, stability filtering, bulk operations, and upgrade recommendations with intelligent caching support. Works with Maven, Gradle, SBT, Mill, and any JVM build tool."
   cache:
     type: caffeine
     caffeine:

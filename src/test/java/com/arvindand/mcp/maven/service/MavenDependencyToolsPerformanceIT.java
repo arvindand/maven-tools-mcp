@@ -39,7 +39,7 @@ class MavenDependencyToolsPerformanceIT {
   @Test
   void testSmallBulkCheckLatestPerformance() {
     Instant start = Instant.now();
-    String result = mavenDependencyTools.maven_bulk_check_latest(SMALL_DEPENDENCY_LIST);
+    String result = mavenDependencyTools.check_multiple_dependencies(SMALL_DEPENDENCY_LIST, false);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Small bulk check (2 deps) took: " + duration.toMillis() + "ms");
@@ -50,7 +50,7 @@ class MavenDependencyToolsPerformanceIT {
   @Test
   void testMediumBulkCheckLatestPerformance() {
     Instant start = Instant.now();
-    String result = mavenDependencyTools.maven_bulk_check_latest(MEDIUM_DEPENDENCY_LIST);
+    String result = mavenDependencyTools.check_multiple_dependencies(MEDIUM_DEPENDENCY_LIST, false);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Medium bulk check (5 deps) took: " + duration.toMillis() + "ms");
@@ -61,7 +61,7 @@ class MavenDependencyToolsPerformanceIT {
   @Test
   void testLargeBulkCheckLatestPerformance() {
     Instant start = Instant.now();
-    String result = mavenDependencyTools.maven_bulk_check_latest(LARGE_DEPENDENCY_LIST);
+    String result = mavenDependencyTools.check_multiple_dependencies(LARGE_DEPENDENCY_LIST, false);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Large bulk check (10 deps) took: " + duration.toMillis() + "ms");
@@ -72,7 +72,7 @@ class MavenDependencyToolsPerformanceIT {
   @Test
   void testBulkStablePerformance() {
     Instant start = Instant.now();
-    String result = mavenDependencyTools.maven_bulk_check_stable(MEDIUM_DEPENDENCY_LIST);
+    String result = mavenDependencyTools.check_multiple_stable_versions(MEDIUM_DEPENDENCY_LIST);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Bulk stable check (5 deps) took: " + duration.toMillis() + "ms");
@@ -87,7 +87,7 @@ class MavenDependencyToolsPerformanceIT {
             + "com.fasterxml.jackson.core:jackson-core:2.10.0";
 
     Instant start = Instant.now();
-    String result = mavenDependencyTools.maven_compare_versions(currentDependencies);
+    String result = mavenDependencyTools.compare_dependency_versions(currentDependencies, false);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Version comparison (3 deps) took: " + duration.toMillis() + "ms");
@@ -99,10 +99,10 @@ class MavenDependencyToolsPerformanceIT {
   void testIndividualCallPerformance() {
     // Test that individual calls are reasonably fast
     Instant start = Instant.now();
-    String result = mavenDependencyTools.maven_get_latest("org.springframework:spring-core");
+    String result = mavenDependencyTools.get_latest_version("org.springframework:spring-core", false);
     Duration duration = Duration.between(start, Instant.now());
 
-    System.out.println("Individual maven_get_latest took: " + duration.toMillis() + "ms");
+    System.out.println("Individual get_latest_version took: " + duration.toMillis() + "ms");
     assertNotNull(result);
     assertTrue(duration.toSeconds() < 5, "Individual call should complete in under 5 seconds");
   }
@@ -114,12 +114,12 @@ class MavenDependencyToolsPerformanceIT {
 
     // Use nanosecond precision for more accurate timing
     long start1 = System.nanoTime();
-    String result1 = mavenDependencyTools.maven_get_latest(uniqueDependency);
+    String result1 = mavenDependencyTools.get_latest_version(uniqueDependency, false);
     long duration1Nanos = System.nanoTime() - start1;
 
     // Second call should be faster (cached)
     long start2 = System.nanoTime();
-    String result2 = mavenDependencyTools.maven_get_latest(uniqueDependency);
+    String result2 = mavenDependencyTools.get_latest_version(uniqueDependency, false);
     long duration2Nanos = System.nanoTime() - start2;
 
     // Convert to milliseconds for display
