@@ -639,6 +639,15 @@ logging:
 - **Search API**: [search.maven.org](https://search.maven.org/)
 - **REST API Guide**: [Using the REST API](https://central.sonatype.org/search/rest-api-guide/)
 
+## 📝 Community & Discussion
+
+**Blog Post:** [How I Connected Claude to Maven Central (and Why You Should Too)](https://dev.to/arvindand/how-i-connected-claude-to-maven-central-and-why-you-should-too-2clo) - A deep dive into the architecture, design decisions, and real-world impact of building this MCP server.
+
+### Get Involved
+- 💬 **Discuss:** Share your experiences and ask questions [on dev.to](https://dev.to/arvindand/how-i-connected-claude-to-maven-central-and-why-you-should-too-2clo)
+- 🐛 **Issues:** [Report bugs or request features](https://github.com/arvindand/maven-tools-mcp/issues)
+- ⭐ **Support:** Star this repo if it improves your workflow
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
