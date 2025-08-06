@@ -160,12 +160,12 @@ Working with **any build tool** that uses Maven Central Repository:
 | `get_version_timeline` | Enhanced version timeline with temporal analysis | versionCount parameter, release gap detection |
 | `analyze_project_health` | Comprehensive health analysis for multiple dependencies | includeUpgradeStrategy flag |
 
-### Raw Context7 Documentation Tools (2 tools - Optional)
+### Raw Context7 Documentation Tools (2 tools - Enabled by Default)
 
 | Tool | Purpose | Key Features |
 |------|---------|--------------|
-| `resolve-library-id` | Search for library documentation | Exposed when context7.enabled=true |
-| `get-library-docs` | Get library documentation by ID | Exposed when context7.enabled=true |
+| `resolve-library-id` | Search for library documentation | Always available (context7.enabled=true by default) |
+| `get-library-docs` | Get library documentation by ID | Always available (context7.enabled=true by default) |
 
 ### Tool Parameters
 
@@ -182,9 +182,9 @@ Working with **any build tool** that uses Maven Central Repository:
 - `versionCount` - Number of recent versions to analyze in timeline (default: 20)
 - `includeRecommendations` - Include detailed recommendations in health analysis
 
-**Context7 Guidance Hints (v1.2.0):**
+**Context7 Integration (v1.2.0):**
 
-When Context7 is enabled (`context7.enabled=true`), Maven tools automatically include Context7 guidance hints in response models when upgrades or modernization are needed. When disabled (default), responses contain only core dependency analysis without guidance hints.
+Context7 integration is **enabled by default** (`context7.enabled=true`). Maven tools automatically include Context7 guidance hints in response models when upgrades or modernization are needed. Additionally, the server acts as an MCP client to expose raw Context7 tools (`resolve-library-id`, `get-library-docs`) directly to your AI assistant. When disabled, responses contain only core dependency analysis without guidance hints or Context7 tools.
 
 **Universal Compatibility:**
 All tools work with standard Maven coordinates (`groupId:artifactId`) and support any JVM build tool.
@@ -354,7 +354,7 @@ Compare current dependency versions with latest available and show upgrade recom
 
 ### Raw Context7 MCP Tools
 
-**Note:** When Context7 integration is enabled, the following raw Context7 MCP tools are automatically exposed:
+**Note:** Context7 integration is enabled by default. The following raw Context7 MCP tools are automatically available through the server's dual MCP architecture (acting as both MCP server and MCP client):
 
 ### `resolve-library-id`
 
@@ -392,7 +392,7 @@ Get comprehensive documentation for a library using its Context7 ID.
 }
 ```
 
-These tools are automatically available when both `context7.enabled=true` and `spring.ai.mcp.client.toolcallback.enabled=true` via Spring AI MCP client integration.
+These tools are automatically available by default through Spring AI MCP client integration. The server acts as both an MCP server (exposing Maven tools) and an MCP client (exposing Context7 tools), providing a unified interface for both dependency analysis and documentation access.
 
 ## Usage Examples
 
@@ -525,21 +525,22 @@ These tools are automatically available when both `context7.enabled=true` and `s
 
 ## Context7 Guided Delegation Architecture (v1.2.0)
 
-**Default Behavior:** Context7 integration is **disabled by default** in v1.2.0. When disabled, Maven tools work independently without Context7 guidance hints. When enabled (`context7.enabled=true`), Maven tools provide intelligent Context7 guidance hints to help LLMs effectively orchestrate the raw Context7 MCP tools.
+**Default Behavior:** Context7 integration is **enabled by default** in v1.2.0. The server acts as both an MCP server (providing Maven tools) and an MCP client (exposing Context7 tools), giving your AI assistant access to both dependency intelligence and documentation guidance in a single connection. When disabled (`context7.enabled=false`), Maven tools work independently without Context7 guidance hints or raw Context7 tools.
 
-### Guided Delegation Architecture
+### Dual MCP Architecture
 
-Maven Tools MCP uses a **guided delegation** approach for Context7 integration:
+Maven Tools MCP uses a **dual MCP architecture** with guided delegation for Context7 integration:
 
-1. **Maven Analysis:** Core dependency analysis and version intelligence via Maven Central API
-2. **Context7 Guidance Hints:** Smart suggestions included in response models when upgrades or modernization are needed (only when `context7.enabled=true`)
-3. **LLM Orchestration:** AI assistants use the guidance hints to effectively query raw Context7 tools for documentation
+1. **MCP Server:** Provides 8 Maven dependency analysis tools with intelligent Context7 guidance hints
+2. **MCP Client:** Acts as Context7 MCP client to expose raw Context7 tools (`resolve-library-id`, `get-library-docs`)
+3. **Intelligent Integration:** Maven tools include smart Context7 search suggestions when upgrades/modernization are needed
+4. **Direct Access:** Your AI assistant can use both Maven analysis AND Context7 documentation tools in a single connection
 
-This approach eliminates complex internal integration while maintaining full functionality through intelligent hints when Context7 is enabled.
+This dual architecture provides both dependency intelligence and documentation access through one MCP server connection, with intelligent guidance for effective Context7 tool usage.
 
-### Enabling Context7 Tools (Optional)
+### Context7 Tools (Enabled by Default)
 
-To expose raw Context7 MCP tools, enable them with the environment variable:
+Context7 tools are automatically enabled by default. To disable Context7 integration entirely, set the environment variable:
 
 ```json
 {
@@ -549,7 +550,7 @@ To expose raw Context7 MCP tools, enable them with the environment variable:
       "args": [
         "run", "-i", "--rm", 
         "-e", "SPRING_PROFILES_ACTIVE=docker",
-        "-e", "CONTEXT7_ENABLED=true",
+        "-e", "CONTEXT7_ENABLED=false",
         "arvindand/maven-tools-mcp:latest"
       ]
     }
@@ -557,7 +558,7 @@ To expose raw Context7 MCP tools, enable them with the environment variable:
 }
 ```
 
-**Graceful Design:** Maven tools work perfectly without Context7 enabled - no guidance hints are included in responses. When you enable Context7, guidance hints help you know when and how to use documentation tools effectively.
+**Graceful Design:** Context7 integration is enabled by default, providing guidance hints and raw Context7 tools out of the box. When disabled, Maven tools work independently without Context7 features, providing only core dependency analysis.
 
 ### Context7 Guidance Hints (v1.2.0)
 
