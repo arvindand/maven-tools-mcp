@@ -110,11 +110,12 @@ public record ReleasePatternAnalysis(
      * @param minInterval shortest interval between releases
      * @return appropriate consistency classification
      */
-    public static ReleaseConsistency classify(double averageDays, long maxInterval, long minInterval) {
+    public static ReleaseConsistency classify(
+        double averageDays, long maxInterval, long minInterval) {
       if (averageDays == 0) return ERRATIC;
-      
+
       double variance = (maxInterval - minInterval) / averageDays;
-      
+
       if (variance <= 0.5) {
         return VERY_CONSISTENT;
       } else if (variance <= 1.0) {
@@ -134,10 +135,7 @@ public record ReleasePatternAnalysis(
    * @param releaseDate when this version was released
    * @param daysSincePrevious days since the previous release
    */
-  public record ReleaseInfo(
-      String version,
-      LocalDateTime releaseDate,
-      Long daysSincePrevious) {}
+  public record ReleaseInfo(String version, LocalDateTime releaseDate, Long daysSincePrevious) {}
 
   /**
    * Generate recommendation based on maintenance analysis.
@@ -148,14 +146,13 @@ public record ReleasePatternAnalysis(
    * @return maintenance-based recommendation
    */
   public static String generateRecommendation(
-      MaintenanceLevel maintenanceLevel, 
-      long daysSinceLastRelease, 
-      double releaseVelocity) {
-    
+      MaintenanceLevel maintenanceLevel, long daysSinceLastRelease, double releaseVelocity) {
+
     return switch (maintenanceLevel) {
       case ACTIVE -> "Well-maintained dependency with active development - safe to use";
       case MODERATE -> "Regularly maintained - good choice for production use";
-      case SLOW -> "Slowly maintained - monitor for updates and consider alternatives for critical projects";
+      case SLOW ->
+          "Slowly maintained - monitor for updates and consider alternatives for critical projects";
       case INACTIVE -> "Minimal maintenance activity - evaluate alternatives and migration plan";
     };
   }
@@ -169,10 +166,10 @@ public record ReleasePatternAnalysis(
    * @return predicted next release timeframe
    */
   public static String predictNextRelease(
-      double averageDaysBetweenReleases, 
-      long daysSinceLastRelease, 
+      double averageDaysBetweenReleases,
+      long daysSinceLastRelease,
       ReleaseConsistency consistency) {
-    
+
     if (averageDaysBetweenReleases == 0) {
       return "Unable to predict - insufficient release history";
     }

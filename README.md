@@ -1,34 +1,38 @@
 # Maven Tools MCP Server
 
 [![Java](https://img.shields.io/badge/Java-24-orange.svg)](https://openjdk.java.net/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.3-green.svg)](https://spring.io/projects/spring-boot)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.4-green.svg)](https://spring.io/projects/spring-boot)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/arvindand/maven-tools-mcp)](https://github.com/arvindand/maven-tools-mcp/releases)
 [![Docker](https://img.shields.io/badge/Docker-Multi--Arch-blue.svg)](https://hub.docker.com/r/arvindand/maven-tools-mcp)
 [![GitHub stars](https://img.shields.io/github/stars/arvindand/maven-tools-mcp?style=social)](https://github.com/arvindand/maven-tools-mcp/stargazers)
 
-**Universal JVM dependency intelligence for any build tool using Maven Central Repository**
+## Universal JVM dependency intelligence for any build tool using Maven Central Repository
 
 A Model Context Protocol (MCP) server that provides AI assistants with dependency analysis. Get instant, accurate dependency information for Maven, Gradle, SBT, Mill, and any JVM build tool that's faster and more reliable than web searches.
 
 ## 🎯 Why This Matters
 
-**Problem:** Managing dependencies across complex projects requires deep analysis beyond simple version lookups
-**Solution:** Dependency intelligence with bulk operations, trend analysis, and risk assessment for any JVM build tool
+- **Problem:** Dependency management involves time-intensive manual searches across Maven Central for version updates and compatibility analysis
+- **Solution:** AI-assisted dependency intelligence with instant bulk analysis, trend insights, and risk assessment for any JVM build tool
 
 ## ⚡ Quick Demo
 
-<img src="assets/demo.gif" alt="Demo GIF"/>
+![Demo GIF](assets/demo.gif)
 
 Ask your AI assistant:
+
 - *"Check all dependencies in this build file for latest versions"* (paste your build.gradle, pom.xml, build.sbt)
 - *"What's the latest Spring Boot version?"*
 - *"Which dependencies in my project need updates?"* (any build tool)
 - *"Show me only stable versions for production deployment"*
-- *"How old are my dependencies and which ones need attention?"* (new in v1.1.0)
-- *"Analyze the release patterns for my key dependencies"* (new in v1.1.0)
-- *"Give me a health check for all my project dependencies"* (new in v1.1.0)
+- *"How old are my dependencies and which ones need attention?"* (v1.1.0)
+- *"Analyze the release patterns for my key dependencies"* (v1.1.0)
+- *"Give me a health check for all my project dependencies"* (v1.1.0)
+- *"How do I upgrade Spring Boot from 2.7.0 to the latest version? Show me migration guidance"* (v1.2.0 with Context7 guidance)
+- *"Check these dependencies for upgrades and suggest documentation searches"* (paste your pom.xml/build.gradle) (v1.2.0)
+- *"I'm still using Jackson 2.12.0. Should I upgrade and how?"* (v1.2.0 with guided delegation)
 
 ## 🔧 Supported Build Tools
 
@@ -46,13 +50,16 @@ Working with **any build tool** that uses Maven Central Repository:
 ## ⚡ Competitive Advantages
 
 ### vs Simple Lookup Tools
+
 - ✅ **Bulk Operations** - Analyze 20+ dependencies in one call
 - ✅ **Version Comparison** - Understand upgrade impact (major/minor/patch)
 - ✅ **Stability Filtering** - Choose stable-only or include pre-release versions
 - ✅ **Enterprise Performance** - <100ms cached responses, native images
 - ✅ **Analytical Intelligence** - Age analysis, release patterns, project health scoring (v1.1.0)
+- ✅ **Context7 Guidance** - Smart documentation hints with guided delegation architecture (v1.2.0)
 
 ### vs Manual Dependency Management
+
 - ✅ **Risk Assessment** - Identify breaking changes before upgrading
 - ✅ **Universal Support** - Works with any JVM build tool
 - ✅ **Complete Analysis** - All version types with intelligent prioritization
@@ -61,6 +68,7 @@ Working with **any build tool** that uses Maven Central Repository:
 ## Setup for Claude Desktop
 
 **Step 1:** Locate your Claude Desktop configuration file
+
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Linux:** `~/.config/Claude/claude_desktop_config.json`
@@ -124,12 +132,14 @@ Working with **any build tool** that uses Maven Central Repository:
 ## What it does
 
 **Core Dependency Intelligence:**
+
 - Get latest or stable versions of Maven dependencies
 - Check if specific versions exist
 - Bulk version checking for multiple dependencies
 - Compare versions and get update recommendations
 
 **Advanced Analytics (v1.1.0):**
+
 - Analyze dependency age and freshness (fresh/current/aging/stale)
 - Assess maintenance activity and release patterns
 - Predict next release timeframes
@@ -137,38 +147,44 @@ Working with **any build tool** that uses Maven Central Repository:
 
 ## Available Tools
 
-### Core Dependency Tools (v1.0.0)
+### Core Maven Intelligence Tools (8 tools)
 
 | Tool | Purpose | Key Features |
 |------|---------|--------------|
 | `get_latest_version` | Get newest version by type with stability preferences | preferStable parameter, all version types |
-| `get_stable_version` | Get latest stable only (production-ready) | Production-safe, excludes pre-release |
 | `check_version_exists` | Verify if specific version exists with type info | Works with any JVM build tool |
 | `check_multiple_dependencies` | Check multiple dependencies with filtering | stableOnly parameter, bulk operations |
-| `check_multiple_stable_versions` | Stable versions for many dependencies | Perfect for production updates |
-| `compare_dependency_versions` | Compare current vs latest with upgrade recommendations | onlyStableTargets parameter, risk assessment |
+| `compare_dependency_versions` | Compare current vs latest with upgrade recommendations | includeMigrationGuidance flag |
+| `analyze_dependency_age` | Classify dependencies as fresh/current/aging/stale | includeModernizationGuidance flag |
+| `analyze_release_patterns` | Analyze maintenance activity and predict releases | monthsToAnalyze parameter, velocity trends |
+| `get_version_timeline` | Enhanced version timeline with temporal analysis | versionCount parameter, release gap detection |
+| `analyze_project_health` | Comprehensive health analysis for multiple dependencies | includeUpgradeStrategy flag |
 
-### Analytical Intelligence Tools (v1.1.0)
+### Raw Context7 Documentation Tools (2 tools - Optional)
 
 | Tool | Purpose | Key Features |
 |------|---------|--------------|
-| `analyze_dependency_age` | Classify dependencies as fresh/current/aging/stale | maxAgeInDays parameter, actionable insights |
-| `analyze_release_patterns` | Analyze maintenance activity and predict releases | monthsToAnalyze parameter, velocity trends |
-| `get_version_timeline` | Enhanced version timeline with temporal analysis | versionCount parameter, release gap detection |
-| `analyze_project_health` | Comprehensive health analysis for multiple dependencies | Health scoring, bulk analysis, recommendations |
+| `resolve-library-id` | Search for library documentation | Exposed when context7.enabled=true |
+| `get-library-docs` | Get library documentation by ID | Exposed when context7.enabled=true |
 
 ### Tool Parameters
 
 **Core Parameters:**
+
 - `preferStable` - Prioritize stable versions in analysis
 - `stableOnly` - Filter to production-ready versions only
 - `onlyStableTargets` - Only suggest upgrades to stable versions
 
 **Analytical Parameters (v1.1.0):**
+
 - `maxAgeInDays` - Set acceptable age threshold for dependencies
 - `monthsToAnalyze` - Specify analysis period for release patterns (default: 24)
 - `versionCount` - Number of recent versions to analyze in timeline (default: 20)
 - `includeRecommendations` - Include detailed recommendations in health analysis
+
+**Context7 Guidance Hints (v1.2.0):**
+
+When Context7 is enabled (`context7.enabled=true`), Maven tools automatically include Context7 guidance hints in response models when upgrades or modernization are needed. When disabled (default), responses contain only core dependency analysis without guidance hints.
 
 **Universal Compatibility:**
 All tools work with standard Maven coordinates (`groupId:artifactId`) and support any JVM build tool.
@@ -178,10 +194,12 @@ All tools work with standard Maven coordinates (`groupId:artifactId`) and suppor
 Get latest version of any dependency from Maven Central (works with Maven, Gradle, SBT, Mill) with stability preferences.
 
 **Parameters:**
+
 - `dependency` (string, required): Maven coordinate in format `groupId:artifactId` (NO version)
 - `preferStable` (boolean, optional): When true, prioritizes stable version in response (default: false)
 
 **Examples:**
+
 ```json
 {
   "dependency": "org.springframework:spring-core",
@@ -197,6 +215,7 @@ Get latest version of any dependency from Maven Central (works with Maven, Gradl
 ```
 
 **Response:**
+
 ```json
 {
   "dependency": "org.springframework:spring-core",
@@ -214,10 +233,12 @@ Get latest version of any dependency from Maven Central (works with Maven, Gradl
 Check if specific dependency version exists and identify its stability type. Works with any JVM build tool.
 
 **Parameters:**
+
 - `dependency` (string, required): Maven coordinate in format `groupId:artifactId` (NO version)
 - `version` (string, required): Version to check
 
 **Example:**
+
 ```json
 {
   "dependency": "org.jetbrains.kotlin:kotlin-stdlib",
@@ -226,6 +247,7 @@ Check if specific dependency version exists and identify its stability type. Wor
 ```
 
 **Response:**
+
 ```json
 {
   "exists": true,
@@ -234,39 +256,17 @@ Check if specific dependency version exists and identify its stability type. Wor
 }
 ```
 
-### `get_stable_version`
-
-Get latest stable version only - excludes alpha, beta, RC, milestone versions. Perfect for production deployments.
-
-**Parameters:**
-- `dependency` (string, required): Maven coordinate in format `groupId:artifactId` (NO version)
-
-**Example:**
-```json
-{
-  "dependency": "com.squareup.retrofit2:retrofit"
-}
-```
-
-**Response:**
-```json
-{
-  "version": "2.19.0",
-  "type": "stable",
-  "total_versions": 100,
-  "stable_versions": 82
-}
-```
-
 ### `check_multiple_dependencies`
 
 Check latest versions for multiple dependencies with filtering options. Works with any JVM build tool.
 
 **Parameters:**
+
 - `dependencies` (string, required): Comma- or newline-separated list of Maven coordinates (NO versions)
 - `stableOnly` (boolean, optional): When true, filters to production-ready versions only (default: false)
 
 **Examples:**
+
 ```json
 {
   "dependencies": "org.jetbrains.kotlin:kotlin-stdlib,com.squareup.retrofit2:retrofit,org.apache.spark:spark-core_2.13",
@@ -282,6 +282,7 @@ Check latest versions for multiple dependencies with filtering options. Works wi
 ```
 
 **Response (array):**
+
 ```json
 [
   {
@@ -300,43 +301,17 @@ Check latest versions for multiple dependencies with filtering options. Works wi
 ]
 ```
 
-### `check_multiple_stable_versions`
-
-Get latest stable versions for multiple dependencies - perfect for production updates.
-
-**Parameters:**
-- `dependencies` (string, required): Comma- or newline-separated list of Maven coordinates (NO versions)
-
-**Example:**
-```json
-{
-  "dependencies": "org.scala-lang:scala-library,org.apache.kafka:kafka_2.13,io.vertx:vertx-core"
-}
-```
-
-**Response (array):**
-```json
-[
-  {
-    "dependency": "org.springframework:spring-boot-starter",
-    "primary_version": "3.5.3",
-    "primary_type": "stable",
-    "total_versions": 50,
-    "stable_versions": 40
-  },
-  // ...more results
-]
-```
-
 ### `compare_dependency_versions`
 
 Compare current dependency versions with latest available and show upgrade recommendations with safety controls.
 
 **Parameters:**
+
 - `currentDependencies` (string, required): Comma- or newline-separated list of Maven coordinates with versions (`groupId:artifactId:version`)
 - `onlyStableTargets` (boolean, optional): When true, only suggests upgrades to stable versions (default: false)
 
 **Examples:**
+
 ```json
 {
   "currentDependencies": "org.jetbrains.kotlin:kotlin-stdlib:1.8.0,com.squareup.retrofit2:retrofit:2.9.0",
@@ -352,6 +327,7 @@ Compare current dependency versions with latest available and show upgrade recom
 ```
 
 **Response:**
+
 ```json
 {
   "comparison_date": "2025-06-07T22:38:47Z",
@@ -376,21 +352,66 @@ Compare current dependency versions with latest available and show upgrade recom
 }
 ```
 
+### Raw Context7 MCP Tools
+
+**Note:** When Context7 integration is enabled, the following raw Context7 MCP tools are automatically exposed:
+
+### `resolve-library-id`
+
+Search for library documentation using intelligent name resolution.
+
+**Parameters:**
+
+- `libraryName` (string, required): Search term for library lookup (e.g., "spring boot", "testcontainers")
+
+**Example:**
+
+```json
+{
+  "libraryName": "testcontainers postgresql"
+}
+```
+
+### `get-library-docs`
+
+Get comprehensive documentation for a library using its Context7 ID.
+
+**Parameters:**
+
+- `context7CompatibleLibraryID` (string, required): Context7-compatible library ID (from resolve-library-id)
+- `topic` (string, optional): Topic for focused documentation (e.g., "setup", "migration", "configuration") 
+- `tokens` (integer, optional): Maximum tokens to retrieve (default: 10000)
+
+**Example:**
+
+```json
+{
+  "context7CompatibleLibraryID": "/testcontainers/testcontainers-java",
+  "topic": "postgresql setup",
+  "tokens": 5000
+}
+```
+
+These tools are automatically available when both `context7.enabled=true` and `spring.ai.mcp.client.toolcallback.enabled=true` via Spring AI MCP client integration.
+
 ## Usage Examples
 
 ### Getting Started Examples
 
 **Simple Questions:**
+
 - "Get latest Spring Boot version but prioritize stable releases"
 - "Check if Kotlin 1.9.0 exists and what stability type it is"
 - "Show me latest stable version of Retrofit for production deployment"
 
 **Multi-Build Tool Support:**
+
 - "Check these Gradle dependencies: org.jetbrains.kotlin:kotlin-stdlib,com.squareup.retrofit2:retrofit"
-- "I need stable versions only for my SBT project dependencies" 
+- "I need stable versions only for my SBT project dependencies"
 - "Compare my Maven versions but only suggest stable upgrades for production"
 
 **Advanced Stability Controls:**
+
 - "Check multiple dependencies but filter to stable versions only"
 - "Compare my current versions with onlyStableTargets=true for safety"
 - "Get complete analysis but prefer stable versions in results"
@@ -398,18 +419,22 @@ Compare current dependency versions with latest available and show upgrade recom
 ## 🚀 Real-World Use Cases
 
 ### Gradle Project Analysis
+
 **Action:** Paste your build.gradle: *"Analyze my Gradle dependencies for outdated versions"*  
 **Result:** Universal dependency analysis in seconds across any build tool
 
 ### Security Response  
+
 **Action:** *"Show me latest stable versions for these affected dependencies"*  
 **Result:** Instant security patch identification with production-safe recommendations
 
 ### Multi-Build Tool Projects
+
 **Action:** *"What are the latest stable versions for Spring Boot, Spring Security, and Jackson for both Maven and Gradle?"*  
 **Result:** Universal dependency intelligence across all JVM build tools
 
 ### Migration Planning with Risk Assessment
+
 **Action:** *"Compare my current versions but only suggest stable upgrades for production safety"*  
 **Result:** Risk-assessed upgrade recommendations with stability filtering
 
@@ -425,11 +450,15 @@ Compare current dependency versions with latest available and show upgrade recom
 | Stability filtering | Not available | Built-in (stableOnly, preferStable) |
 | Build tool compatibility | Tool-specific searches | Universal JVM support |
 
-## ✨ New Analytical Intelligence Examples (v1.1.0)
+## ✨ Advanced Features Examples
+
+### Analytical Intelligence (v1.1.0) & Documentation Enrichment (v1.2.0)
 
 ### Dependency Age Analysis
+
 **Usage:** *"How old is my Spring Boot dependency and should I update it?"*  
 **Tool:** `analyze_dependency_age`
+
 ```json
 {
   "dependency": "org.springframework.boot:spring-boot-starter",
@@ -440,8 +469,10 @@ Compare current dependency versions with latest available and show upgrade recom
 ```
 
 ### Release Pattern Analysis  
+
 **Usage:** *"What's the maintenance pattern for Jackson? When might the next release be?"*  
 **Tool:** `analyze_release_patterns`
+
 ```json
 {
   "dependency": "com.fasterxml.jackson.core:jackson-core",
@@ -452,8 +483,10 @@ Compare current dependency versions with latest available and show upgrade recom
 ```
 
 ### Project Health Check
+
 **Usage:** *"Give me a health assessment for all my key dependencies"*  
 **Tool:** `analyze_project_health`
+
 ```json
 {
   "overall_health": "good",
@@ -463,8 +496,10 @@ Compare current dependency versions with latest available and show upgrade recom
 ```
 
 ### Version Timeline Intelligence
+
 **Usage:** *"Show me the recent release timeline for JUnit with gap analysis"*  
 **Tool:** `get_version_timeline`
+
 ```json
 {
   "insights": ["High release frequency indicates active development"],
@@ -481,10 +516,106 @@ Compare current dependency versions with latest available and show upgrade recom
 - **Dependency age analysis with actionable insights** (v1.1.0)
 - **Maintenance pattern analysis and predictions** (v1.1.0)
 - **Project health scoring and recommendations** (v1.1.0)
+- **Context7 migration guidance and upgrade strategies** (v1.2.0)
+- **Documentation enrichment for complex upgrades** (v1.2.0)
 - Caching for better performance
 - Works with MCP-compatible AI assistants
 
 > **Note:** Snapshot versions are not supported. This is because the Maven Central API does not index or provide access to snapshot artifacts. Only released versions (stable, rc, beta, alpha, milestone) are available.
+
+## Context7 Guided Delegation Architecture (v1.2.0)
+
+**Default Behavior:** Context7 integration is **disabled by default** in v1.2.0. When disabled, Maven tools work independently without Context7 guidance hints. When enabled (`context7.enabled=true`), Maven tools provide intelligent Context7 guidance hints to help LLMs effectively orchestrate the raw Context7 MCP tools.
+
+### Guided Delegation Architecture
+
+Maven Tools MCP uses a **guided delegation** approach for Context7 integration:
+
+1. **Maven Analysis:** Core dependency analysis and version intelligence via Maven Central API
+2. **Context7 Guidance Hints:** Smart suggestions included in response models when upgrades or modernization are needed (only when `context7.enabled=true`)
+3. **LLM Orchestration:** AI assistants use the guidance hints to effectively query raw Context7 tools for documentation
+
+This approach eliminates complex internal integration while maintaining full functionality through intelligent hints when Context7 is enabled.
+
+### Enabling Context7 Tools (Optional)
+
+To expose raw Context7 MCP tools, enable them with the environment variable:
+
+```json
+{
+  "mcpServers": {
+    "maven-tools": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm", 
+        "-e", "SPRING_PROFILES_ACTIVE=docker",
+        "-e", "CONTEXT7_ENABLED=true",
+        "arvindand/maven-tools-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+**Graceful Design:** Maven tools work perfectly without Context7 enabled - no guidance hints are included in responses. When you enable Context7, guidance hints help you know when and how to use documentation tools effectively.
+
+### Context7 Guidance Hints (v1.2.0)
+
+**Intelligent LLM Orchestration:**
+
+Maven Tools MCP provides Context7 guidance hints in response models to help LLMs effectively use the raw Context7 MCP tools when documentation is needed. This guided delegation approach ensures reliable functionality while maintaining simplicity.
+
+**Context7 Guidance Example:**
+
+**Usage:** *"Compare my Spring Boot version and show upgrade path"*
+
+**Tool:** `compare_dependency_versions`
+
+```json
+{
+  "dependencies": [{
+    "dependency": "org.springframework.boot:spring-boot-starter:2.7.0",
+    "current_version": "2.7.0",
+    "latest_version": "3.2.0", 
+    "update_type": "major",
+    "context7_guidance": {
+      "suggested_search": "Spring Boot major version upgrade migration guide",
+      "search_hints": [
+        "Search for 'Spring Boot migration' or 'Spring Framework upgrade'",
+        "Include version numbers for specific migration paths",
+        "Look for official Spring.io documentation"
+      ],
+      "complexity": "high",
+      "documentation_focus": "migration guides, breaking changes, upgrade paths"
+    }
+  }]
+}
+```
+
+**Modernization Guidance Example:**
+
+**Usage:** *"Analyze my aging dependencies with modernization suggestions"*
+
+**Tool:** `analyze_dependency_age`
+
+```json
+{
+  "dependency": "org.hibernate:hibernate-core",
+  "age_classification": "AGING",
+  "days_since_last_release": 180,
+  "recommendation": "Consider upgrading - dependency is showing age",
+  "context7_guidance": {
+    "suggested_search": "Hibernate ORM upgrade to latest best practices",
+    "search_hints": [
+      "Search for 'Hibernate ORM Java' to avoid NHibernate (.NET) results",
+      "Include 'JPA' keyword for persistence-related guidance",
+      "Look for official Hibernate documentation"
+    ],
+    "complexity": "moderate",
+    "documentation_focus": "best practices, modern usage, latest features"
+  }
+}
+```
 
 ## Performance Notes
 
@@ -498,17 +629,26 @@ Compare current dependency versions with latest available and show upgrade recom
 **Q: How is this different from Dependabot/Renovate?**  
 A: Those tools create automated PRs. This gives you instant, interactive dependency intelligence through your AI assistant for decision-making and planning.
 
+**Q: How much time does this actually save?**  
+A: For single dependencies: from 3-5 seconds (web search) to <100ms. For 20+ dependencies: from 60+ seconds of manual searching to <500ms bulk analysis.
+
 **Q: Why not just search Maven Central directly?**  
-A: This provides structured, cached responses optimized for AI consumption with intelligent version classification and bulk operations.
+A: This provides structured, cached responses optimized for AI consumption with intelligent version classification and bulk operations - plus the time savings above.
 
 **Q: Can this replace my IDE's dependency management?**  
-A: No, it complements your IDE by providing instant dependency intelligence during conversations with AI assistants.
+A: No, it complements your IDE by providing instant dependency intelligence during natural conversations with AI assistants for planning and decision-making.
+
+**Q: What AI assistants does this work with?**  
+A: Any MCP-compatible assistant including Claude Desktop, GitHub Copilot, and other MCP clients. Works through natural conversation.
 
 **Q: Does it work with private Maven repositories?**  
 A: Currently only Maven Central.
 
 **Q: What about Gradle dependencies?**  
 A: Maven Central hosts both Maven and Gradle dependencies, so it works for Gradle projects too (using Maven coordinates).
+
+**Q: What is Context7 and how does the guided delegation work?**  
+A: Context7 is an MCP server by Upstash that provides up-to-date documentation and code examples. Maven Tools MCP uses a guided delegation architecture (v1.2.0) - our tools provide Context7 guidance hints to help your AI assistant effectively use the raw Context7 tools when documentation is needed. This keeps the system simple while providing intelligent orchestration.
 
 ## Alternative Setup Methods
 
@@ -533,6 +673,7 @@ Download `docker-compose.yml` and configure:
 ```
 
 **For development/testing only:**
+
 ```bash
 docker compose up -d  # Runs server in background for testing
 ```
@@ -540,6 +681,7 @@ docker compose up -d  # Runs server in background for testing
 ### Build from Source (for contributors)
 
 **Prerequisites:**
+
 - Java 24
 - Maven 3.9+
 
@@ -555,10 +697,11 @@ cd maven-tools-mcp
 ./mvnw clean package -Pfull
 
 # Run the JAR
-java -jar target/maven-tools-mcp-1.1.1.jar
+java -jar target/maven-tools-mcp-1.2.0.jar
 ```
 
 **Claude Desktop configuration for JAR:**
+
 ```json
 {
   "mcpServers": {
@@ -566,7 +709,7 @@ java -jar target/maven-tools-mcp-1.1.1.jar
       "command": "java",
       "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-1.1.1.jar"
+        "/absolute/path/to/maven-tools-mcp-1.2.0.jar"
       ]
     }
   }
@@ -582,7 +725,7 @@ For easier builds, use the provided scripts in the `build/` folder:
 ./build/build.sh
 
 # Windows - Complete build helper
-.\build\build-windows.cmd
+.\build\build.cmd
 ```
 
 ## Enterprise & Custom Clients
@@ -627,23 +770,33 @@ logging:
 ## References & Resources
 
 ### Model Context Protocol (MCP)
+
 - **Official Website**: [modelcontextprotocol.io](https://modelcontextprotocol.io/)
 - **GitHub Repository**: [modelcontextprotocol/specification](https://github.com/modelcontextprotocol/specification)
 - **Protocol Documentation**: [MCP Specification](https://spec.modelcontextprotocol.io/)
 
 ### Spring AI MCP
+
 - **Documentation**: [Spring AI MCP Reference](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html)
 - **GitHub**: [spring-projects/spring-ai](https://github.com/spring-projects/spring-ai)
 
 ### Maven Central API
+
 - **Search API**: [search.maven.org](https://search.maven.org/)
 - **REST API Guide**: [Using the REST API](https://central.sonatype.org/search/rest-api-guide/)
 
+### Context7 MCP Server
+
+- **GitHub Repository**: [upstash/context7](https://github.com/upstash/context7)
+- **NPM Package**: [@upstash/context7-mcp](https://www.npmjs.com/package/@upstash/context7-mcp)
+- **Documentation**: [Upstash Context7 Blog](https://upstash.com/blog/context7-mcp)
+
 ## 📝 Community & Discussion
 
-**Blog Post:** [How I Connected Claude to Maven Central (and Why You Should Too)](https://dev.to/arvindand/how-i-connected-claude-to-maven-central-and-why-you-should-too-2clo) - A deep dive into the architecture, design decisions, and real-world impact of building this MCP server.
+**Blog Post:** [How I Connected Claude to Maven Central (and Why You Should Too)](https://dev.to/arvindand/how-i-connected-claude-to-maven-central-and-why-you-should-too-2clo)
 
 ### Get Involved
+
 - 💬 **Discuss:** Share your experiences and ask questions [on dev.to](https://dev.to/arvindand/how-i-connected-claude-to-maven-central-and-why-you-should-too-2clo)
 - 🐛 **Issues:** [Report bugs or request features](https://github.com/arvindand/maven-tools-mcp/issues)
 - ⭐ **Support:** Star this repo if it improves your workflow
@@ -657,4 +810,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 1.1.1
+- Version: 1.2.0

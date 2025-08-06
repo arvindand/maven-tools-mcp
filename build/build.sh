@@ -72,11 +72,11 @@ case $choice in
         (cd .. && ./mvnw -Pnative spring-boot:build-image)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.2.0")
         
         echo "✅ Native Docker image built successfully!"
         echo ""
-        echo "To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:${PROJECT_VERSION}"
+        echo "To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:${PROJECT_VERSION}"
         exit 0
         ;;
     4)
@@ -88,11 +88,11 @@ case $choice in
         (cd .. && ./mvnw spring-boot:build-image)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.2.0")
         
         echo "✅ JVM Docker image built successfully!"
         echo ""
-        echo "To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:${PROJECT_VERSION}"
+        echo "To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:${PROJECT_VERSION}"
         exit 0
         ;;
     5)

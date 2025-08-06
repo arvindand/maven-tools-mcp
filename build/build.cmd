@@ -47,31 +47,41 @@ if "%choice%"=="2" (
 )
 
 if "%choice%"=="3" (
-    echo 🐳 Building Native Docker image with buildpacks...    echo ⏳ This may take 10-15 minutes for native compilation...
+    echo 🐳 Building Native Docker image with buildpacks...
+    echo ⏳ This may take 10-15 minutes for native compilation...
     echo Step 1: Package application...
     call :run_maven clean package -DskipTests
     if errorlevel 1 goto :error
     echo Step 2: Build Native Docker image...
     call :run_maven -Pnative spring-boot:build-image
     if errorlevel 1 goto :error
+    
+    REM Get project version
+    for /f "tokens=*" %%i in ('pushd "%~dp0.." ^& call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul ^& popd') do set PROJECT_VERSION=%%i
+    if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=1.2.0
+    
     echo ✅ Native Docker image built successfully!
     echo.
-    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:1.1.0-SNAPSHOT
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:%PROJECT_VERSION%
     goto :end
 )
 
-if "%choice%"=="4" (    echo 🐳 Building JVM Docker image with buildpacks...
+if "%choice%"=="4" (
+    echo 🐳 Building JVM Docker image with buildpacks...
     echo Step 1: Package application...
     call :run_maven clean package -DskipTests
     if errorlevel 1 goto :error
     echo Step 2: Build JVM Docker image...
     call :run_maven spring-boot:build-image
     if errorlevel 1 goto :error
+    
+    REM Get project version
+    for /f "tokens=*" %%i in ('pushd "%~dp0.." ^& call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul ^& popd') do set PROJECT_VERSION=%%i
+    if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=1.2.0
+    
     echo ✅ JVM Docker image built successfully!
     echo.
-    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:1.1.0-SNAPSHOT
-    goto :end
-    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:1.1.0-SNAPSHOT
+    echo To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:%PROJECT_VERSION%
     goto :end
 )
 
@@ -94,7 +104,15 @@ exit /b 1
 if errorlevel 1 (
     goto :error
 ) else (
-    echo ✅ Command completed successfully! 
+    echo ✅ Command completed successfully!
+    
+    REM Look for JAR file (similar to build.sh)
+    for /f %%i in ('dir /b /s ..\target\*.jar 2^>nul ^| findstr /v ".original"') do set JAR_FILE=%%i
+    if defined JAR_FILE (
+        echo.
+        echo JAR file created: %JAR_FILE%
+        echo To run: java -jar %JAR_FILE%
+    )
 )
 goto :end
 

@@ -62,8 +62,13 @@ public class JsonResponseService {
   private String createResponse(String status, String message) {
     try {
       return objectMapper.writeValueAsString(new Response(status, message));
-    } catch (JsonProcessingException _) {
-      return "{\"status\":\"%s\",\"message\":\"%s\"}".formatted(status, escapeJson(message));
+    } catch (JsonProcessingException e) {
+      // Use modern text blocks and enhanced string formatting
+      return """
+        {"status":"%s","message":"%s"}
+        """
+          .formatted(status, escapeJson(message))
+          .trim();
     }
   }
 

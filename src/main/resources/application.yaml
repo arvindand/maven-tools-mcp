@@ -1,4 +1,7 @@
 spring:
+  threads:
+    virtual:
+      enabled: true
   main:
     web-application-type: none
     banner-mode: off
@@ -8,13 +11,22 @@ spring:
     mcp:
       server:
         name: maven-tools-mcp
-        version: 1.1.1
+        version: 1.2.0
         type: SYNC
         instructions: "Universal JVM dependency intelligence server for any build tool using Maven Central Repository. Provides comprehensive dependency analysis, latest version lookup, stability filtering, bulk operations, and upgrade recommendations with intelligent caching support. Works with Maven, Gradle, SBT, Mill, and any JVM build tool."
+      client:
+        enabled: true                     # Enable MCP client with SSE transport (Docker default)
+        type: SYNC
+        request-timeout: 15s
+        toolcallback:
+          enabled: true                   # Enable exposing Context7 tools as raw MCP tools
+        sse:
+          connections:
+            context7:
+              url: https://mcp.context7.com
+              sse-endpoint: /sse
   cache:
     type: caffeine
-    caffeine:
-      spec: maximumSize=2000,expireAfterWrite=86400s
 
 # Logging configuration - let logback-spring.xml handle the appenders
 logging:
@@ -37,3 +49,9 @@ maven:
     base-url: https://search.maven.org/solrsearch/select
     timeout: 5s
     max-results: 100
+
+# Context7 guidance hints - lightweight suggestions in response models to help LLMs
+# effectively use Context7 tools for migration guidance and upgrade strategies.
+# No external calls are made - only response enrichment with search hints.
+context7:
+  enabled: true                       # Set to false to disable Context7 guidance hints in responses

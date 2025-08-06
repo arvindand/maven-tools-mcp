@@ -1,5 +1,6 @@
 package com.arvindand.mcp.maven.service;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,7 +44,8 @@ class MavenDependencyToolsIT {
   @Test
   void testMavenBulkCheckStable() {
     String dependencies = "org.springframework:spring-core,com.fasterxml.jackson.core:jackson-core";
-    String result = mavenDependencyTools.check_multiple_stable_versions(dependencies);
+    String result =
+        mavenDependencyTools.check_multiple_dependencies(dependencies, true); // stableOnly=true
 
     assertNotNull(result);
     assertTrue(result.startsWith("["));
@@ -76,6 +78,97 @@ class MavenDependencyToolsIT {
     assertTrue(
         result.contains("\"status\" : \"error\"") || result.contains("\"status\" : \"not_found\""));
     assertTrue(result.contains("org.springframework:spring-core"));
+  }
+
+  /** Tests Context7 guidance field structure in test profile (should be null when disabled). */
+  @Test
+  void testVersionComparisonContext7GuidanceStructure() {
+    String currentDependencies = "org.springframework:spring-core:6.0.0";
+    String result = mavenDependencyTools.compare_dependency_versions(currentDependencies, false);
+
+    assertNotNull(result);
+    assertTrue(result.startsWith("{"));
+    assertTrue(result.endsWith("}"));
+    assertTrue(result.contains("comparison_date"));
+    assertTrue(result.contains("current_version"));
+    assertTrue(result.contains("latest_version"));
+
+    // In test profile, Context7 guidance should be null regardless of update availability
+    assertTrue(result.contains("context7_guidance"));
+    if (result.contains("\"update_available\" : true")) {
+      // Even with updates available, guidance should be null in test profile
+      assertTrue(result.contains("\"context7_guidance\" : null"));
+      assertFalse(result.contains("suggested_search"));
+    }
+  }
+
+  /** Tests Context7 guidance hints for project health analysis with aging dependencies. */
+  @Test
+  void testProjectHealthIncludesContext7Guidance() {
+    String dependencies = "org.springframework:spring-core";
+    String result = mavenDependencyTools.analyze_project_health(dependencies, 365);
+
+    assertNotNull(result);
+    assertTrue(result.startsWith("{"));
+    assertTrue(result.endsWith("}"));
+    assertTrue(result.contains("overall_health"));
+    assertTrue(result.contains("dependencies"));
+
+    // Verify Context7 guidance hints are included for aging/stale dependencies
+    assertTrue(result.contains("\"dependencies\" :"));
+    // Context7 guidance should be present for aging or stale dependencies
+    if (result.contains("\"age_classification\" : \"aging\"")
+        || result.contains("\"age_classification\" : \"stale\"")) {
+      assertTrue(result.contains("context7_guidance"));
+    }
+  }
+
+  /** Tests Context7 modernization guidance hints for aging dependency analysis. */
+  @Test
+  void testDependencyAgeIncludesContext7Guidance() {
+    String dependency = "org.springframework:spring-core";
+    String result = mavenDependencyTools.analyze_dependency_age(dependency, 365);
+
+    assertNotNull(result);
+    assertTrue(result.startsWith("{"));
+    assertTrue(result.endsWith("}"));
+
+    // Verify DependencyAgeResponse structure (using snake_case field names)
+    assertTrue(result.contains("\"dependency\""));
+    assertTrue(result.contains("\"latest_version\""));
+    assertTrue(result.contains("\"age_classification\""));
+
+    // Verify Context7 guidance hints are included for aging/stale dependencies
+    if (result.contains("\"age_classification\" : \"AGING\"")
+        || result.contains("\"age_classification\" : \"STALE\"")) {
+      assertTrue(result.contains("context7_guidance"));
+      assertTrue(result.contains("suggested_search"));
+      assertTrue(result.contains("search_hints"));
+      assertTrue(result.contains("complexity"));
+      assertTrue(result.contains("documentation_focus"));
+    }
+    assertTrue(result.contains("\"days_since_last_release\""));
+    assertTrue(result.contains("\"last_release_date\""));
+    assertTrue(result.contains("\"age_description\""));
+    assertTrue(result.contains("\"recommendation\""));
+  }
+
+  /**
+   * Tests Context7 guidance is disabled in test profile - should NOT include guidance when
+   * context7.enabled=false.
+   */
+  @Test
+  void testContext7GuidanceDisabledInTestProfile() {
+    // Use an older Spring Boot version that would trigger Context7 guidance if enabled
+    String oldDependencies = "org.springframework.boot:spring-boot-starter:2.5.0";
+    String result = mavenDependencyTools.compare_dependency_versions(oldDependencies, false);
+
+    assertNotNull(result);
+    assertTrue(result.contains("\"update_available\" : true"));
+    assertTrue(result.contains("\"update_type\" : \"major\""));
+    // Context7 guidance should be null since context7.enabled=false in test profile
+    assertTrue(result.contains("\"context7_guidance\" : null"));
+    assertFalse(result.contains("suggested_search"));
   }
 
   /** Tests get_latest_version returns all version types in the response. */
@@ -152,7 +245,8 @@ class MavenDependencyToolsIT {
   @Test
   void testBulkCheckStableReturnsOnlyStableData() {
     String dependencies = "org.springframework:spring-core,com.fasterxml.jackson.core:jackson-core";
-    String result = mavenDependencyTools.check_multiple_stable_versions(dependencies);
+    String result =
+        mavenDependencyTools.check_multiple_dependencies(dependencies, true); // stableOnly=true
 
     assertNotNull(result);
     assertTrue(result.startsWith("[") && result.endsWith("]"));
@@ -215,6 +309,42 @@ class MavenDependencyToolsIT {
     assertTrue(result.contains("\"status\" : \"found\""));
     assertTrue(
         result.contains("\"status\" : \"not_found\"") || result.contains("\"status\" : \"error\""));
+  }
+
+  /**
+   * Tests that get_latest_version with preferStable=true behaves like the old get_stable_version.
+   */
+  @Test
+  void testGetLatestVersionWithPreferStable() {
+    String result =
+        mavenDependencyTools.get_latest_version("org.springframework:spring-core", true);
+
+    assertNotNull(result);
+    assertTrue(result.contains("\"dependency\" : \"org.springframework:spring-core\""));
+    assertTrue(result.contains("\"latest_stable\""));
+    // When preferStable=true, the response should prioritize stable version information
+    assertTrue(result.contains("stable"));
+  }
+
+  /**
+   * Tests that check_multiple_dependencies with stableOnly=true behaves like the old
+   * check_multiple_stable_versions.
+   */
+  @Test
+  void testCheckMultipleDependenciesWithStableOnly() {
+    String dependencies = "org.springframework:spring-core,com.fasterxml.jackson.core:jackson-core";
+    String result =
+        mavenDependencyTools.check_multiple_dependencies(dependencies, true); // stableOnly=true
+
+    assertNotNull(result);
+    assertTrue(result.startsWith("[") && result.endsWith("]"));
+
+    // Should only return stable versions when stableOnly=true
+    assertTrue(result.contains("\"type\" : \"stable\""));
+    // Should not contain pre-release versions as primary
+    assertFalse(result.contains("\"type\" : \"rc\""));
+    assertFalse(result.contains("\"type\" : \"beta\""));
+    assertFalse(result.contains("\"type\" : \"alpha\""));
   }
 
   /** Tests that version counts are accurate in bulk results. */

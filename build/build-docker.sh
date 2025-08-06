@@ -56,9 +56,9 @@ case $choice in
         echo "⏳ This may take 10-15 minutes for native compilation..."
         ../mvnw -Pnative spring-boot:build-image
         
-        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
-        echo "✅ Built native image: arvindand/maven-tools-mcp:${PROJECT_VERSION}"
-        echo "🚀 Run with: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:${PROJECT_VERSION}"
+        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.2.0")
+        echo "✅ Built native image: maven-tools-mcp:${PROJECT_VERSION}"
+        echo "🚀 Run with: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:${PROJECT_VERSION}"
         ;;
     3)
         echo "🏗️  Building JVM Image with Spring Boot buildpacks..."
@@ -79,9 +79,9 @@ case $choice in
         echo "🐳 Building JVM Docker image with buildpacks..."
         ../mvnw spring-boot:build-image
         
-        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.1.1")
-        echo "✅ Built JVM image: arvindand/maven-tools-mcp:${PROJECT_VERSION}"
-        echo "🚀 Run with: docker run -i -e SPRING_PROFILES_ACTIVE=docker arvindand/maven-tools-mcp:${PROJECT_VERSION}"
+        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.2.0")
+        echo "✅ Built JVM image: maven-tools-mcp:${PROJECT_VERSION}"
+        echo "🚀 Run with: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:${PROJECT_VERSION}"
         ;;
     *)
         echo "❌ Invalid option. Please choose 1, 2, or 3."

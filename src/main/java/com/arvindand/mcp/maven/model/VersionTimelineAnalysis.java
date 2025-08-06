@@ -72,9 +72,7 @@ public record VersionTimelineAnalysis(
         return description;
       }
 
-      /**
-       * Classify release gap based on days since previous and average interval.
-       */
+      /** Classify release gap based on days since previous and average interval. */
       public static ReleaseGap classify(long daysSincePrevious, double averageInterval) {
         if (averageInterval == 0 || daysSincePrevious <= 0) {
           return NORMAL;
@@ -203,12 +201,10 @@ public record VersionTimelineAnalysis(
     }
   }
 
-  /**
-   * Format relative time description.
-   */
+  /** Format relative time description. */
   public static String formatRelativeTime(LocalDateTime releaseDate, LocalDateTime now) {
     long days = java.time.Duration.between(releaseDate, now).toDays();
-    
+
     if (days == 0) {
       return "today";
     } else if (days == 1) {

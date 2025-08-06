@@ -3,6 +3,7 @@ package com.arvindand.mcp.maven.config;
 import com.arvindand.mcp.maven.service.MavenDependencyTools;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -14,6 +15,7 @@ import org.springframework.context.annotation.Configuration;
  * @since 0.1.0
  */
 @Configuration
+@EnableConfigurationProperties({MavenCentralProperties.class, Context7Properties.class})
 public class McpToolsConfig {
 
   /**
@@ -27,4 +29,8 @@ public class McpToolsConfig {
       MavenDependencyTools mavenDependencyTools) {
     return MethodToolCallbackProvider.builder().toolObjects(mavenDependencyTools).build();
   }
+
+  // Note: Context7 tools are now automatically exposed via Spring AI MCP client integration
+  // The raw Context7 tools "resolve-library-id" and "get-library-docs" are available
+  // when context7.enabled=true via the configured MCP client in application.yaml
 }

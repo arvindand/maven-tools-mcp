@@ -78,10 +78,11 @@ public record DependencyAgeAnalysis(
    */
   public static DependencyAgeAnalysis fromTimestamp(
       String dependency, String latestVersion, long timestamp) {
-    LocalDateTime releaseDate = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
+    LocalDateTime releaseDate =
+        LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
     LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
     long daysSinceRelease = java.time.Duration.between(releaseDate, now).toDays();
-    
+
     AgeClassification classification = AgeClassification.classify(daysSinceRelease);
     String ageDescription = formatAgeDescription(daysSinceRelease);
     String recommendation = generateRecommendation(classification, daysSinceRelease);

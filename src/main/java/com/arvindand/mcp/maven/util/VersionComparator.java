@@ -1,7 +1,9 @@
 package com.arvindand.mcp.maven.util;
 
 import com.arvindand.mcp.maven.model.VersionInfo.VersionType;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Objects;
 import java.util.Set;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.springframework.stereotype.Component;
@@ -31,11 +33,15 @@ public final class VersionComparator implements Comparator<String> {
    */
   @Override
   public int compare(String version1, String version2) {
-    if (version1 == null && version2 == null) return 0;
-    if (version1 == null) return -1;
-    if (version2 == null) return 1;
-
-    return new ComparableVersion(version1).compareTo(new ComparableVersion(version2));
+    return switch ((version1 == null ? 1 : 0) + (version2 == null ? 2 : 0)) {
+      case 0 ->
+          new ComparableVersion(version1)
+              .compareTo(new ComparableVersion(version2)); // both non-null
+      case 1 -> -1; // version1 is null, version2 is not
+      case 2 -> 1; // version2 is null, version1 is not
+      case 3 -> 0; // both null
+      default -> throw new IllegalStateException("Unexpected comparison state");
+    };
   }
 
   /**
@@ -46,7 +52,7 @@ public final class VersionComparator implements Comparator<String> {
    */
   public static String getLatest(String[] versions) {
     if (versions == null || versions.length == 0) return null;
-    return java.util.Arrays.stream(versions).max(new VersionComparator()).orElse(null);
+    return Arrays.stream(versions).max(new VersionComparator()).orElse(null);
   }
 
   /**
@@ -227,19 +233,19 @@ public final class VersionComparator implements Comparator<String> {
       if (this == obj) return true;
       if (obj == null || getClass() != obj.getClass()) return false;
       VersionComponents that = (VersionComponents) obj;
-      return java.util.Arrays.equals(numericParts, that.numericParts)
-          && java.util.Objects.equals(qualifier, that.qualifier);
+      return Arrays.equals(numericParts, that.numericParts)
+          && Objects.equals(qualifier, that.qualifier);
     }
 
     @Override
     public int hashCode() {
-      return java.util.Objects.hash(java.util.Arrays.hashCode(numericParts), qualifier);
+      return Objects.hash(Arrays.hashCode(numericParts), qualifier);
     }
 
     @Override
     public String toString() {
       return "VersionComponents{numericParts="
-          + java.util.Arrays.toString(numericParts)
+          + Arrays.toString(numericParts)
           + ", qualifier='"
           + qualifier
           + "'}";

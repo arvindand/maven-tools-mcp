@@ -72,7 +72,9 @@ class MavenDependencyToolsPerformanceIT {
   @Test
   void testBulkStablePerformance() {
     Instant start = Instant.now();
-    String result = mavenDependencyTools.check_multiple_stable_versions(MEDIUM_DEPENDENCY_LIST);
+    String result =
+        mavenDependencyTools.check_multiple_dependencies(
+            MEDIUM_DEPENDENCY_LIST, true); // stableOnly=true
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Bulk stable check (5 deps) took: " + duration.toMillis() + "ms");
@@ -99,7 +101,8 @@ class MavenDependencyToolsPerformanceIT {
   void testIndividualCallPerformance() {
     // Test that individual calls are reasonably fast
     Instant start = Instant.now();
-    String result = mavenDependencyTools.get_latest_version("org.springframework:spring-core", false);
+    String result =
+        mavenDependencyTools.get_latest_version("org.springframework:spring-core", false);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Individual get_latest_version took: " + duration.toMillis() + "ms");

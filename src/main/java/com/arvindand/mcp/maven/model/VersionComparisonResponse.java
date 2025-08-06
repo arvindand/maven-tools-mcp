@@ -2,6 +2,7 @@ package com.arvindand.mcp.maven.model;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Represents the result of version comparison.
@@ -25,7 +26,8 @@ public record VersionComparisonResponse(
       String updateType,
       boolean updateAvailable,
       String status,
-      String error) {
+      String error,
+      Optional<Context7Guidance> context7Guidance) {
 
     public static DependencyComparisonResult success(
         String dependency,
@@ -33,7 +35,14 @@ public record VersionComparisonResponse(
         String latestVersion,
         String latestType,
         String updateType,
-        boolean updateAvailable) {
+        boolean updateAvailable,
+        boolean context7Enabled) {
+      // Add Context7 guidance if update is available and Context7 is enabled
+      Optional<Context7Guidance> guidance =
+          (updateAvailable && context7Enabled)
+              ? Optional.of(Context7Guidance.forMigration(dependency, updateType))
+              : Optional.empty();
+
       return new DependencyComparisonResult(
           dependency,
           currentVersion,
@@ -42,22 +51,23 @@ public record VersionComparisonResponse(
           updateType,
           updateAvailable,
           "success",
-          null);
+          null,
+          guidance);
     }
 
     public static DependencyComparisonResult notFound(String dependency, String currentVersion) {
       return new DependencyComparisonResult(
-          dependency, currentVersion, null, null, null, false, "not_found", null);
+          dependency, currentVersion, null, null, null, false, "not_found", null, Optional.empty());
     }
 
     public static DependencyComparisonResult noCurrentVersion(String dependency) {
       return new DependencyComparisonResult(
-          dependency, null, null, null, null, false, "no_current_version", null);
+          dependency, null, null, null, null, false, "no_current_version", null, Optional.empty());
     }
 
     public static DependencyComparisonResult error(String dependency, String error) {
       return new DependencyComparisonResult(
-          dependency, null, null, null, null, false, "error", error);
+          dependency, null, null, null, null, false, "error", error, Optional.empty());
     }
   }
 

@@ -93,7 +93,8 @@ public class MavenCentralService {
       key =
           "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + (#coordinate.packaging()"
               + " ?: 'jar')")
-  public List<MavenSearchResponse.MavenArtifact> getAllVersionsWithTimestamps(MavenCoordinate coordinate) {
+  public List<MavenSearchResponse.MavenArtifact> getAllVersionsWithTimestamps(
+      MavenCoordinate coordinate) {
     return fetchVersionsWithTimestamps(coordinate, null, properties.maxResults());
   }
 
@@ -207,7 +208,7 @@ public class MavenCentralService {
 
     return RestClient.builder()
         .baseUrl(properties.baseUrl())
-        .defaultHeader("User-Agent", "Maven-Tools-MCP/1.1.0")
+        .defaultHeader("User-Agent", "Maven-Tools-MCP/1.2.0")
         .requestFactory(requestFactory)
         .build();
   }

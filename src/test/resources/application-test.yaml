@@ -1,0 +1,33 @@
+logging:
+  level:
+    # Your app logs at INFO level (goes to STDERR via logback config)
+    "[com.arvindand.mcp.maven]": DEBUG
+    # Framework logs at ERROR level to minimize noise
+    "[org.springframework.ai.mcp]": ERROR
+    "[org.springframework.boot]": ERROR
+    "[org.springframework]": ERROR
+    "[org.apache.http]": ERROR
+    "[ch.qos.logback]": ERROR
+    root: ERROR
+
+spring:
+  cache:
+    type: caffeine
+  ai:
+    mcp:
+      client:
+        enabled: false
+        type: SYNC
+        request-timeout: 5s
+        sse:
+          connections:
+            context7:
+              url: https://mcp.context7.com
+              sse-endpoint: /sse
+    
+# Context7 configuration - disabled by default for regular tests to avoid process hanging
+# Only enable for Context7-specific tests
+context7:
+  enabled: false
+  timeout: 5s
+  cache-ttl: 1h
