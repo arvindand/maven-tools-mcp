@@ -56,7 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Complex Context7 Integration**: Removed 688 lines of internal Context7 integration code:
   - `DocumentationEnrichmentService` (replaced with guided delegation)
   - `DocumentationEnrichmentProperties` configuration
-  - `Context7McpClient` internal service calls
   - Complex MCP client orchestration and error handling
 - **Context7 Tool Parameters**: Removed from Maven tool method signatures:
   - `includeMigrationGuidance` parameter
