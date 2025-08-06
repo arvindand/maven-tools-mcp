@@ -379,7 +379,7 @@ Get comprehensive documentation for a library using its Context7 ID.
 **Parameters:**
 
 - `context7CompatibleLibraryID` (string, required): Context7-compatible library ID (from resolve-library-id)
-- `topic` (string, optional): Topic for focused documentation (e.g., "setup", "migration", "configuration") 
+- `topic` (string, optional): Topic for focused documentation (e.g., "setup", "migration", "configuration")
 - `tokens` (integer, optional): Maximum tokens to retrieve (default: 10000)
 
 **Example:**
@@ -794,7 +794,10 @@ logging:
 
 ## 📝 Community & Discussion
 
-**Blog Post:** [How I Connected Claude to Maven Central (and Why You Should Too)](https://dev.to/arvindand/how-i-connected-claude-to-maven-central-and-why-you-should-too-2clo)
+**Blog Posts:**
+
+- [How I Connected Claude to Maven Central (and Why You Should Too)](https://dev.to/arvindand/how-i-connected-claude-to-maven-central-and-why-you-should-too-2clo)
+- [Guided Delegation: Adding Context7 Documentation to My Maven Tools MCP Server](https://dev.to/arvindand/guided-delegation-adding-context7-documentation-to-my-maven-tools-mcp-server-572l)
 
 ### Get Involved
 
