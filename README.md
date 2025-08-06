@@ -8,9 +8,9 @@
 [![Docker](https://img.shields.io/badge/Docker-Multi--Arch-blue.svg)](https://hub.docker.com/r/arvindand/maven-tools-mcp)
 [![GitHub stars](https://img.shields.io/github/stars/arvindand/maven-tools-mcp?style=social)](https://github.com/arvindand/maven-tools-mcp/stargazers)
 
-## Universal JVM dependency intelligence for any build tool using Maven Central Repository
+## Universal Maven Central dependency intelligence for JVM build tools
 
-A Model Context Protocol (MCP) server that provides AI assistants with dependency analysis. Get instant, accurate dependency information for Maven, Gradle, SBT, Mill, and any JVM build tool that's faster and more reliable than web searches.
+MCP server providing AI assistants with Maven Central dependency intelligence for Spring Boot, Gradle, and all JVM build tools. Get instant, accurate dependency information that's faster and more reliable than web searches. Features guided delegation architecture with Context7 integration for documentation and migration guidance.
 
 ## 🎯 Why This Matters
 
