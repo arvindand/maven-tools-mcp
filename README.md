@@ -10,7 +10,7 @@
 
 ## Universal Maven Central dependency intelligence for JVM build tools
 
-MCP server providing AI assistants with Maven Central dependency intelligence for all JVM build tools (Maven, Gradle, SBT, Mill). Get instant, accurate dependency information that's faster and more reliable than web searches. Features guided delegation architecture with Context7 integration for documentation and migration guidance.
+MCP server providing AI assistants with Maven Central dependency intelligence for all JVM build tools (Maven, Gradle, SBT, Mill). Get instant, accurate dependency information that's faster and more reliable than web searches. Features Context7 integration for documentation support.
 
 ## 🎯 Why This Matters
 
