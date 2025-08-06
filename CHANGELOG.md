@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (1.2.0)
 
 - **Guided Delegation Architecture**: Context7 guidance hints in Maven tool responses for intelligent LLM orchestration
-- `Context7Properties` configuration with `context7.enabled` setting (defaults to false)
+- `Context7Properties` configuration with `context7.enabled` setting (defaults to true)
 - `Context7Guidance` model with smart search suggestions and ecosystem-specific hints
 - Context7 guidance integration in response models (when context7.enabled=true):
   - `VersionComparisonResponse` includes migration guidance hints for updates
@@ -40,9 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enhanced `get_latest_version` to replace `get_stable_version` with `preferStable` parameter
   - Enhanced `check_multiple_dependencies` to replace `check_multiple_stable_versions` with `stableOnly` parameter
 - **Guided Delegation**: Maven tools now provide Context7 guidance hints instead of internal documentation calls
-- **Conditional Context7 Guidance**: Guidance hints only included when `context7.enabled=true` (disabled by default)
+- **Conditional Context7 Guidance**: Guidance hints only included when `context7.enabled=true` (enabled by default)
 - Removed Context7 parameters from Maven tools (includeMigrationGuidance, includeUpgradeStrategy, includeModernizationGuidance)
-- Context7 integration disabled by default (context7.enabled=false) with clean responses when disabled
+- Context7 integration enabled by default (context7.enabled=true) with clean responses when disabled
 - Updated tool descriptions to reference separate Context7 tool usage for documentation needs
 
 ### Fixed (1.2.0)
