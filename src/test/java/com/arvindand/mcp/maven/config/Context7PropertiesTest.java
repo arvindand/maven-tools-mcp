@@ -1,6 +1,6 @@
 package com.arvindand.mcp.maven.config;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,8 +20,8 @@ class Context7PropertiesTest {
   @Autowired private Context7Properties context7Properties;
 
   @Test
-  void testContext7PropertiesDisabledByDefault() {
+  void testContext7PropertiesEnabledByDefault() {
     System.out.println("Context7Properties.enabled = " + context7Properties.enabled());
-    assertFalse(context7Properties.enabled(), "Context7 should be disabled by default");
+    assertTrue(context7Properties.enabled(), "Context7 should be enabled by default");
   }
 }
