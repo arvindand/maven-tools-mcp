@@ -760,7 +760,7 @@ logging:
 
 ## Technical Details
 
-- **Framework**: Spring Boot 3.5.3 with [Spring AI MCP](https://docs.spring.io/spring-ai/reference/api/mcp.html)
+- **Framework**: Spring Boot 3.5.4 with [Spring AI MCP](https://docs.spring.io/spring-ai/reference/api/mcp.html)
 - **MCP Protocol**: 2024-11-05
 - **Java Version**: 24
 - **Transport**: stdio
