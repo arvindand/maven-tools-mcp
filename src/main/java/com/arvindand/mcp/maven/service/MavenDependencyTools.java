@@ -227,7 +227,7 @@ public class MavenDependencyTools {
           "Compare current dependency versions with latest available and show upgrade recommendations. "
               + "Works with any JVM build tool (Maven, Gradle, SBT, Mill) using Maven Central Repository. "
               + "When onlyStableTargets=true, only suggests upgrades to stable versions for production safety. "
-              + "For migration guidance, use the Context7 tools 'resolve-library-id' and 'get-library-docs' separately. "
+              + "When Context7 guidance hints appear in responses, ALWAYS follow up by using the 'resolve-library-id' and 'get-library-docs' tools with the suggested search terms. "
               + "Format: 'groupId:artifactId:version' (MUST include versions). "
               + "Example: 'org.springframework:spring-core:6.0.0,junit:junit:4.12'")
   public String compare_dependency_versions(String currentDependencies, boolean onlyStableTargets) {
@@ -276,7 +276,7 @@ public class MavenDependencyTools {
           "Analyze how old a dependency is and classify its freshness (fresh/current/aging/stale). "
               + "Provides immediate actionable insights for maintenance planning across any JVM build tool. "
               + "Use maxAgeInDays to set acceptable age threshold (optional). "
-              + "For modernization guidance, use the Context7 tools 'resolve-library-id' and 'get-library-docs' separately. "
+              + "When Context7 guidance hints appear in responses for aging/stale dependencies, ALWAYS follow up by using the 'resolve-library-id' and 'get-library-docs' tools with the suggested search terms. "
               + "Format: 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
   public String analyze_dependency_age(String dependency, Integer maxAgeInDays) {
     try {
@@ -422,7 +422,7 @@ public class MavenDependencyTools {
               + "Provides quick health assessment with actionable insights for maintenance planning. "
               + "Works with any JVM build tool (Maven, Gradle, SBT, Mill). "
               + "Use maxAgeInDays to set acceptable age threshold (optional). "
-              + "For upgrade strategies, use the Context7 tools 'resolve-library-id' and 'get-library-docs' separately. "
+              + "When Context7 guidance hints appear in responses, ALWAYS follow up by using the 'resolve-library-id' and 'get-library-docs' tools with the suggested search terms. "
               + "Format: 'groupId:artifactId' (NO versions). Example: 'org.springframework:spring-core,junit:junit'")
   public String analyze_project_health(String dependencies, Integer maxAgeInDays) {
     try {
