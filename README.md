@@ -728,14 +728,12 @@ The server can be configured via `application.yaml`:
 spring:
   cache:
     type: caffeine
-    caffeine:
-      spec: maximumSize=2000,expireAfterWrite=3600s
 
 # Maven Central API settings
 maven:
   central:
     base-url: https://search.maven.org/solrsearch/select
-    timeout: 10s
+    timeout: 5s
     max-results: 100
 
 # Logging (minimal for MCP stdio transport)
