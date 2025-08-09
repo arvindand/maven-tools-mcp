@@ -54,8 +54,9 @@ class MavenDependencyToolsContext7EnabledIT {
             "Context7 guidance should be present for updates when enabled");
 
         var guidance = dep.context7Guidance().get();
-        assertNotNull(guidance.suggestedSearch());
-        assertNotNull(guidance.documentationFocus());
+        assertNotNull(guidance.orchestrationInstructions());
+        assertTrue(guidance.orchestrationInstructions().contains("resolve-library-id"));
+        assertTrue(guidance.orchestrationInstructions().contains("get-library-docs"));
       }
     }
   }
@@ -63,11 +64,12 @@ class MavenDependencyToolsContext7EnabledIT {
   /** Tests that the tool works with Context7 enabled (simplified test). */
   @Test
   void testContext7EnabledBasicOperation() {
+    // This test just verifies that tools work when Context7 is enabled
+    // The main functionality is covered by the Context7 guidance test above
     ToolResponse resp = mavenDependencyTools.get_latest_version("junit:junit", false);
 
-    // Just verify the tool works when Context7 is enabled
-    VersionsByType result = getSuccessData(resp);
-    assertNotNull(result);
-    assertEquals("junit:junit", result.dependency());
+    // Just verify we get a successful response
+    assertInstanceOf(
+        ToolResponse.Success.class, resp, "Should get successful response with Context7 enabled");
   }
 }

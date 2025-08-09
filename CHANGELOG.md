@@ -22,10 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Type-safe ToolResponse architecture**: Unified response wrapper for all MCP tools with sealed interface pattern
 - **Performance optimizations**: Early-exit algorithms with 50-80% performance improvements
 - **Enhanced test coverage**: Critical version parsing test scenarios for complex pre-release versions
+- **Simplified Context7 orchestration**: Clear step-by-step tool usage instructions with web search fallback
 
 ### Changed (1.3.0)
 
 - **BREAKING**: All MCP tool methods now return `ToolResponse` instead of JSON strings for better type safety
+- **Context7Guidance model**: Simplified from 5 fields to single `orchestrationInstructions` field for better clarity
+- **Library name resolution**: Now uses Maven artifactId directly instead of ecosystem-specific mapping for universal coverage
 - **Response format**: Consistent response structure with `ToolResponse.Success<T>` and `ToolResponse.Error`
 - **User-Agent Header**: Updated to Maven-Tools-MCP/1.3.0
 - **Native image configuration**: Updated reflection hints to include ToolResponse and nested records
@@ -43,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Unused code**: Removed duplicate ToolResponseOperation interface and associated error handling method
 - **Obsolete dependencies**: Cleaned up JsonResponseService references and inline imports
+- **Context7 complexity**: Eliminated redundant guidance fields (suggestedSearch, searchHints, complexity, documentationFocus)
+- **Ecosystem-specific logic**: Removed 70+ lines of hardcoded Spring/Hibernate/Jackson library mapping for maintainability
 
 ## [1.2.0] - 2025-07-24
 

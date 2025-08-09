@@ -1,13 +1,12 @@
 package com.arvindand.mcp.maven.model;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tests for Context7Guidance model and guidance generation logic.
+ * Unit tests for simplified Context7Guidance model and orchestration instruction generation.
  *
  * @author Arvind Menon
  * @since 1.2.0
@@ -15,97 +14,78 @@ import org.junit.jupiter.api.Test;
 class Context7GuidanceTest {
 
   @Test
-  void testForMigration_SpringBoot() {
+  void testForMigration_Major() {
     Context7Guidance guidance =
         Context7Guidance.forMigration("org.springframework.boot:spring-boot-starter", "major");
 
     assertNotNull(guidance);
-    assertEquals("Spring Boot major version upgrade migration guide", guidance.suggestedSearch());
-    assertEquals("high", guidance.complexity());
-    assertEquals(
-        "migration guides, breaking changes, upgrade paths", guidance.documentationFocus());
-    assertTrue(
-        guidance
-            .searchHints()
-            .contains("Search for 'Spring Boot migration' or 'Spring Framework upgrade'"));
+    assertNotNull(guidance.orchestrationInstructions());
+    assertTrue(guidance.orchestrationInstructions().contains("resolve-library-id"));
+    assertTrue(guidance.orchestrationInstructions().contains("get-library-docs"));
+    assertTrue(guidance.orchestrationInstructions().contains("spring-boot-starter"));
+    assertTrue(guidance.orchestrationInstructions().contains("migration guide"));
+    assertTrue(guidance.orchestrationInstructions().contains("web search"));
   }
 
   @Test
-  void testForMigration_Hibernate() {
+  void testForMigration_Minor() {
     Context7Guidance guidance =
-        Context7Guidance.forMigration("org.hibernate:hibernate-core", "major");
+        Context7Guidance.forMigration("com.fasterxml.jackson.core:jackson-core", "minor");
 
-    assertNotNull(guidance);
-    assertTrue(guidance.suggestedSearch().toLowerCase().contains("hibernate"));
-    assertEquals("high", guidance.complexity());
-    assertTrue(
-        guidance
-            .searchHints()
-            .contains("Search for 'Hibernate ORM Java' to avoid NHibernate (.NET) results"));
+    assertNotNull(guidance.orchestrationInstructions());
+    assertTrue(guidance.orchestrationInstructions().contains("jackson-core"));
+    assertTrue(guidance.orchestrationInstructions().contains("upgrade guide"));
+    assertTrue(guidance.orchestrationInstructions().contains("minor version"));
   }
 
   @Test
-  void testForModernization_StaleDependency() {
+  void testForModernization_Aging() {
     Context7Guidance guidance =
-        Context7Guidance.forModernization("com.fasterxml.jackson.core:jackson-core", "stale");
+        Context7Guidance.forModernization("org.hibernate:hibernate-core", "aging");
 
-    assertNotNull(guidance);
-    assertTrue(guidance.suggestedSearch().contains("modernization guide latest version"));
-    assertEquals("moderate", guidance.complexity());
-    assertEquals("best practices, modern usage, latest features", guidance.documentationFocus());
-    assertTrue(
-        guidance
-            .searchHints()
-            .contains("Consider searching for alternatives or replacement libraries"));
+    assertNotNull(guidance.orchestrationInstructions());
+    assertTrue(guidance.orchestrationInstructions().contains("hibernate-core"));
+    assertTrue(guidance.orchestrationInstructions().contains("modern usage and best practices"));
+    assertTrue(guidance.orchestrationInstructions().contains("latest features best practices"));
   }
 
   @Test
-  void testForModernization_AgingDependency() {
-    Context7Guidance guidance = Context7Guidance.forModernization("junit:junit", "aging");
+  void testForModernization_Stale() {
+    Context7Guidance guidance =
+        Context7Guidance.forModernization("commons-lang:commons-lang", "stale");
 
-    assertNotNull(guidance);
-    assertTrue(guidance.suggestedSearch().contains("upgrade to latest best practices"));
-    assertEquals("moderate", guidance.complexity());
-    assertTrue(
-        guidance.searchHints().contains("Search for 'best practices' and 'modern usage patterns'"));
+    assertNotNull(guidance.orchestrationInstructions());
+    assertTrue(guidance.orchestrationInstructions().contains("commons-lang"));
+    assertTrue(guidance.orchestrationInstructions().contains("alternatives and replacements"));
+    assertTrue(guidance.orchestrationInstructions().contains("modernization alternatives"));
   }
 
   @Test
-  void testLibraryNameExtraction() {
-    // Test Spring Boot extraction
+  void testArtifactIdExtraction() {
+    // Test that we use artifactId directly without complex library name extraction
     Context7Guidance springGuidance =
         Context7Guidance.forMigration("org.springframework.boot:spring-boot-starter", "major");
-    assertTrue(springGuidance.suggestedSearch().contains("Spring Boot"));
+    assertTrue(springGuidance.orchestrationInstructions().contains("spring-boot-starter"));
 
-    // Test Hibernate extraction
     Context7Guidance hibernateGuidance =
-        Context7Guidance.forMigration("org.hibernate:hibernate-core", "minor");
-    assertTrue(hibernateGuidance.suggestedSearch().contains("Hibernate ORM"));
+        Context7Guidance.forMigration("org.hibernate:hibernate-core", "major");
+    assertTrue(hibernateGuidance.orchestrationInstructions().contains("hibernate-core"));
 
-    // Test Jackson extraction
     Context7Guidance jacksonGuidance =
-        Context7Guidance.forMigration("com.fasterxml.jackson.core:jackson-databind", "patch");
-    assertTrue(jacksonGuidance.suggestedSearch().contains("Jackson"));
-
-    // Test Apache extraction
-    Context7Guidance apacheGuidance =
-        Context7Guidance.forMigration("org.apache.commons:commons-lang3", "minor");
-    assertTrue(apacheGuidance.suggestedSearch().contains("commons lang3"));
+        Context7Guidance.forMigration("com.fasterxml.jackson.core:jackson-core", "major");
+    assertTrue(jacksonGuidance.orchestrationInstructions().contains("jackson-core"));
   }
 
   @Test
-  void testComplexityMapping() {
-    assertEquals("high", Context7Guidance.forMigration("test:test", "major").complexity());
-    assertEquals("moderate", Context7Guidance.forMigration("test:test", "minor").complexity());
-    assertEquals("low", Context7Guidance.forMigration("test:test", "patch").complexity());
-    assertEquals("moderate", Context7Guidance.forMigration("test:test", "unknown").complexity());
-  }
+  void testOrchestrationInstructionsContainRequiredElements() {
+    Context7Guidance guidance = Context7Guidance.forMigration("test:test-artifact", "patch");
 
-  @Test
-  void testSearchHintsIncludeJavaKeyword() {
-    Context7Guidance guidance = Context7Guidance.forModernization("general:dependency", "aging");
-
-    assertTrue(
-        guidance.searchHints().contains("Include 'Java' keyword to get JVM-specific guidance"));
+    // Verify all required orchestration elements are present
+    String instructions = guidance.orchestrationInstructions();
+    assertTrue(instructions.contains("resolve-library-id tool"));
+    assertTrue(instructions.contains("get-library-docs tool"));
+    assertTrue(instructions.contains("Context7 ID"));
+    assertTrue(instructions.contains("web search"));
+    assertTrue(instructions.contains("test-artifact"));
   }
 }

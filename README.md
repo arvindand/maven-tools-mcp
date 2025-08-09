@@ -27,9 +27,9 @@ Ask your AI assistant:
 - *"What's the latest Spring Boot version?"*
 - *"Which dependencies in my project need updates?"* (any build tool)
 - *"Show me only stable versions for production deployment"*
-- *"How old are my dependencies and which ones need attention?"* (v1.1.0)
-- *"Analyze the release patterns for my key dependencies"* (v1.1.0)
-- *"Give me a health check for all my project dependencies"* (v1.1.0)
+- *"How old are my dependencies and which ones need attention?"*
+- *"Analyze the release patterns for my key dependencies"*
+- *"Give me a health check for all my project dependencies"*
 - *"How do I upgrade Spring Boot from 2.7.0 to the latest version? Show me migration guidance"*
 - *"Check these dependencies for upgrades and suggest documentation searches"* (paste your pom.xml/build.gradle)
 - *"I'm still using Jackson 2.12.0. Should I upgrade and how?"*
@@ -55,15 +55,15 @@ Working with **any build tool** that uses Maven Central Repository:
 - ✅ **Version Comparison** - Understand upgrade impact (major/minor/patch)
 - ✅ **Stability Filtering** - Choose stable-only or include pre-release versions
 - ✅ **Enterprise Performance** - <100ms cached responses, native images
-- ✅ **Analytical Intelligence** - Age analysis, release patterns, project health scoring (v1.1.0)
-- ✅ **Context7 Guidance** - Smart documentation hints with guided delegation architecture
+- ✅ **Analytical Intelligence** - Age analysis, release patterns, project health scoring
+- ✅ **Context7 Orchestration** - Clear tool orchestration instructions with web search fallback
 
 ### vs Manual Dependency Management
 
 - ✅ **Risk Assessment** - Identify breaking changes before upgrading
 - ✅ **Universal Support** - Works with any JVM build tool
 - ✅ **Complete Analysis** - All version types with intelligent prioritization
-- ✅ **Maintenance Intelligence** - Predict maintenance activity and sustainability (v1.1.0)
+- ✅ **Maintenance Intelligence** - Predict maintenance activity and sustainability
 
 ## Setup for Claude Desktop
 
@@ -138,7 +138,7 @@ Working with **any build tool** that uses Maven Central Repository:
 - Bulk version checking for multiple dependencies
 - Compare versions and get update recommendations
 
-**Advanced Analytics (v1.1.0):**
+**Advanced Analytics:**
 
 - Analyze dependency age and freshness (fresh/current/aging/stale)
 - Assess maintenance activity and release patterns
@@ -175,16 +175,16 @@ Working with **any build tool** that uses Maven Central Repository:
 - `stableOnly` - Filter to production-ready versions only
 - `onlyStableTargets` - Only suggest upgrades to stable versions
 
-**Analytical Parameters (v1.1.0):**
+**Analytical Parameters:**
 
 - `maxAgeInDays` - Set acceptable age threshold for dependencies
 - `monthsToAnalyze` - Specify analysis period for release patterns (default: 24)
 - `versionCount` - Number of recent versions to analyze in timeline (default: 20)
 - `includeRecommendations` - Include detailed recommendations in health analysis
 
-**Context7 Integration (v1.3.0):**
+**Context7 Integration:**
 
-Context7 integration is **enabled by default** (`context7.enabled=true`). Maven tools automatically include Context7 guidance hints in response models when upgrades or modernization are needed. Additionally, the server acts as an MCP client to expose raw Context7 tools (`resolve-library-id`, `get-library-docs`) directly to your AI assistant. When disabled, responses contain only core dependency analysis without guidance hints or Context7 tools.
+Context7 integration is **enabled by default** (`context7.enabled=true`). Maven tools automatically include explicit orchestration instructions in response models when upgrades or modernization are needed. Additionally, the server acts as an MCP client to expose raw Context7 tools (`resolve-library-id`, `get-library-docs`) directly to your AI assistant. When disabled, responses contain only core dependency analysis without orchestration instructions or Context7 tools.
 
 **Universal Compatibility:**
 All tools work with standard Maven coordinates (`groupId:artifactId`) and support any JVM build tool.
@@ -513,9 +513,9 @@ These tools are automatically available by default through Spring AI MCP client 
 - Version type classification (stable, RC, beta, alpha, milestone)
 - Bulk operations for multiple dependencies
 - Version comparison tools
-- **Dependency age analysis with actionable insights** (v1.1.0)
-- **Maintenance pattern analysis and predictions** (v1.1.0)
-- **Project health scoring and recommendations** (v1.1.0)
+- **Dependency age analysis with actionable insights**
+- **Maintenance pattern analysis and predictions**
+- **Project health scoring and recommendations**
 - **Context7 migration guidance and upgrade strategies**
 - **Documentation enrichment for complex upgrades**
 - Caching for better performance
@@ -560,13 +560,13 @@ Context7 tools are automatically enabled by default. To disable Context7 integra
 
 **Graceful Design:** Context7 integration is enabled by default, providing guidance hints and raw Context7 tools out of the box. When disabled, Maven tools work independently without Context7 features, providing only core dependency analysis.
 
-### Context7 Guidance Hints
+### Context7 Orchestration Instructions
 
 **Intelligent LLM Orchestration:**
 
-Maven Tools MCP provides Context7 guidance hints in response models to help LLMs effectively use the raw Context7 MCP tools when documentation is needed. This guided delegation approach ensures reliable functionality while maintaining simplicity.
+Maven Tools MCP provides explicit orchestration instructions in response models to help LLMs effectively use the raw Context7 MCP tools when documentation is needed. These clear step-by-step instructions include web search fallback for resilient documentation access.
 
-**Context7 Guidance Example:**
+**Context7 Orchestration Example:**
 
 **Usage:** *"Compare my Spring Boot version and show upgrade path"*
 
@@ -580,14 +580,7 @@ Maven Tools MCP provides Context7 guidance hints in response models to help LLMs
     "latest_version": "3.2.0", 
     "update_type": "major",
     "context7_guidance": {
-      "suggested_search": "Spring Boot major version upgrade migration guide",
-      "search_hints": [
-        "Search for 'Spring Boot migration' or 'Spring Framework upgrade'",
-        "Include version numbers for specific migration paths",
-        "Look for official Spring.io documentation"
-      ],
-      "complexity": "high",
-      "documentation_focus": "migration guides, breaking changes, upgrade paths"
+      "orchestration_instructions": "Use resolve-library-id tool with libraryName='spring-boot-starter' to find documentation ID. Then use get-library-docs tool with the returned Context7 ID and topic='migration guide' to get upgrade instructions. If Context7 doesn't provide sufficient information, perform a web search for 'spring-boot-starter major version upgrade guide'."
     }
   }]
 }
@@ -606,14 +599,7 @@ Maven Tools MCP provides Context7 guidance hints in response models to help LLMs
   "days_since_last_release": 180,
   "recommendation": "Consider upgrading - dependency is showing age",
   "context7_guidance": {
-    "suggested_search": "Hibernate ORM upgrade to latest best practices",
-    "search_hints": [
-      "Search for 'Hibernate ORM Java' to avoid NHibernate (.NET) results",
-      "Include 'JPA' keyword for persistence-related guidance",
-      "Look for official Hibernate documentation"
-    ],
-    "complexity": "moderate",
-    "documentation_focus": "best practices, modern usage, latest features"
+    "orchestration_instructions": "Use resolve-library-id tool with libraryName='hibernate-core' to find documentation ID. Then use get-library-docs tool with the returned Context7 ID and topic='modern usage and best practices' to get modernization guidance. If Context7 doesn't provide sufficient information, perform a web search for 'hibernate-core latest features best practices'."
   }
 }
 ```
@@ -649,7 +635,7 @@ A: Currently only Maven Central.
 A: Maven Central hosts both Maven and Gradle dependencies, so it works for Gradle projects too (using Maven coordinates).
 
 **Q: What is Context7 and how does the guided delegation work?**  
-A: Context7 is an MCP server by Upstash that provides up-to-date documentation and code examples. Maven Tools MCP uses a guided delegation architecture - our tools provide Context7 guidance hints to help your AI assistant effectively use the raw Context7 tools when documentation is needed. This keeps the system simple while providing intelligent orchestration.
+A: Context7 is an MCP server by Upstash that provides up-to-date documentation and code examples. Maven Tools MCP uses a guided delegation architecture - our tools provide explicit orchestration instructions to help your AI assistant effectively use the raw Context7 tools when documentation is needed. This includes clear step-by-step tool usage instructions with web search fallback for resilient documentation access.
 
 ## Alternative Setup Methods
 
