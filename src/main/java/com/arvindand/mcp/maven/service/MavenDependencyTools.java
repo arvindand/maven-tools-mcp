@@ -164,8 +164,7 @@ public class MavenDependencyTools {
             return notFoundResponse(coordinate);
           }
 
-          return ToolResponse.Success.of(
-              buildVersionsByType(coordinate, allVersions, preferStable));
+          return buildVersionsByType(coordinate, allVersions, preferStable);
         });
   }
 
@@ -358,9 +357,7 @@ public class MavenDependencyTools {
           }
 
           // Create response with basic analysis
-          DependencyAge response = DependencyAge.from(analysis, context7Properties.enabled());
-
-          return ToolResponse.Success.of(response);
+          return DependencyAge.from(analysis, context7Properties.enabled());
         });
   }
 
