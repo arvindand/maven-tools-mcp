@@ -37,7 +37,7 @@
         <spring-ai.version>1.0.0</spring-ai.version>
         <fmt-maven-plugin.version>2.27</fmt-maven-plugin.version>
         <maven-artifact.version>3.9.11</maven-artifact.version>
-        <resilience4j.version>2.2.0</resilience4j.version>
+        <resilience4j.version>2.3.0</resilience4j.version>
         <!-- Test execution properties -->
         <skipUTs>false</skipUTs>
         <skipITs>false</skipITs>
