@@ -11,8 +11,4 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @since 1.2.0
  */
 @ConfigurationProperties(prefix = "context7")
-public record Context7Properties(boolean enabled) {
-
-  // Spring Boot will use this constructor and bind properties
-  // The default value is set in application.yaml
-}
+public record Context7Properties(boolean enabled) {}

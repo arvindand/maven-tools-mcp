@@ -344,6 +344,29 @@ class VersionComparatorTest {
     assertThat(updateType).as(description).isEqualTo(expectedUpdateType);
   }
 
+  @Test
+  void testCriticalVersionParsingScenarios() {
+    // Test the critical parsing scenarios that were failing before the fix
+
+    // Spring Boot milestone versions (previously corrupted by ComparableVersion.toString())
+    assertThat(versionComparator.determineUpdateType("2.0.0-M1", "2.0.0")).isEqualTo("patch");
+    assertThat(versionComparator.determineUpdateType("1.5.0", "2.0.0-M1")).isEqualTo("major");
+
+    // Complex pre-release versions
+    assertThat(versionComparator.determineUpdateType("3.1.0-RC1", "3.1.0")).isEqualTo("patch");
+    assertThat(versionComparator.determineUpdateType("1.0.0-alpha", "1.0.0-beta"))
+        .isEqualTo("patch");
+
+    // Verify version parsing doesn't corrupt the original strings
+    VersionComparator.VersionComponents parsed1 = versionComparator.parseVersion("2.0.0-M1");
+    assertThat(parsed1.qualifier()).isEqualTo("m1");
+    assertThat(parsed1.numericParts()).containsExactly(2, 0, 0);
+
+    VersionComparator.VersionComponents parsed2 = versionComparator.parseVersion("1.0.0-SNAPSHOT");
+    assertThat(parsed2.qualifier()).isEqualTo("snapshot");
+    assertThat(parsed2.numericParts()).containsExactly(1, 0, 0);
+  }
+
   @SuppressWarnings("unused")
   private static Stream<Arguments> updateTypeTestData() {
     return Stream.of(

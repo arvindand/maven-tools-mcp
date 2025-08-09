@@ -18,10 +18,14 @@ import org.springframework.stereotype.Component;
 public final class VersionComparator implements Comparator<String> {
 
   private static final String UNKNOWN = "unknown";
+  private static final String ALPHA = "alpha";
+  private static final String BETA = "beta";
+  private static final String MILESTONE = "milestone";
+  private static final String PATCH = "patch";
   private static final Set<String> STABLE_QUALIFIERS = Set.of("final", "ga", "release");
-  private static final Set<String> ALPHA_QUALIFIERS = Set.of("alpha", "a");
-  private static final Set<String> BETA_QUALIFIERS = Set.of("beta", "b");
-  private static final Set<String> MILESTONE_QUALIFIERS = Set.of("milestone", "m");
+  private static final Set<String> ALPHA_QUALIFIERS = Set.of(ALPHA, "a");
+  private static final Set<String> BETA_QUALIFIERS = Set.of(BETA, "b");
+  private static final Set<String> MILESTONE_QUALIFIERS = Set.of(MILESTONE, "m");
   private static final Set<String> RC_QUALIFIERS = Set.of("rc", "cr");
 
   /**
@@ -125,26 +129,53 @@ public final class VersionComparator implements Comparator<String> {
    * @return parsed version components
    */
   public VersionComponents parseVersion(String version) {
-    if (version == null) return new VersionComponents(new int[0], "");
+    if (version == null || version.trim().isEmpty()) {
+      return new VersionComponents(new int[0], "");
+    }
 
-    String normalized = new ComparableVersion(version).toString();
-    int hyphenIndex = normalized.indexOf('-');
+    String trimmed = version.trim();
 
-    String numericPart = hyphenIndex != -1 ? normalized.substring(0, hyphenIndex) : normalized;
-    String qualifier = hyphenIndex != -1 ? normalized.substring(hyphenIndex + 1).toLowerCase() : "";
+    // Split on first hyphen to separate numeric part from qualifier
+    int hyphenIndex = findFirstQualifierSeparator(trimmed);
+    String numericPart = hyphenIndex != -1 ? trimmed.substring(0, hyphenIndex) : trimmed;
+    String qualifier = hyphenIndex != -1 ? trimmed.substring(hyphenIndex + 1).toLowerCase() : "";
 
+    // Parse numeric components (major.minor.patch.etc)
     String[] segments = numericPart.split("\\.");
     int[] numericParts = new int[segments.length];
 
     for (int i = 0; i < segments.length; i++) {
       try {
-        numericParts[i] = Integer.parseInt(segments[i]);
+        // Handle cases like "1.0.0-SNAPSHOT" where hyphen is within a segment
+        String segment = segments[i];
+        int segmentHyphen = segment.indexOf('-');
+        if (segmentHyphen != -1) {
+          segment = segment.substring(0, segmentHyphen);
+          // If this is the first time we see a qualifier, capture it
+          if (qualifier.isEmpty()) {
+            qualifier = segments[i].substring(segmentHyphen + 1).toLowerCase();
+          }
+        }
+        numericParts[i] = Integer.parseInt(segment);
       } catch (NumberFormatException _) {
         numericParts[i] = 0;
       }
     }
 
     return new VersionComponents(numericParts, qualifier);
+  }
+
+  private int findFirstQualifierSeparator(String version) {
+    // Look for common qualifier separators: - or _
+    // But be smart about it - avoid separating dates (2023-01-15) or similar patterns
+    int hyphenIndex = version.indexOf('-');
+    int underscoreIndex = version.indexOf('_');
+
+    // Return the first separator found, preferring hyphen
+    if (hyphenIndex == -1 && underscoreIndex == -1) return -1;
+    if (hyphenIndex == -1) return underscoreIndex;
+    if (underscoreIndex == -1) return hyphenIndex;
+    return Math.min(hyphenIndex, underscoreIndex);
   }
 
   private String extractQualifier(String version) {
@@ -176,7 +207,7 @@ public final class VersionComparator implements Comparator<String> {
 
   private boolean isAlphaQualifier(String qualifier) {
     return ALPHA_QUALIFIERS.contains(qualifier)
-        || qualifier.startsWith("alpha")
+        || qualifier.startsWith(ALPHA)
         || qualifier.startsWith("a")
         || qualifier.contains("dev")
         || qualifier.contains("preview");
@@ -184,13 +215,13 @@ public final class VersionComparator implements Comparator<String> {
 
   private boolean isBetaQualifier(String qualifier) {
     return BETA_QUALIFIERS.contains(qualifier)
-        || qualifier.startsWith("beta")
+        || qualifier.startsWith(BETA)
         || qualifier.startsWith("b");
   }
 
   private boolean isMilestoneQualifier(String qualifier) {
     return MILESTONE_QUALIFIERS.contains(qualifier)
-        || qualifier.startsWith("milestone")
+        || qualifier.startsWith(MILESTONE)
         || qualifier.startsWith("m");
   }
 
@@ -202,6 +233,15 @@ public final class VersionComparator implements Comparator<String> {
   }
 
   private String determineUpdateType(VersionComponents current, VersionComponents latest) {
+    // Handle case where numeric parts are identical but qualifiers differ
+    boolean sameNumericVersion = areNumericVersionsEqual(current, latest);
+
+    if (sameNumericVersion) {
+      // If numeric versions are the same, check qualifiers
+      return determineQualifierUpdate(current.qualifier(), latest.qualifier());
+    }
+
+    // Compare numeric parts to determine update type
     int maxLength = Math.max(current.numericParts().length, latest.numericParts().length);
 
     for (int i = 0; i < maxLength; i++) {
@@ -212,13 +252,78 @@ public final class VersionComparator implements Comparator<String> {
         return switch (i) {
           case 0 -> "major";
           case 1 -> "minor";
-          default -> "patch";
+          default -> PATCH;
         };
       } else if (currentPart > latestPart) {
+        // Current version is higher than "latest" - this is a downgrade scenario
         return UNKNOWN;
       }
     }
     return "none";
+  }
+
+  private boolean areNumericVersionsEqual(VersionComponents current, VersionComponents latest) {
+    int maxLength = Math.max(current.numericParts().length, latest.numericParts().length);
+
+    for (int i = 0; i < maxLength; i++) {
+      int currentPart = i < current.numericParts().length ? current.numericParts()[i] : 0;
+      int latestPart = i < latest.numericParts().length ? latest.numericParts()[i] : 0;
+
+      if (currentPart != latestPart) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private String determineQualifierUpdate(String currentQualifier, String latestQualifier) {
+    // If both are empty, versions are identical
+    if (currentQualifier.isEmpty() && latestQualifier.isEmpty()) {
+      return "none";
+    }
+
+    // If current has qualifier but latest doesn't, it's upgrading to stable
+    if (!currentQualifier.isEmpty() && latestQualifier.isEmpty()) {
+      return PATCH; // Treat pre-release to stable as patch update
+    }
+
+    // If current is stable but latest has qualifier, this is unusual (downgrade to pre-release)
+    if (currentQualifier.isEmpty() && !latestQualifier.isEmpty()) {
+      return UNKNOWN;
+    }
+
+    // Both have qualifiers - compare stability levels
+    return compareQualifierStability(currentQualifier, latestQualifier);
+  }
+
+  private String compareQualifierStability(String currentQualifier, String latestQualifier) {
+    // Define stability order (lower index = less stable)
+    String[] stabilityOrder = {ALPHA, BETA, MILESTONE, "rc", "snapshot"};
+
+    int currentStability = getQualifierStability(currentQualifier, stabilityOrder);
+    int latestStability = getQualifierStability(latestQualifier, stabilityOrder);
+
+    if (latestStability > currentStability) {
+      return PATCH; // Upgrading to more stable pre-release
+    } else if (latestStability < currentStability) {
+      return UNKNOWN; // Downgrading to less stable
+    } else {
+      // Same stability level - might be version number change within qualifier
+      return currentQualifier.equals(latestQualifier) ? "none" : PATCH;
+    }
+  }
+
+  private int getQualifierStability(String qualifier, String[] stabilityOrder) {
+    String lowerQualifier = qualifier.toLowerCase();
+
+    for (int i = 0; i < stabilityOrder.length; i++) {
+      if (lowerQualifier.contains(stabilityOrder[i])) {
+        return i;
+      }
+    }
+
+    // Unknown qualifier types get medium stability
+    return stabilityOrder.length / 2;
   }
 
   /**

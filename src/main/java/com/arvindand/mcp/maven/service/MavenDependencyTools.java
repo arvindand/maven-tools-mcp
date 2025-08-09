@@ -14,24 +14,30 @@ import com.arvindand.mcp.maven.model.VersionComparison;
 import com.arvindand.mcp.maven.model.VersionInfo;
 import com.arvindand.mcp.maven.model.VersionInfo.VersionType;
 import com.arvindand.mcp.maven.model.VersionTimelineAnalysis;
+import com.arvindand.mcp.maven.model.VersionTimelineAnalysis.RecentActivity.ActivityLevel;
+import com.arvindand.mcp.maven.model.VersionTimelineAnalysis.TimelineEntry.ReleaseGap;
+import com.arvindand.mcp.maven.model.VersionTimelineAnalysis.VelocityTrend.TrendDirection;
 import com.arvindand.mcp.maven.model.VersionsByType;
 import com.arvindand.mcp.maven.util.MavenCoordinateParser;
 import com.arvindand.mcp.maven.util.VersionComparator;
+import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
 
 /**
@@ -46,6 +52,20 @@ public class MavenDependencyTools {
   private static final String UNEXPECTED_ERROR = "Unexpected error";
   private static final String MAVEN_CENTRAL_ERROR = "Maven Central error: ";
   private static final String INVALID_MAVEN_COORDINATE_FORMAT = "Invalid Maven coordinate format: ";
+  private static final String SUCCESS_STATUS = "success";
+  private static final String ACTIVE_MAINTENANCE = "active";
+
+  // Health level constants
+  private static final String EXCELLENT_HEALTH = "excellent";
+  private static final String GOOD_HEALTH = "good";
+  private static final String FAIR_HEALTH = "fair";
+  private static final String POOR_HEALTH = "poor";
+
+  // Age classification constants
+  private static final String FRESH_AGE = "fresh";
+  private static final String CURRENT_AGE = "current";
+  private static final String AGING_AGE = "aging";
+  private static final String STALE_AGE = "stale";
   private static final Logger logger = LoggerFactory.getLogger(MavenDependencyTools.class);
 
   // Analysis constants
@@ -86,6 +106,32 @@ public class MavenDependencyTools {
   }
 
   /**
+   * Common error handling for tool operations that return data objects.
+   *
+   * @param operation the operation to execute
+   * @param <T> the return type
+   * @return ToolResponse containing either success result or error
+   */
+  private <T> ToolResponse executeToolOperation(ToolOperation<T> operation) {
+    try {
+      T result = operation.execute();
+      return ToolResponse.Success.of(result);
+    } catch (IllegalArgumentException e) {
+      return ToolResponse.Error.of(INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
+    } catch (MavenCentralException e) {
+      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
+    } catch (Exception e) {
+      logger.error(UNEXPECTED_ERROR, e);
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+    }
+  }
+
+  @FunctionalInterface
+  private interface ToolOperation<T> {
+    T execute() throws IllegalArgumentException, MavenCentralException;
+  }
+
+  /**
    * Get the latest version of any dependency from Maven Central (works with Maven, Gradle, SBT,
    * Mill). Consolidates functionality from the former get_stable_version tool - use
    * preferStable=true for production-ready versions.
@@ -98,29 +144,29 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Get latest version of any dependency from Maven Central (works with Maven, Gradle, SBT, Mill). "
-              + "Shows ALL version types (stable, rc, beta, alpha, milestone) for comprehensive analysis. "
-              + "When preferStable=true, prioritizes stable version in response while still including all types. "
-              + "Format: 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
-  public ToolResponse get_latest_version(String dependency, boolean preferStable) {
-    try {
-      MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-      List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
+          "Get latest version of any Maven Central dependency with version type analysis. Works with all JVM build tools.")
+  public ToolResponse get_latest_version(
+      @ToolParam(
+              description =
+                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
+          String dependency,
+      @ToolParam(
+              description =
+                  "When true, prioritizes stable version in response while showing all types. When false, shows latest version of any type first (default: false)",
+              required = false)
+          boolean preferStable) {
+    return executeToolOperation(
+        () -> {
+          MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
+          List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
 
-      if (allVersions.isEmpty()) {
-        return notFoundResponse(coordinate);
-      }
+          if (allVersions.isEmpty()) {
+            return notFoundResponse(coordinate);
+          }
 
-      return ToolResponse.Success.of(buildVersionsByType(coordinate, allVersions, preferStable));
-    } catch (IllegalArgumentException e) {
-      return ToolResponse.Error.of(
-          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
-    } catch (MavenCentralException e) {
-      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
-    } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
-    }
+          return ToolResponse.Success.of(
+              buildVersionsByType(coordinate, allVersions, preferStable));
+        });
   }
 
   /**
@@ -133,35 +179,37 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Check if specific dependency version exists and identify its stability type. "
-              + "Works with any JVM build tool (Maven, Gradle, SBT, Mill) using Maven Central Repository. "
-              + "Format: 'groupId:artifactId' + version. Example: "
-              + "dependency='org.springframework:spring-core', version='6.1.4'")
-  public ToolResponse check_version_exists(String dependency, String version) {
-    try {
-      MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-      String versionToCheck = coordinate.version() != null ? coordinate.version() : version;
+          "Check if a specific dependency version exists in Maven Central and identify its stability type.")
+  public ToolResponse check_version_exists(
+      @ToolParam(
+              description =
+                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
+          String dependency,
+      @ToolParam(
+              description =
+                  "Specific version string to check for existence. Example: '6.1.4' or '2.7.18-SNAPSHOT'")
+          String version) {
+    return executeToolOperation(
+        () -> {
+          MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
+          String versionToCheck = coordinate.version() != null ? coordinate.version() : version;
 
-      if (versionToCheck == null || versionToCheck.trim().isEmpty()) {
-        return ToolResponse.Error.of(
-            "Version must be provided either in dependency string or version parameter");
-      }
+          if (versionToCheck == null || versionToCheck.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                "Version must be provided either in dependency string or version parameter");
+          }
 
-      boolean exists = mavenCentralService.checkVersionExists(coordinate, versionToCheck);
-      String versionType = versionComparator.getVersionTypeString(versionToCheck);
+          boolean exists = mavenCentralService.checkVersionExists(coordinate, versionToCheck);
+          String versionType = versionComparator.getVersionTypeString(versionToCheck);
 
-      DependencyInfo result = 
-          DependencyInfo.success(coordinate, versionToCheck, exists, versionType, versionComparator.isStableVersion(versionToCheck), null);
-      return ToolResponse.Success.of(result);
-    } catch (IllegalArgumentException e) {
-      return ToolResponse.Error.of(
-          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
-    } catch (MavenCentralException e) {
-      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
-    } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
-    }
+          return DependencyInfo.success(
+              coordinate,
+              versionToCheck,
+              exists,
+              versionType,
+              versionComparator.isStableVersion(versionToCheck),
+              null);
+        });
   }
 
   /**
@@ -174,42 +222,40 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Check latest versions for multiple dependencies with filtering options. "
-              + "Works with any JVM build tool (Maven, Gradle, SBT, Mill) using Maven Central Repository. "
-              + "When stableOnly=false, includes ALL version types for comprehensive analysis. "
-              + "When stableOnly=true, filters to production-ready versions only. "
-              + "Format: 'groupId:artifactId' (NO versions). Example: 'org.springframework:spring-core,junit:junit'")
-  public ToolResponse check_multiple_dependencies(String dependencies, boolean stableOnly) {
-    try {
-      List<String> depList = parseDependencies(dependencies);
+          "Check latest versions for multiple dependencies with optional filtering to stable versions only.")
+  public ToolResponse check_multiple_dependencies(
+      @ToolParam(
+              description =
+                  "Comma or newline separated list of Maven dependency coordinates in format 'groupId:artifactId' (NO versions). Example: 'org.springframework:spring-core,junit:junit'")
+          String dependencies,
+      @ToolParam(
+              description =
+                  "When true, filters results to show only stable (production-ready) versions. When false, includes all version types (default: false)",
+              required = false)
+          boolean stableOnly) {
+    return executeToolOperation(
+        () -> {
+          List<String> depList = parseDependencies(dependencies);
 
-      List<BulkCheckResult> results;
-      try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-        List<CompletableFuture<BulkCheckResult>> futures =
-            depList.stream()
-                .distinct()
-                .map(
-                    dep ->
-                        CompletableFuture.supplyAsync(
-                            () ->
-                                stableOnly
-                                    ? processStableVersionCheck(dep)
-                                    : processComprehensiveVersionCheck(dep),
-                            executor))
-                .toList();
-        results = futures.stream().map(CompletableFuture::join).toList();
-      }
+          List<BulkCheckResult> results;
+          try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<BulkCheckResult>> futures =
+                depList.stream()
+                    .distinct()
+                    .map(
+                        dep ->
+                            CompletableFuture.supplyAsync(
+                                () ->
+                                    stableOnly
+                                        ? processStableVersionCheck(dep)
+                                        : processComprehensiveVersionCheck(dep),
+                                executor))
+                    .toList();
+            results = futures.stream().map(CompletableFuture::join).toList();
+          }
 
-      return ToolResponse.Success.of(results);
-    } catch (IllegalArgumentException e) {
-      return ToolResponse.Error.of(
-          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
-    } catch (MavenCentralException e) {
-      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
-    } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
-    }
+          return results;
+        });
   }
 
   /**
@@ -223,43 +269,37 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Compare current dependency versions with latest available and show upgrade recommendations. "
-              + "Works with any JVM build tool (Maven, Gradle, SBT, Mill) using Maven Central Repository. "
-              + "When onlyStableTargets=true, only suggests upgrades to stable versions for production safety. "
-              + "When Context7 guidance hints appear in responses, ALWAYS follow up by using the 'resolve-library-id' and 'get-library-docs' tools with the suggested search terms. "
-              + "Format: 'groupId:artifactId:version' (MUST include versions). "
-              + "Example: 'org.springframework:spring-core:6.0.0,junit:junit:4.12'")
-  public ToolResponse compare_dependency_versions(String currentDependencies, boolean onlyStableTargets) {
-    try {
-      List<String> depList = parseDependencies(currentDependencies);
+          "Compare current dependency versions with latest available and provide upgrade recommendations with migration guidance.")
+  public ToolResponse compare_dependency_versions(
+      @ToolParam(
+              description =
+                  "Comma or newline separated list of dependency coordinates WITH versions in format 'groupId:artifactId:version'. Example: 'org.springframework:spring-core:6.0.0,junit:junit:4.12'")
+          String currentDependencies,
+      @ToolParam(
+              description =
+                  "When true, only suggests upgrades to stable versions for production safety. When false, suggests upgrades to latest available version of any type (default: false)",
+              required = false)
+          boolean onlyStableTargets) {
+    return executeToolOperation(
+        () -> {
+          List<String> depList = parseDependencies(currentDependencies);
 
-      List<VersionComparison.DependencyComparisonResult> results;
-      try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-        List<CompletableFuture<VersionComparison.DependencyComparisonResult>> futures =
-            depList.stream()
-                .distinct()
-                .map(
-                    dep ->
-                        CompletableFuture.supplyAsync(
-                            () -> compareDependencyVersion(dep, onlyStableTargets), executor))
-                .toList();
-        results = futures.stream().map(CompletableFuture::join).toList();
-      }
+          List<VersionComparison.DependencyComparisonResult> results;
+          try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<VersionComparison.DependencyComparisonResult>> futures =
+                depList.stream()
+                    .distinct()
+                    .map(
+                        dep ->
+                            CompletableFuture.supplyAsync(
+                                () -> compareDependencyVersion(dep, onlyStableTargets), executor))
+                    .toList();
+            results = futures.stream().map(CompletableFuture::join).toList();
+          }
 
-      VersionComparison.UpdateSummary summary = calculateUpdateSummary(results);
-      VersionComparison response =
-          new VersionComparison(Instant.now(), results, summary);
-
-      return ToolResponse.Success.of(response);
-    } catch (IllegalArgumentException e) {
-      return ToolResponse.Error.of(
-          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
-    } catch (MavenCentralException e) {
-      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
-    } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
-    }
+          VersionComparison.UpdateSummary summary = calculateUpdateSummary(results);
+          return new VersionComparison(Instant.now(), results, summary);
+        });
   }
 
   /**
@@ -272,57 +312,56 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Analyze how old a dependency is and classify its freshness (fresh/current/aging/stale). "
-              + "Provides immediate actionable insights for maintenance planning across any JVM build tool. "
-              + "Use maxAgeInDays to set acceptable age threshold (optional). "
-              + "When Context7 guidance hints appear in responses for aging/stale dependencies, ALWAYS follow up by using the 'resolve-library-id' and 'get-library-docs' tools with the suggested search terms. "
-              + "Format: 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
-  public ToolResponse analyze_dependency_age(String dependency, Integer maxAgeInDays) {
-    try {
-      MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-      List<MavenSearchResponse.MavenArtifact> versions =
-          mavenCentralService.getRecentVersionsWithTimestamps(coordinate, 1);
+          "Analyze dependency age and classify freshness (fresh/current/aging/stale) with actionable maintenance insights.")
+  public ToolResponse analyze_dependency_age(
+      @ToolParam(
+              description =
+                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
+          String dependency,
+      @ToolParam(
+              description =
+                  "Optional maximum acceptable age threshold in days. If specified and dependency exceeds this age, additional recommendations are provided. No limit if not specified",
+              required = false)
+          Integer maxAgeInDays) {
+    return executeToolOperation(
+        () -> {
+          MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
+          List<MavenSearchResponse.MavenArtifact> versions =
+              mavenCentralService.getRecentVersionsWithTimestamps(coordinate, 1);
 
-      if (versions.isEmpty()) {
-        return notFoundResponse(coordinate);
-      }
+          if (versions.isEmpty()) {
+            return notFoundResponse(coordinate);
+          }
 
-      MavenSearchResponse.MavenArtifact latestVersion = versions.get(0);
-      DependencyAgeAnalysis basicAnalysis =
-          DependencyAgeAnalysis.fromTimestamp(
-              coordinate.toCoordinateString(), latestVersion.version(), latestVersion.timestamp());
+          MavenSearchResponse.MavenArtifact latestVersion = versions.get(0);
+          DependencyAgeAnalysis basicAnalysis =
+              DependencyAgeAnalysis.fromTimestamp(
+                  coordinate.toCoordinateString(),
+                  latestVersion.version(),
+                  latestVersion.timestamp());
 
-      // Add custom recommendation if maxAgeInDays is specified
-      DependencyAgeAnalysis analysis = basicAnalysis;
-      if (maxAgeInDays != null && basicAnalysis.daysSinceLastRelease() > maxAgeInDays) {
-        analysis =
-            new DependencyAgeAnalysis(
-                basicAnalysis.dependency(),
-                basicAnalysis.latestVersion(),
-                basicAnalysis.ageClassification(),
-                basicAnalysis.daysSinceLastRelease(),
-                basicAnalysis.lastReleaseDate(),
-                basicAnalysis.ageDescription(),
-                "Exceeds specified age threshold of "
-                    + maxAgeInDays
-                    + " days - "
-                    + basicAnalysis.recommendation());
-      }
+          // Add custom recommendation if maxAgeInDays is specified
+          DependencyAgeAnalysis analysis = basicAnalysis;
+          if (maxAgeInDays != null && basicAnalysis.daysSinceLastRelease() > maxAgeInDays) {
+            analysis =
+                new DependencyAgeAnalysis(
+                    basicAnalysis.dependency(),
+                    basicAnalysis.latestVersion(),
+                    basicAnalysis.ageClassification(),
+                    basicAnalysis.daysSinceLastRelease(),
+                    basicAnalysis.lastReleaseDate(),
+                    basicAnalysis.ageDescription(),
+                    "Exceeds specified age threshold of "
+                        + maxAgeInDays
+                        + " days - "
+                        + basicAnalysis.recommendation());
+          }
 
-      // Create response with basic analysis
-      DependencyAge response =
-          DependencyAge.from(analysis, context7Properties.enabled());
+          // Create response with basic analysis
+          DependencyAge response = DependencyAge.from(analysis, context7Properties.enabled());
 
-      return ToolResponse.Success.of(response);
-    } catch (IllegalArgumentException e) {
-      return ToolResponse.Error.of(
-          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
-    } catch (MavenCentralException e) {
-      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
-    } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
-    }
+          return ToolResponse.Success.of(response);
+        });
   }
 
   /**
@@ -335,35 +374,33 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Analyze release patterns, maintenance activity and predict next release timeframe. "
-              + "Provides insights into project health based on historical release data across any JVM build tool. "
-              + "Use monthsToAnalyze to specify analysis period (default: 24 months). "
-              + "Format: 'groupId:artifactId' (NO version). Example: 'com.fasterxml.jackson.core:jackson-core'")
-  public ToolResponse analyze_release_patterns(String dependency, Integer monthsToAnalyze) {
-    try {
-      MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-      int analysisMonths = monthsToAnalyze != null ? monthsToAnalyze : DEFAULT_ANALYSIS_MONTHS;
+          "Analyze release patterns and maintenance activity to predict future release timeframes and project health.")
+  public ToolResponse analyze_release_patterns(
+      @ToolParam(
+              description =
+                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version). Example: 'com.fasterxml.jackson.core:jackson-core'")
+          String dependency,
+      @ToolParam(
+              description =
+                  "Number of months of historical release data to analyze for patterns and predictions. Default is 24 months if not specified",
+              required = false)
+          Integer monthsToAnalyze) {
+    return executeToolOperation(
+        () -> {
+          MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
+          int analysisMonths = monthsToAnalyze != null ? monthsToAnalyze : DEFAULT_ANALYSIS_MONTHS;
 
-      List<MavenSearchResponse.MavenArtifact> allVersions =
-          mavenCentralService.getAllVersionsWithTimestamps(coordinate);
+          List<MavenSearchResponse.MavenArtifact> allVersions =
+              mavenCentralService.getAllVersionsWithTimestamps(coordinate);
 
-      if (allVersions.isEmpty()) {
-        return notFoundResponse(coordinate);
-      }
+          if (allVersions.isEmpty()) {
+            throw new MavenCentralException(
+                "No versions found for " + coordinate.toCoordinateString());
+          }
 
-      ReleasePatternAnalysis analysis =
-          analyzeReleasePattern(coordinate.toCoordinateString(), allVersions, analysisMonths);
-
-      return ToolResponse.Success.of(analysis);
-    } catch (IllegalArgumentException e) {
-      return ToolResponse.Error.of(
-          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
-    } catch (MavenCentralException e) {
-      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
-    } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
-    }
+          return analyzeReleasePattern(
+              coordinate.toCoordinateString(), allVersions, analysisMonths);
+        });
   }
 
   /**
@@ -376,35 +413,32 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Get version timeline with temporal analysis, release gaps, and stability patterns. "
-              + "Shows version progression with relative timestamps and trend analysis across any JVM build tool. "
-              + "Use versionCount to specify how many recent versions to analyze (default: 20). "
-              + "Format: 'groupId:artifactId' (NO version). Example: 'org.junit.jupiter:junit-jupiter'")
-  public ToolResponse get_version_timeline(String dependency, Integer versionCount) {
-    try {
-      MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-      int maxVersions = versionCount != null ? versionCount : DEFAULT_VERSION_COUNT;
+          "Get detailed version timeline with temporal analysis, release gaps, and stability patterns.")
+  public ToolResponse get_version_timeline(
+      @ToolParam(
+              description =
+                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version). Example: 'org.junit.jupiter:junit-jupiter'")
+          String dependency,
+      @ToolParam(
+              description =
+                  "Number of recent versions to include in timeline analysis. Default is 20 versions if not specified. Typical range: 10-50",
+              required = false)
+          Integer versionCount) {
+    return executeToolOperation(
+        () -> {
+          MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
+          int maxVersions = versionCount != null ? versionCount : DEFAULT_VERSION_COUNT;
 
-      List<MavenSearchResponse.MavenArtifact> versions =
-          mavenCentralService.getRecentVersionsWithTimestamps(coordinate, maxVersions);
+          List<MavenSearchResponse.MavenArtifact> versions =
+              mavenCentralService.getRecentVersionsWithTimestamps(coordinate, maxVersions);
 
-      if (versions.isEmpty()) {
-        return notFoundResponse(coordinate);
-      }
+          if (versions.isEmpty()) {
+            throw new MavenCentralException(
+                "No versions found for " + coordinate.toCoordinateString());
+          }
 
-      VersionTimelineAnalysis analysis =
-          analyzeVersionTimeline(coordinate.toCoordinateString(), versions);
-
-      return ToolResponse.Success.of(analysis);
-    } catch (IllegalArgumentException e) {
-      return ToolResponse.Error.of(
-          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
-    } catch (MavenCentralException e) {
-      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
-    } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
-    }
+          return analyzeVersionTimeline(coordinate.toCoordinateString(), versions);
+        });
   }
 
   /**
@@ -417,46 +451,41 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Analyze overall health of multiple dependencies combining age analysis and maintenance patterns. "
-              + "Provides quick health assessment with actionable insights for maintenance planning. "
-              + "Works with any JVM build tool (Maven, Gradle, SBT, Mill). "
-              + "Use maxAgeInDays to set acceptable age threshold (optional). "
-              + "When Context7 guidance hints appear in responses, ALWAYS follow up by using the 'resolve-library-id' and 'get-library-docs' tools with the suggested search terms. "
-              + "Format: 'groupId:artifactId' (NO versions). Example: 'org.springframework:spring-core,junit:junit'")
-  public ToolResponse analyze_project_health(String dependencies, Integer maxAgeInDays) {
-    try {
-      List<String> depList = parseDependencies(dependencies);
+          "Analyze overall health of multiple dependencies with combined age analysis and maintenance patterns for quick assessment.")
+  public ToolResponse analyze_project_health(
+      @ToolParam(
+              description =
+                  "Comma or newline separated list of Maven dependency coordinates in format 'groupId:artifactId' (NO versions). Example: 'org.springframework:spring-core,junit:junit'")
+          String dependencies,
+      @ToolParam(
+              description =
+                  "Optional maximum acceptable age threshold in days for health scoring. Dependencies exceeding this age receive lower health scores. No age penalty if not specified",
+              required = false)
+          Integer maxAgeInDays) {
+    return executeToolOperation(
+        () -> {
+          List<String> depList = parseDependencies(dependencies);
 
-      if (depList.isEmpty()) {
-        return ToolResponse.Error.of("No dependencies provided for analysis");
-      }
+          if (depList.isEmpty()) {
+            throw new IllegalArgumentException("No dependencies provided for analysis");
+          }
 
-      // Analyze each dependency for age and patterns
-      List<ProjectHealthAnalysis.DependencyHealthAnalysis> dependencyAnalyses;
-      try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-        List<CompletableFuture<ProjectHealthAnalysis.DependencyHealthAnalysis>> futures =
-            depList.stream()
-                .distinct()
-                .map(
-                    dep ->
-                        CompletableFuture.supplyAsync(
-                            () -> analyzeSimpleDependencyHealth(dep, maxAgeInDays), executor))
-                .toList();
-        dependencyAnalyses = futures.stream().map(CompletableFuture::join).toList();
-      }
+          // Analyze each dependency for age and patterns
+          List<ProjectHealthAnalysis.DependencyHealthAnalysis> dependencyAnalyses;
+          try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<ProjectHealthAnalysis.DependencyHealthAnalysis>> futures =
+                depList.stream()
+                    .distinct()
+                    .map(
+                        dep ->
+                            CompletableFuture.supplyAsync(
+                                () -> analyzeSimpleDependencyHealth(dep, maxAgeInDays), executor))
+                    .toList();
+            dependencyAnalyses = futures.stream().map(CompletableFuture::join).toList();
+          }
 
-      ProjectHealthAnalysis healthSummary =
-          buildSimpleHealthSummary(dependencyAnalyses, maxAgeInDays);
-      return ToolResponse.Success.of(healthSummary);
-    } catch (IllegalArgumentException e) {
-      return ToolResponse.Error.of(
-          INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
-    } catch (MavenCentralException e) {
-      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
-    } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
-    }
+          return buildSimpleHealthSummary(dependencyAnalyses, maxAgeInDays);
+        });
   }
 
   private ToolResponse notFoundResponse(MavenCoordinate coordinate) {
@@ -469,6 +498,7 @@ public class MavenDependencyTools {
     return ToolResponse.Error.notFound(message);
   }
 
+  @SuppressWarnings("java:S1172") // preferStable is used by VersionsByType.getPreferredVersion()
   private VersionsByType buildVersionsByType(
       MavenCoordinate coordinate, List<String> allVersions, boolean preferStable) {
     Map<VersionType, String> versionsByType = HashMap.newHashMap(5);
@@ -578,51 +608,20 @@ public class MavenDependencyTools {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
       List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
-
       if (allVersions.isEmpty()) {
         return BulkCheckResult.notFound(dep);
       }
 
-      // Build version info for each type
-      Map<VersionType, String> versionsByType = HashMap.newHashMap(5);
-      for (String version : allVersions) {
-        VersionType type = versionComparator.getVersionType(version);
-        versionsByType.putIfAbsent(type, version);
-        if (versionsByType.size() == 5) break;
-      }
+      Map<VersionType, String> versionsByType = buildVersionsByType(allVersions);
+      VersionInfoCollection versionInfos = createVersionInfoCollection(versionsByType);
+      int stableCount = countStableVersions(allVersions);
 
-      // Convert to VersionInfo objects
-      VersionInfo latestStable =
-          versionsByType.containsKey(VersionType.STABLE)
-              ? new VersionInfo(versionsByType.get(VersionType.STABLE), VersionType.STABLE)
-              : null;
-      VersionInfo latestRc =
-          versionsByType.containsKey(VersionType.RC)
-              ? new VersionInfo(versionsByType.get(VersionType.RC), VersionType.RC)
-              : null;
-      VersionInfo latestBeta =
-          versionsByType.containsKey(VersionType.BETA)
-              ? new VersionInfo(versionsByType.get(VersionType.BETA), VersionType.BETA)
-              : null;
-      VersionInfo latestAlpha =
-          versionsByType.containsKey(VersionType.ALPHA)
-              ? new VersionInfo(versionsByType.get(VersionType.ALPHA), VersionType.ALPHA)
-              : null;
-      VersionInfo latestMilestone =
-          versionsByType.containsKey(VersionType.MILESTONE)
-              ? new VersionInfo(versionsByType.get(VersionType.MILESTONE), VersionType.MILESTONE)
-              : null;
-
-      int stableCount =
-          (int)
-              allVersions.stream()
-                  .mapToInt(v -> versionComparator.getVersionType(v) == VersionType.STABLE ? 1 : 0)
-                  .sum();
-
-      // Prefer stable version as primary, fallback to latest overall
-      String primaryVersion = latestStable != null ? latestStable.version() : allVersions.get(0);
+      String primaryVersion =
+          versionInfos.latestStable() != null
+              ? versionInfos.latestStable().version()
+              : allVersions.get(0);
       String primaryType =
-          latestStable != null
+          versionInfos.latestStable() != null
               ? VersionType.STABLE.getDisplayName()
               : versionComparator.getVersionTypeString(allVersions.get(0));
 
@@ -632,23 +631,67 @@ public class MavenDependencyTools {
           primaryType,
           allVersions.size(),
           stableCount,
-          latestStable,
-          latestRc,
-          latestBeta,
-          latestAlpha,
-          latestMilestone);
+          versionInfos.latestStable(),
+          versionInfos.latestRc(),
+          versionInfos.latestBeta(),
+          versionInfos.latestAlpha(),
+          versionInfos.latestMilestone());
     } catch (Exception e) {
       logger.error("Error processing comprehensive version check for {}: {}", dep, e.getMessage());
       return BulkCheckResult.error(dep, e.getMessage());
     }
   }
 
+  private Map<VersionType, String> buildVersionsByType(List<String> allVersions) {
+    Map<VersionType, String> versionsByType = HashMap.newHashMap(5);
+    Set<VersionType> remainingTypes = EnumSet.allOf(VersionType.class);
+
+    for (String version : allVersions) {
+      VersionType type = versionComparator.getVersionType(version);
+      if (remainingTypes.contains(type)) {
+        versionsByType.putIfAbsent(type, version);
+        remainingTypes.remove(type);
+        if (remainingTypes.isEmpty()) break;
+      }
+    }
+    return versionsByType;
+  }
+
+  private VersionInfoCollection createVersionInfoCollection(
+      Map<VersionType, String> versionsByType) {
+    return new VersionInfoCollection(
+        createVersionInfo(versionsByType, VersionType.STABLE),
+        createVersionInfo(versionsByType, VersionType.RC),
+        createVersionInfo(versionsByType, VersionType.BETA),
+        createVersionInfo(versionsByType, VersionType.ALPHA),
+        createVersionInfo(versionsByType, VersionType.MILESTONE));
+  }
+
+  private VersionInfo createVersionInfo(Map<VersionType, String> versionsByType, VersionType type) {
+    return versionsByType.containsKey(type)
+        ? new VersionInfo(versionsByType.get(type), type)
+        : null;
+  }
+
+  private int countStableVersions(List<String> allVersions) {
+    return allVersions.stream()
+        .mapToInt(v -> versionComparator.getVersionType(v) == VersionType.STABLE ? 1 : 0)
+        .sum();
+  }
+
+  private record VersionInfoCollection(
+      VersionInfo latestStable,
+      VersionInfo latestRc,
+      VersionInfo latestBeta,
+      VersionInfo latestAlpha,
+      VersionInfo latestMilestone) {}
+
   private VersionComparison.UpdateSummary calculateUpdateSummary(
       List<VersionComparison.DependencyComparisonResult> results) {
 
     Map<String, Long> counts =
         results.stream()
-            .filter(result -> "success".equals(result.status()))
+            .filter(result -> SUCCESS_STATUS.equals(result.status()))
             .collect(
                 Collectors.groupingBy(
                     VersionComparison.DependencyComparisonResult::updateType,
@@ -671,16 +714,15 @@ public class MavenDependencyTools {
   private ReleasePatternAnalysis analyzeReleasePattern(
       String dependency, List<MavenSearchResponse.MavenArtifact> allVersions, int analysisMonths) {
 
-    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-    LocalDateTime cutoffDate = now.minusMonths(analysisMonths);
+    Instant now = Instant.now();
+    Instant cutoffDate = now.minus((long) analysisMonths * DAYS_IN_MONTH, ChronoUnit.DAYS);
 
     // Filter versions within analysis period
     List<MavenSearchResponse.MavenArtifact> analysisVersions =
         allVersions.stream()
             .filter(
                 v -> {
-                  LocalDateTime releaseDate =
-                      LocalDateTime.ofInstant(Instant.ofEpochMilli(v.timestamp()), ZoneOffset.UTC);
+                  Instant releaseDate = Instant.ofEpochMilli(v.timestamp());
                   return releaseDate.isAfter(cutoffDate);
                 })
             .toList();
@@ -699,20 +741,24 @@ public class MavenDependencyTools {
       if (intervalDays > 0) intervals.add(intervalDays);
     }
 
-    // Calculate statistics
-    double averageDays =
-        intervals.isEmpty() ? 0 : intervals.stream().mapToLong(Long::longValue).average().orElse(0);
-    double releaseVelocity = averageDays > 0 ? ((double) DAYS_IN_MONTH / averageDays) : 0;
+    // Calculate statistics in single pass
+    double averageDays;
+    long maxInterval;
+    long minInterval;
+    if (intervals.isEmpty()) {
+      averageDays = 0;
+      maxInterval = 0;
+      minInterval = 0;
+    } else {
+      var stats = intervals.stream().mapToLong(Long::longValue).summaryStatistics();
+      averageDays = stats.getAverage();
+      maxInterval = stats.getMax();
+      minInterval = stats.getMin();
+    }
+    double releaseVelocity = averageDays > 0 ? (DAYS_IN_MONTH / averageDays) : 0;
 
-    long maxInterval =
-        intervals.isEmpty() ? 0 : intervals.stream().mapToLong(Long::longValue).max().orElse(0);
-    long minInterval =
-        intervals.isEmpty() ? 0 : intervals.stream().mapToLong(Long::longValue).min().orElse(0);
-
-    LocalDateTime lastReleaseDate =
-        LocalDateTime.ofInstant(
-            Instant.ofEpochMilli(analysisVersions.get(0).timestamp()), ZoneOffset.UTC);
-    long daysSinceLastRelease = java.time.Duration.between(lastReleaseDate, now).toDays();
+    Instant lastReleaseDate = Instant.ofEpochMilli(analysisVersions.get(0).timestamp());
+    long daysSinceLastRelease = Duration.between(lastReleaseDate, now).toDays();
 
     // Classifications
     ReleasePatternAnalysis.MaintenanceLevel maintenanceLevel =
@@ -745,7 +791,7 @@ public class MavenDependencyTools {
         releaseVelocity,
         maintenanceLevel,
         consistency,
-        lastReleaseDate.toInstant(ZoneOffset.UTC),
+        lastReleaseDate,
         nextReleasePrediction,
         recentReleases,
         recommendation);
@@ -756,18 +802,24 @@ public class MavenDependencyTools {
 
     Instant now = Instant.now();
 
-    // Calculate average interval for gap analysis
-    List<Long> intervals = new ArrayList<>();
-    for (int i = 1; i < versions.size(); i++) {
-      long prevTimestamp = versions.get(i).timestamp();
-      long currentTimestamp = versions.get(i - 1).timestamp();
-      long intervalDays = (currentTimestamp - prevTimestamp) / MILLISECONDS_TO_DAYS;
-      if (intervalDays > 0) intervals.add(intervalDays);
-    }
-    double averageInterval =
-        intervals.isEmpty() ? 0 : intervals.stream().mapToLong(Long::longValue).average().orElse(0);
+    // Pre-calculate all intervals and average - single pass optimization
+    long[] intervalDays = new long[versions.size()];
+    List<Long> positiveIntervals = new ArrayList<>();
 
-    // Build timeline entries
+    for (int i = 1; i < versions.size(); i++) {
+      long currentTimestamp = versions.get(i - 1).timestamp();
+      long prevTimestamp = versions.get(i).timestamp();
+      long interval = (currentTimestamp - prevTimestamp) / MILLISECONDS_TO_DAYS;
+      intervalDays[i] = interval;
+      if (interval > 0) positiveIntervals.add(interval);
+    }
+
+    double averageInterval =
+        positiveIntervals.isEmpty()
+            ? 0
+            : positiveIntervals.stream().mapToLong(Long::longValue).average().orElse(0);
+
+    // Build timeline entries using pre-calculated intervals
     List<VersionTimelineAnalysis.TimelineEntry> timeline = new ArrayList<>();
     for (int i = 0; i < versions.size(); i++) {
       MavenSearchResponse.MavenArtifact version = versions.get(i);
@@ -776,18 +828,9 @@ public class MavenDependencyTools {
       String relativeTime = VersionTimelineAnalysis.formatRelativeTime(releaseDate, now);
       VersionType versionType = versionComparator.getVersionType(version.version());
 
-      Long daysSincePrevious = null;
-      VersionTimelineAnalysis.TimelineEntry.ReleaseGap gap =
-          VersionTimelineAnalysis.TimelineEntry.ReleaseGap.NORMAL;
-
-      if (i > 0) {
-        long prevTimestamp = versions.get(i - 1).timestamp();
-        long intervalDays = (version.timestamp() - prevTimestamp) / (1000 * 60 * 60 * 24);
-        daysSincePrevious = intervalDays;
-        gap =
-            VersionTimelineAnalysis.TimelineEntry.ReleaseGap.classify(
-                intervalDays, averageInterval);
-      }
+      Long daysSincePrevious = i > 0 ? intervalDays[i] : null;
+      ReleaseGap gap =
+          i > 0 ? ReleaseGap.classify(intervalDays[i], averageInterval) : ReleaseGap.NORMAL;
 
       boolean isBreakingChange =
           versionComparator.determineUpdateType("0.0.0", version.version()).equals("major");
@@ -805,29 +848,26 @@ public class MavenDependencyTools {
 
     // Calculate metrics
     Instant oldestDate = Instant.ofEpochMilli(versions.get(versions.size() - 1).timestamp());
-    int timeSpanMonths = (int) java.time.Duration.between(oldestDate, now).toDays() / DAYS_IN_MONTH;
+    int timeSpanMonths = (int) Duration.between(oldestDate, now).toDays() / DAYS_IN_MONTH;
 
-    // Count recent activity
-    Instant oneMonthAgo = now.minus(java.time.Duration.ofDays(30));
-    Instant threeMonthsAgo = now.minus(java.time.Duration.ofDays(90));
+    // Count recent activity with optimized stream operations
+    Instant oneMonthAgo = now.minus(DAYS_IN_MONTH, ChronoUnit.DAYS);
+    Instant threeMonthsAgo = now.minus(3L * DAYS_IN_MONTH, ChronoUnit.DAYS);
 
-    int releasesLastMonth =
-        (int)
-            versions.stream()
-                .filter(
-                    v -> Instant.ofEpochMilli(v.timestamp()).isAfter(oneMonthAgo))
-                .count();
-    int releasesLastQuarter =
-        (int)
-            versions.stream()
-                .filter(
-                    v -> Instant.ofEpochMilli(v.timestamp()).isAfter(threeMonthsAgo))
-                .count();
+    long releasesLastMonth =
+        versions.stream()
+            .filter(v -> Instant.ofEpochMilli(v.timestamp()).isAfter(oneMonthAgo))
+            .count();
+
+    long releasesLastQuarter =
+        versions.stream()
+            .filter(v -> Instant.ofEpochMilli(v.timestamp()).isAfter(threeMonthsAgo))
+            .count();
 
     // Create analysis objects
     VersionTimelineAnalysis.VelocityTrend velocityTrend =
         new VersionTimelineAnalysis.VelocityTrend(
-            VersionTimelineAnalysis.VelocityTrend.TrendDirection.STABLE,
+            TrendDirection.STABLE,
             "Release velocity appears stable",
             releasesLastQuarter / 3.0,
             versions.size() / Math.max(timeSpanMonths, 1.0),
@@ -846,14 +886,13 @@ public class MavenDependencyTools {
                 ? "Good stability pattern - safe for production use"
                 : "Consider waiting for stable releases");
 
-    long lastReleaseAge = java.time.Duration.between(timeline.get(0).releaseDate(), now).toDays();
+    long lastReleaseAge = Duration.between(timeline.get(0).releaseDate(), now).toDays();
 
     VersionTimelineAnalysis.RecentActivity recentActivity =
         new VersionTimelineAnalysis.RecentActivity(
-            releasesLastMonth,
-            releasesLastQuarter,
-            VersionTimelineAnalysis.RecentActivity.ActivityLevel.classify(
-                releasesLastMonth, releasesLastQuarter),
+            (int) releasesLastMonth,
+            (int) releasesLastQuarter,
+            ActivityLevel.classify((int) releasesLastMonth, (int) releasesLastQuarter),
             lastReleaseAge,
             "Recent activity: " + releasesLastQuarter + " releases in last quarter");
 
@@ -878,11 +917,9 @@ public class MavenDependencyTools {
 
     List<String> insights = new ArrayList<>();
 
-    if (recentActivity.activityLevel()
-        == VersionTimelineAnalysis.RecentActivity.ActivityLevel.VERY_ACTIVE) {
+    if (recentActivity.activityLevel() == ActivityLevel.VERY_ACTIVE) {
       insights.add("High release frequency indicates active development");
-    } else if (recentActivity.activityLevel()
-        == VersionTimelineAnalysis.RecentActivity.ActivityLevel.DORMANT) {
+    } else if (recentActivity.activityLevel() == ActivityLevel.DORMANT) {
       insights.add("No recent releases - consider checking project status");
     }
 
@@ -893,13 +930,7 @@ public class MavenDependencyTools {
     }
 
     long majorGaps =
-        timeline.stream()
-            .mapToLong(
-                t ->
-                    t.releaseGap() == VersionTimelineAnalysis.TimelineEntry.ReleaseGap.MAJOR_GAP
-                        ? 1
-                        : 0)
-            .sum();
+        timeline.stream().mapToLong(t -> t.releaseGap() == ReleaseGap.MAJOR_GAP ? 1 : 0).sum();
     if (majorGaps > 0) {
       insights.add("Found " + majorGaps + " significant gaps in release schedule");
     }
@@ -924,20 +955,17 @@ public class MavenDependencyTools {
               coordinate.toCoordinateString(), latestVersion.version(), latestVersion.timestamp());
 
       // Simple maintenance assessment based on recent versions
-      LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-      LocalDateTime sixMonthsAgo = now.minusMonths(6);
+      Instant now = Instant.now();
+      Instant sixMonthsAgo = now.minus(6L * DAYS_IN_MONTH, ChronoUnit.DAYS);
 
       long recentVersions =
           versions.stream()
-              .filter(
-                  v ->
-                      LocalDateTime.ofInstant(Instant.ofEpochMilli(v.timestamp()), ZoneOffset.UTC)
-                          .isAfter(sixMonthsAgo))
+              .filter(v -> Instant.ofEpochMilli(v.timestamp()).isAfter(sixMonthsAgo))
               .count();
 
       String maintenanceStatus;
       if (recentVersions >= 3) {
-        maintenanceStatus = "active";
+        maintenanceStatus = ACTIVE_MAINTENANCE;
       } else if (recentVersions >= 1) {
         maintenanceStatus = "moderate";
       } else {
@@ -977,9 +1005,12 @@ public class MavenDependencyTools {
 
     // Maintenance penalty
     switch (maintenanceStatus) {
-      case "active" -> score -= 0; // No penalty
+      case ACTIVE_MAINTENANCE -> score -= 0; // No penalty
       case "moderate" -> score -= MODERATE_MAINTENANCE_PENALTY;
       case "slow" -> score -= SLOW_MAINTENANCE_PENALTY;
+      default -> {
+        // Unknown maintenance status - no penalty
+      }
     }
 
     // Custom age threshold penalty
@@ -998,10 +1029,14 @@ public class MavenDependencyTools {
     int successfulAnalyses =
         (int)
             dependencyAnalyses.stream()
-                .mapToLong(dep -> "success".equals(dep.status()) ? 1 : 0)
+                .mapToLong(dep -> SUCCESS_STATUS.equals(dep.status()) ? 1 : 0)
                 .sum();
 
-    if (successfulAnalyses == 0) {
+    // Calculate averages and counts in single pass
+    List<ProjectHealthAnalysis.DependencyHealthAnalysis> successfulDeps =
+        dependencyAnalyses.stream().filter(dep -> SUCCESS_STATUS.equals(dep.status())).toList();
+
+    if (successfulDeps.isEmpty()) {
       return new ProjectHealthAnalysis(
           "unknown",
           0,
@@ -1012,66 +1047,23 @@ public class MavenDependencyTools {
           List.of("Unable to analyze any dependencies"));
     }
 
-    // Calculate averages and counts
-    List<ProjectHealthAnalysis.DependencyHealthAnalysis> successfulDeps =
-        dependencyAnalyses.stream().filter(dep -> "success".equals(dep.status())).toList();
+    // Single pass through successful dependencies
+    DependencyMetrics metrics = calculateDependencyMetrics(successfulDeps);
 
-    double averageHealthScore =
-        successfulDeps.stream()
-            .mapToInt(ProjectHealthAnalysis.DependencyHealthAnalysis::healthScore)
-            .average()
-            .orElse(0);
-
-    long freshCount =
-        successfulDeps.stream()
-            .mapToLong(dep -> "fresh".equals(dep.ageClassification()) ? 1 : 0)
-            .sum();
-    long currentCount =
-        successfulDeps.stream()
-            .mapToLong(dep -> "current".equals(dep.ageClassification()) ? 1 : 0)
-            .sum();
-    long agingCount =
-        successfulDeps.stream()
-            .mapToLong(dep -> "aging".equals(dep.ageClassification()) ? 1 : 0)
-            .sum();
-    long staleCount =
-        successfulDeps.stream()
-            .mapToLong(dep -> "stale".equals(dep.ageClassification()) ? 1 : 0)
-            .sum();
-
-    long activeMaintenanceCount =
-        successfulDeps.stream()
-            .mapToLong(dep -> "active".equals(dep.maintenanceLevel()) ? 1 : 0)
-            .sum();
-
-    // Overall health assessment
-    String overallHealth;
-    if (averageHealthScore >= EXCELLENT_HEALTH_THRESHOLD) {
-      overallHealth = "excellent";
-    } else if (averageHealthScore >= GOOD_HEALTH_THRESHOLD) {
-      overallHealth = "good";
-    } else if (averageHealthScore >= FAIR_HEALTH_THRESHOLD) {
-      overallHealth = "fair";
-    } else {
-      overallHealth = "poor";
-    }
+    double averageHealthScore = metrics.totalHealthScore() / (double) successfulDeps.size();
+    String overallHealth = determineOverallHealth(averageHealthScore);
 
     // Create age distribution
     ProjectHealthAnalysis.AgeDistribution ageDistribution =
         new ProjectHealthAnalysis.AgeDistribution(
-            (int) freshCount, (int) currentCount, (int) agingCount, (int) staleCount);
+            (int) metrics.freshCount(),
+            (int) metrics.currentCount(),
+            (int) metrics.agingCount(),
+            (int) metrics.staleCount());
 
-    // Key recommendations
-    List<String> recommendations = new ArrayList<>();
-    if (staleCount > 0) {
-      recommendations.add("Review " + staleCount + " stale dependencies for alternatives");
-    }
-    if (agingCount > successfulAnalyses / 2) {
-      recommendations.add("Consider updating aging dependencies");
-    }
-    if (activeMaintenanceCount < successfulAnalyses / 2) {
-      recommendations.add("Monitor maintenance activity for slower-updated dependencies");
-    }
+    // Generate recommendations
+    List<String> recommendations =
+        generateHealthRecommendations(metrics, successfulAnalyses, successfulDeps, maxAgeInDays);
 
     return new ProjectHealthAnalysis(
         overallHealth,
@@ -1082,4 +1074,93 @@ public class MavenDependencyTools {
         dependencyAnalyses,
         recommendations);
   }
+
+  private DependencyMetrics calculateDependencyMetrics(
+      List<ProjectHealthAnalysis.DependencyHealthAnalysis> successfulDeps) {
+    // Calculate all metrics in optimized stream operations
+    int totalHealthScore =
+        successfulDeps.stream()
+            .mapToInt(ProjectHealthAnalysis.DependencyHealthAnalysis::healthScore)
+            .sum();
+
+    Map<String, Long> ageCounts =
+        successfulDeps.stream()
+            .collect(
+                Collectors.groupingBy(
+                    ProjectHealthAnalysis.DependencyHealthAnalysis::ageClassification,
+                    Collectors.counting()));
+
+    long activeMaintenanceCount =
+        successfulDeps.stream()
+            .filter(dep -> ACTIVE_MAINTENANCE.equals(dep.maintenanceLevel()))
+            .count();
+
+    return new DependencyMetrics(
+        totalHealthScore,
+        ageCounts.getOrDefault(FRESH_AGE, 0L),
+        ageCounts.getOrDefault(CURRENT_AGE, 0L),
+        ageCounts.getOrDefault(AGING_AGE, 0L),
+        ageCounts.getOrDefault(STALE_AGE, 0L),
+        activeMaintenanceCount);
+  }
+
+  private String determineOverallHealth(double averageHealthScore) {
+    if (averageHealthScore >= EXCELLENT_HEALTH_THRESHOLD) {
+      return EXCELLENT_HEALTH;
+    } else if (averageHealthScore >= GOOD_HEALTH_THRESHOLD) {
+      return GOOD_HEALTH;
+    } else if (averageHealthScore >= FAIR_HEALTH_THRESHOLD) {
+      return FAIR_HEALTH;
+    } else {
+      return POOR_HEALTH;
+    }
+  }
+
+  private List<String> generateHealthRecommendations(
+      DependencyMetrics metrics,
+      int successfulAnalyses,
+      List<ProjectHealthAnalysis.DependencyHealthAnalysis> successfulDeps,
+      Integer maxAgeInDays) {
+    List<String> recommendations = new ArrayList<>();
+
+    if (metrics.staleCount() > 0) {
+      recommendations.add(
+          "Review " + metrics.staleCount() + " stale dependencies for alternatives");
+    }
+    if (metrics.agingCount() > successfulAnalyses / 2) {
+      recommendations.add("Consider updating aging dependencies");
+    }
+    if (metrics.activeMaintenanceCount() < successfulAnalyses / 2) {
+      recommendations.add("Monitor maintenance activity for slower-updated dependencies");
+    }
+
+    // Add age-specific recommendations when custom threshold is set
+    if (maxAgeInDays != null) {
+      long exceedsThreshold =
+          successfulDeps.stream()
+              .filter(
+                  dep ->
+                      STALE_AGE.equals(dep.ageClassification())
+                          || AGING_AGE.equals(dep.ageClassification()))
+              .count();
+      if (exceedsThreshold > 0) {
+        recommendations.add(
+            "Found "
+                + exceedsThreshold
+                + " dependencies exceeding your "
+                + maxAgeInDays
+                + "-day age threshold");
+      }
+    }
+
+    return recommendations;
+  }
+
+  private record DependencyMetrics(
+      int totalHealthScore,
+      long freshCount,
+      long currentCount,
+      long agingCount,
+      long staleCount,
+      long activeMaintenanceCount) {}
 }

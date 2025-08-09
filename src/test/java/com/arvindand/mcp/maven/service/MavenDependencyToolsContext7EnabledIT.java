@@ -42,11 +42,6 @@ class MavenDependencyToolsContext7EnabledIT {
     String oldDependencies = "org.springframework.boot:spring-boot-starter:2.5.0";
     ToolResponse resp = mavenDependencyTools.compare_dependency_versions(oldDependencies, false);
 
-    if (resp instanceof ToolResponse.Error) {
-      System.out.println("SKIPPING test due to Maven Central API error");
-      return;
-    }
-
     VersionComparison comparison = getSuccessData(resp);
     assertNotNull(comparison);
 

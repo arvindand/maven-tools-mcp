@@ -1,5 +1,7 @@
 package com.arvindand.mcp.maven.service;
 
+import static com.arvindand.mcp.maven.config.CacheConstants.*;
+
 import com.arvindand.mcp.maven.config.MavenCentralProperties;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.MavenSearchResponse;
@@ -8,6 +10,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
@@ -37,7 +40,7 @@ public class MavenCentralService {
    * @return the latest version or null if not found
    */
   @Cacheable(
-      value = "maven-latest-versions",
+      value = MAVEN_LATEST_VERSIONS,
       key =
           "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + (#coordinate.packaging()"
               + " ?: 'jar')")
@@ -54,7 +57,7 @@ public class MavenCentralService {
    * @return true if the version exists
    */
   @Cacheable(
-      value = "maven-version-checks",
+      value = MAVEN_VERSION_CHECKS,
       key =
           "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + #version + ':' +"
               + " (#coordinate.packaging() ?: 'jar')")
@@ -74,7 +77,7 @@ public class MavenCentralService {
    * @return list of all versions, sorted by version descending
    */
   @Cacheable(
-      value = "maven-all-versions",
+      value = MAVEN_ALL_VERSIONS,
       key =
           "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + (#coordinate.packaging()"
               + " ?: 'jar')")
@@ -89,7 +92,7 @@ public class MavenCentralService {
    * @return list of artifacts with version and timestamp information
    */
   @Cacheable(
-      value = "maven-versions-with-timestamps",
+      value = MAVEN_VERSIONS_WITH_TIMESTAMPS,
       key =
           "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + (#coordinate.packaging()"
               + " ?: 'jar')")
@@ -106,7 +109,7 @@ public class MavenCentralService {
    * @return list of artifacts with version and timestamp information
    */
   @Cacheable(
-      value = "maven-recent-versions-with-timestamps",
+      value = MAVEN_RECENT_VERSIONS_WITH_TIMESTAMPS,
       key =
           "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + #maxVersions + ':' + (#coordinate.packaging()"
               + " ?: 'jar')")
@@ -201,7 +204,7 @@ public class MavenCentralService {
   }
 
   private RestClient createRestClient() {
-    var requestFactory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+    var requestFactory = new SimpleClientHttpRequestFactory();
     int timeoutMs = (int) properties.timeout().toMillis();
     requestFactory.setConnectTimeout(timeoutMs);
     requestFactory.setReadTimeout(timeoutMs);

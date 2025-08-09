@@ -116,12 +116,6 @@ class MavenDependencyToolsIT {
     ToolResponse response =
         mavenDependencyTools.compare_dependency_versions(currentDependencies, false);
 
-    // Skip if Maven Central has issues
-    if (response instanceof ToolResponse.Error) {
-      System.out.println("SKIPPING test due to Maven Central API error");
-      return;
-    }
-
     VersionComparison comparison = getSuccessData(response);
     assertNotNull(comparison.comparisonDate());
     assertNotNull(comparison.updateSummary());
@@ -142,12 +136,6 @@ class MavenDependencyToolsIT {
   void testAnalyzeDependencyAge() {
     ToolResponse response = mavenDependencyTools.analyze_dependency_age("junit:junit", null);
 
-    // Skip if Maven Central has issues
-    if (response instanceof ToolResponse.Error) {
-      System.out.println("SKIPPING test due to Maven Central API error");
-      return;
-    }
-
     DependencyAge result = getSuccessData(response);
     assertEquals("junit:junit", result.dependency());
     assertNotNull(result.latestVersion());
@@ -166,12 +154,6 @@ class MavenDependencyToolsIT {
     String dependencies = "junit:junit:4.12,org.slf4j:slf4j-api:1.7.30";
     ToolResponse response = mavenDependencyTools.analyze_project_health(dependencies, null);
 
-    // Skip if Maven Central has issues
-    if (response instanceof ToolResponse.Error) {
-      System.out.println("SKIPPING test due to Maven Central API error");
-      return;
-    }
-
     ProjectHealthAnalysis result = getSuccessData(response);
     assertNotNull(result.analysisDate());
     assertTrue(result.dependencyCount() >= 2);
@@ -184,7 +166,8 @@ class MavenDependencyToolsIT {
       assertNotNull(depHealth.dependency());
       assertNotNull(depHealth.latestVersion());
       assertNotNull(depHealth.ageClassification());
-      assertNotNull(depHealth.healthScore());
+      assertTrue(
+          depHealth.healthScore() >= 0); // healthScore is primitive int, check for valid range
     }
   }
 
