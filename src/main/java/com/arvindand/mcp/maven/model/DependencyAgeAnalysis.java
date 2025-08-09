@@ -86,7 +86,7 @@ public record DependencyAgeAnalysis(
 
     AgeClassification classification = AgeClassification.classify(daysSinceRelease);
     String ageDescription = formatAgeDescription(daysSinceRelease);
-    String recommendation = generateRecommendation(classification, daysSinceRelease);
+    String recommendation = generateRecommendation(classification);
 
     return new DependencyAgeAnalysis(
         dependency,
@@ -98,21 +98,23 @@ public record DependencyAgeAnalysis(
         recommendation);
   }
 
+  private static final String RELEASED = "Released ";
+
   private static String formatAgeDescription(long days) {
     if (days <= 1) {
       return "Released today or yesterday";
     } else if (days <= 7) {
-      return "Released " + days + " days ago";
+      return RELEASED + days + " days ago";
     } else if (days <= 30) {
-      return "Released " + (days / 7) + " weeks ago";
+      return RELEASED + (days / 7) + " weeks ago";
     } else if (days <= 365) {
-      return "Released " + (days / 30) + " months ago";
+      return RELEASED + (days / 30) + " months ago";
     } else {
-      return "Released " + (days / 365) + " years ago";
+      return RELEASED + (days / 365) + " years ago";
     }
   }
 
-  private static String generateRecommendation(AgeClassification classification, long days) {
+  private static String generateRecommendation(AgeClassification classification) {
     return switch (classification) {
       case FRESH -> "Recently updated - safe to use latest version";
       case CURRENT -> "Actively maintained - consider updating if needed";

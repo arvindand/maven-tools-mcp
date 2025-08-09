@@ -20,6 +20,9 @@ public record Context7Guidance(
     String complexity,
     String documentationFocus) {
 
+  private static final String MODERATE = "moderate";
+  private static final String STALE = "stale";
+
   /**
    * Create guidance for version comparison/migration scenarios.
    *
@@ -47,9 +50,9 @@ public record Context7Guidance(
   public static Context7Guidance forModernization(String dependency, String ageClassification) {
     String libraryName = extractLibraryName(dependency);
     String suggestedSearch = generateModernizationSearch(libraryName, ageClassification);
-    List<String> searchHints = generateModernizationHints(dependency, ageClassification);
+    List<String> searchHints = generateModernizationHints(ageClassification);
     String complexity =
-        "aging".equals(ageClassification) || "stale".equals(ageClassification) ? "moderate" : "low";
+        "aging".equals(ageClassification) || STALE.equals(ageClassification) ? MODERATE : "low";
     String documentationFocus = "best practices, modern usage, latest features";
 
     return new Context7Guidance(suggestedSearch, searchHints, complexity, documentationFocus);
@@ -95,7 +98,7 @@ public record Context7Guidance(
 
   private static String generateModernizationSearch(String libraryName, String ageClassification) {
     return switch (ageClassification) {
-      case "stale" -> libraryName + " modernization guide latest version";
+      case STALE -> libraryName + " modernization guide latest version";
       case "aging" -> libraryName + " upgrade to latest best practices";
       default -> libraryName + " latest features improvements";
     };
@@ -124,9 +127,8 @@ public record Context7Guidance(
     return hints;
   }
 
-  private static List<String> generateModernizationHints(
-      String dependency, String ageClassification) {
-    if ("stale".equals(ageClassification)) {
+  private static List<String> generateModernizationHints(String ageClassification) {
+    if (STALE.equals(ageClassification)) {
       return List.of(
           "Consider searching for alternatives or replacement libraries",
           "Look for migration guides to newer maintained alternatives",
@@ -142,9 +144,9 @@ public record Context7Guidance(
   private static String determineComplexity(String updateType) {
     return switch (updateType) {
       case "major" -> "high";
-      case "minor" -> "moderate";
+      case "minor" -> MODERATE;
       case "patch" -> "low";
-      default -> "moderate";
+      default -> MODERATE;
     };
   }
 }

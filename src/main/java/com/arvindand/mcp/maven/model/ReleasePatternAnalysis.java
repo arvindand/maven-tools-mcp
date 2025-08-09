@@ -141,12 +141,9 @@ public record ReleasePatternAnalysis(
    * Generate recommendation based on maintenance analysis.
    *
    * @param maintenanceLevel the classified maintenance level
-   * @param daysSinceLastRelease days since most recent release
-   * @param releaseVelocity releases per month
    * @return maintenance-based recommendation
    */
-  public static String generateRecommendation(
-      MaintenanceLevel maintenanceLevel, long daysSinceLastRelease, double releaseVelocity) {
+  public static String generateRecommendation(MaintenanceLevel maintenanceLevel) {
 
     return switch (maintenanceLevel) {
       case ACTIVE -> "Well-maintained dependency with active development - safe to use";

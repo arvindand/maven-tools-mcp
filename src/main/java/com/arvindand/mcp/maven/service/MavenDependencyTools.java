@@ -779,9 +779,7 @@ public class MavenDependencyTools {
 
     String nextReleasePrediction =
         ReleasePatternAnalysis.predictNextRelease(averageDays, daysSinceLastRelease, consistency);
-    String recommendation =
-        ReleasePatternAnalysis.generateRecommendation(
-            maintenanceLevel, daysSinceLastRelease, releaseVelocity);
+    String recommendation = ReleasePatternAnalysis.generateRecommendation(maintenanceLevel);
 
     return new ReleasePatternAnalysis(
         dependency,
