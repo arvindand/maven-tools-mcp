@@ -1,35 +1,38 @@
 package com.arvindand.mcp.maven.model;
 
-import java.time.LocalDateTime;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import java.time.Instant;
 import java.util.Optional;
 
 /**
- * Response for dependency age analysis with optional Context7 guidance hints.
+ * Comprehensive dependency age information with analysis and guidance.
  *
- * @param dependency the dependency coordinate
- * @param latestVersion the latest version analyzed
- * @param ageClassification age classification (fresh/current/aging/stale)
+ * @param dependency the Maven coordinate analyzed
+ * @param latestVersion the latest version found
  * @param daysSinceLastRelease days since the latest version was released
- * @param lastReleaseDate when the latest version was released
- * @param ageDescription human-readable age description
- * @param recommendation suggested action based on age analysis
- * @param context7Guidance optional Context7 guidance for modernization
+ * @param lastReleaseDate ISO formatted date of the last release
+ * @param ageClassification age classification (fresh/current/aging/stale)
+ * @param ageDescription human-readable description of the dependency's age status
+ * @param recommendation actionable recommendation based on age analysis
+ * @param context7Guidance optional Context7 guidance for deeper integration insights
+ * @param maxAgeInDays the configured threshold for age classification
  * @author Arvind Menon
- * @since 1.2.0
+ * @since 1.3.0
  */
-public record DependencyAgeResponse(
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+public record DependencyAge(
     String dependency,
     String latestVersion,
     DependencyAgeAnalysis.AgeClassification ageClassification,
     long daysSinceLastRelease,
-    LocalDateTime lastReleaseDate,
+    Instant lastReleaseDate,
     String ageDescription,
     String recommendation,
     Optional<Context7Guidance> context7Guidance) {
 
   /** Creates a response from a basic DependencyAgeAnalysis with Context7 guidance. */
-  public static DependencyAgeResponse from(
-      DependencyAgeAnalysis analysis, boolean context7Enabled) {
+  public static DependencyAge from(DependencyAgeAnalysis analysis, boolean context7Enabled) {
     // Add Context7 guidance for aging/stale dependencies when Context7 is enabled
     Optional<Context7Guidance> guidance =
         (context7Enabled
@@ -41,7 +44,7 @@ public record DependencyAgeResponse(
                     analysis.dependency(), analysis.ageClassification().getName()))
             : Optional.empty();
 
-    return new DependencyAgeResponse(
+    return new DependencyAge(
         analysis.dependency(),
         analysis.latestVersion(),
         analysis.ageClassification(),

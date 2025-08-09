@@ -1,22 +1,26 @@
 package com.arvindand.mcp.maven.model;
 
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Represents the result of version comparison.
+ * Represents the result of comparing dependency versions with upgrade recommendations.
  *
  * @param comparisonDate when the comparison was performed
- * @param dependencies list of dependency comparison results
- * @param updateSummary summary of available updates
+ * @param dependencies individual comparison results for each dependency
+ * @param updateSummary overall summary of available updates
  * @author Arvind Menon
- * @since 0.1.0
+ * @since 1.3.0
  */
-public record VersionComparisonResponse(
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+public record VersionComparison(
     Instant comparisonDate,
     List<DependencyComparisonResult> dependencies,
     UpdateSummary updateSummary) {
+
   /** Individual dependency comparison result. */
   public record DependencyComparisonResult(
       String dependency,

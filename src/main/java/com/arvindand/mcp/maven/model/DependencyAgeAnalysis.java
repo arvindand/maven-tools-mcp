@@ -1,8 +1,9 @@
 package com.arvindand.mcp.maven.model;
 
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 
 /**
  * Analysis of dependency age and freshness classification.
@@ -17,12 +18,13 @@ import java.time.ZoneOffset;
  * @author Arvind Menon
  * @since 1.1.0
  */
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DependencyAgeAnalysis(
     String dependency,
     String latestVersion,
     AgeClassification ageClassification,
     long daysSinceLastRelease,
-    LocalDateTime lastReleaseDate,
+    Instant lastReleaseDate,
     String ageDescription,
     String recommendation) {
 
@@ -78,10 +80,9 @@ public record DependencyAgeAnalysis(
    */
   public static DependencyAgeAnalysis fromTimestamp(
       String dependency, String latestVersion, long timestamp) {
-    LocalDateTime releaseDate =
-        LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
-    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-    long daysSinceRelease = java.time.Duration.between(releaseDate, now).toDays();
+    Instant releaseDate = Instant.ofEpochMilli(timestamp);
+    Instant now = Instant.now();
+    long daysSinceRelease = ChronoUnit.DAYS.between(releaseDate, now);
 
     AgeClassification classification = AgeClassification.classify(daysSinceRelease);
     String ageDescription = formatAgeDescription(daysSinceRelease);

@@ -2,19 +2,18 @@ package com.arvindand.mcp.maven.config;
 
 import com.arvindand.mcp.maven.model.BulkCheckResult;
 import com.arvindand.mcp.maven.model.Context7Guidance;
+import com.arvindand.mcp.maven.model.DependencyAge;
 import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
-import com.arvindand.mcp.maven.model.DependencyAgeResponse;
-import com.arvindand.mcp.maven.model.DependencyExistsResponse;
-import com.arvindand.mcp.maven.model.DetailedVersionInfo;
-import com.arvindand.mcp.maven.model.ImplementationGuidance;
+import com.arvindand.mcp.maven.model.DependencyInfo;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.MavenSearchResponse;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
 import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
-import com.arvindand.mcp.maven.model.VersionComparisonResponse;
+import com.arvindand.mcp.maven.model.VersionComparison;
 import com.arvindand.mcp.maven.model.VersionInfo;
 import com.arvindand.mcp.maven.model.VersionTimelineAnalysis;
 import com.arvindand.mcp.maven.model.VersionsByType;
+import com.arvindand.mcp.maven.model.ToolResponse;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
@@ -49,11 +48,10 @@ public class NativeImageConfiguration {
       // Register all record classes with comprehensive reflection access
       registerRecordClass(hints, MavenCoordinate.class);
       registerRecordClass(hints, BulkCheckResult.class);
-      registerRecordClass(hints, DetailedVersionInfo.class);
-      registerRecordClass(hints, DependencyExistsResponse.class);
-      registerRecordClass(hints, VersionComparisonResponse.class);
-      registerRecordClass(hints, VersionComparisonResponse.DependencyComparisonResult.class);
-      registerRecordClass(hints, VersionComparisonResponse.UpdateSummary.class);
+      registerRecordClass(hints, DependencyInfo.class);
+      registerRecordClass(hints, VersionComparison.class);
+      registerRecordClass(hints, VersionComparison.DependencyComparisonResult.class);
+      registerRecordClass(hints, VersionComparison.UpdateSummary.class);
       registerRecordClass(hints, VersionInfo.class);
 
       // Register MavenSearchResponse and its nested records for Jackson deserialization
@@ -77,14 +75,17 @@ public class NativeImageConfiguration {
 
       // Register Context7 integration record classes (v1.2.0)
       registerRecordClass(hints, Context7Guidance.class);
-      registerRecordClass(hints, DependencyAgeResponse.class);
+      registerRecordClass(hints, DependencyAge.class);
 
       // Register structured response record classes (v1.2.0)
       registerRecordClass(hints, ProjectHealthAnalysis.class);
       registerRecordClass(hints, ProjectHealthAnalysis.AgeDistribution.class);
       registerRecordClass(hints, ProjectHealthAnalysis.DependencyHealthAnalysis.class);
       registerRecordClass(hints, VersionsByType.class);
-      registerRecordClass(hints, ImplementationGuidance.class);
+
+      registerRecordClass(hints, ToolResponse.class);
+      registerRecordClass(hints, ToolResponse.Success.class);
+      registerRecordClass(hints, ToolResponse.Error.class);
 
       // Register configuration properties record classes
       registerRecordClass(hints, MavenCentralProperties.class);

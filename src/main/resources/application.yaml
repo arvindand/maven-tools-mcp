@@ -11,7 +11,7 @@ spring:
     mcp:
       server:
         name: maven-tools-mcp
-        version: 1.2.0
+        version: 1.3.0
         type: SYNC
         instructions: "Universal JVM dependency intelligence server for any build tool using Maven Central Repository. Provides comprehensive dependency analysis, latest version lookup, stability filtering, bulk operations, and upgrade recommendations with intelligent caching support. Works with Maven, Gradle, SBT, Mill, and any JVM build tool."
       client:

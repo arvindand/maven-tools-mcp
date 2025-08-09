@@ -1,6 +1,7 @@
 package com.arvindand.mcp.maven.model;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
@@ -43,7 +44,7 @@ public record VersionTimelineAnalysis(
   public record TimelineEntry(
       String version,
       VersionInfo.VersionType versionType,
-      LocalDateTime releaseDate,
+      Instant releaseDate,
       String relativeTime,
       Long daysSincePrevious,
       boolean isBreakingChange,
@@ -202,8 +203,8 @@ public record VersionTimelineAnalysis(
   }
 
   /** Format relative time description. */
-  public static String formatRelativeTime(LocalDateTime releaseDate, LocalDateTime now) {
-    long days = java.time.Duration.between(releaseDate, now).toDays();
+  public static String formatRelativeTime(Instant releaseDate, Instant now) {
+    long days = ChronoUnit.DAYS.between(releaseDate, now);
 
     if (days == 0) {
       return "today";

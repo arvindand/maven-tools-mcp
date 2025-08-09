@@ -1,26 +1,29 @@
 package com.arvindand.mcp.maven.model;
 
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Represents the results of project health analysis for multiple dependencies.
+ * Comprehensive health analysis for multiple dependencies in a project.
  *
- * @param overallHealth overall health assessment (excellent/good/fair/poor)
- * @param averageHealthScore average health score across all dependencies (0-100)
- * @param totalDependencies total number of dependencies analyzed
- * @param analyzedSuccessfully number of dependencies successfully analyzed
- * @param ageDistribution distribution of dependencies by age classification
- * @param dependencies list of individual dependency health analyses
- * @param recommendations list of actionable recommendations
+ * @param analysisDate ISO formatted date when analysis was performed
+ * @param dependencyCount total number of dependencies analyzed
+ * @param healthSummary overall health assessment
+ * @param ageDistribution breakdown of dependencies by age classification
+ * @param recommendations prioritized list of recommendations
+ * @param dependencies individual analysis for each dependency
+ * @param maxAgeInDays the age threshold used for classification
  * @author Arvind Menon
- * @since 1.2.0
+ * @since 1.1.0
  */
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ProjectHealthAnalysis(
-    String overallHealth,
-    int averageHealthScore,
-    int totalDependencies,
-    int analyzedSuccessfully,
+    String analysisDate,
+    int dependencyCount,
+    int successfulAnalysis,
+    int failedAnalysis,
     AgeDistribution ageDistribution,
     List<DependencyHealthAnalysis> dependencies,
     List<String> recommendations) {

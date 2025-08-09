@@ -30,9 +30,9 @@ Ask your AI assistant:
 - *"How old are my dependencies and which ones need attention?"* (v1.1.0)
 - *"Analyze the release patterns for my key dependencies"* (v1.1.0)
 - *"Give me a health check for all my project dependencies"* (v1.1.0)
-- *"How do I upgrade Spring Boot from 2.7.0 to the latest version? Show me migration guidance"* (v1.2.0 with Context7 guidance)
-- *"Check these dependencies for upgrades and suggest documentation searches"* (paste your pom.xml/build.gradle) (v1.2.0)
-- *"I'm still using Jackson 2.12.0. Should I upgrade and how?"* (v1.2.0 with guided delegation)
+- *"How do I upgrade Spring Boot from 2.7.0 to the latest version? Show me migration guidance"*
+- *"Check these dependencies for upgrades and suggest documentation searches"* (paste your pom.xml/build.gradle)
+- *"I'm still using Jackson 2.12.0. Should I upgrade and how?"*
 
 ## 🔧 Supported Build Tools
 
@@ -56,7 +56,7 @@ Working with **any build tool** that uses Maven Central Repository:
 - ✅ **Stability Filtering** - Choose stable-only or include pre-release versions
 - ✅ **Enterprise Performance** - <100ms cached responses, native images
 - ✅ **Analytical Intelligence** - Age analysis, release patterns, project health scoring (v1.1.0)
-- ✅ **Context7 Guidance** - Smart documentation hints with guided delegation architecture (v1.2.0)
+- ✅ **Context7 Guidance** - Smart documentation hints with guided delegation architecture
 
 ### vs Manual Dependency Management
 
@@ -182,7 +182,7 @@ Working with **any build tool** that uses Maven Central Repository:
 - `versionCount` - Number of recent versions to analyze in timeline (default: 20)
 - `includeRecommendations` - Include detailed recommendations in health analysis
 
-**Context7 Integration (v1.2.0):**
+**Context7 Integration (v1.3.0):**
 
 Context7 integration is **enabled by default** (`context7.enabled=true`). Maven tools automatically include Context7 guidance hints in response models when upgrades or modernization are needed. Additionally, the server acts as an MCP client to expose raw Context7 tools (`resolve-library-id`, `get-library-docs`) directly to your AI assistant. When disabled, responses contain only core dependency analysis without guidance hints or Context7 tools.
 
@@ -452,7 +452,7 @@ These tools are automatically available by default through Spring AI MCP client 
 
 ## ✨ Advanced Features Examples
 
-### Analytical Intelligence (v1.1.0) & Documentation Enrichment (v1.2.0)
+### Analytical Intelligence & Documentation Enrichment
 
 ### Dependency Age Analysis
 
@@ -516,16 +516,16 @@ These tools are automatically available by default through Spring AI MCP client 
 - **Dependency age analysis with actionable insights** (v1.1.0)
 - **Maintenance pattern analysis and predictions** (v1.1.0)
 - **Project health scoring and recommendations** (v1.1.0)
-- **Context7 migration guidance and upgrade strategies** (v1.2.0)
-- **Documentation enrichment for complex upgrades** (v1.2.0)
+- **Context7 migration guidance and upgrade strategies**
+- **Documentation enrichment for complex upgrades**
 - Caching for better performance
 - Works with MCP-compatible AI assistants
 
 > **Note:** Snapshot versions are not supported. This is because the Maven Central API does not index or provide access to snapshot artifacts. Only released versions (stable, rc, beta, alpha, milestone) are available.
 
-## Context7 Guided Delegation Architecture (v1.2.0)
+## Context7 Guided Delegation Architecture
 
-**Default Behavior:** Context7 integration is **enabled by default** in v1.2.0. The server acts as both an MCP server (providing Maven tools) and an MCP client (exposing Context7 tools), giving your AI assistant access to both dependency intelligence and documentation guidance in a single connection. When disabled (`context7.enabled=false`), Maven tools work independently without Context7 guidance hints or raw Context7 tools.
+**Default Behavior:** Context7 integration is **enabled by default**. The server acts as both an MCP server (providing Maven tools) and an MCP client (exposing Context7 tools), giving your AI assistant access to both dependency intelligence and documentation guidance in a single connection. When disabled (`context7.enabled=false`), Maven tools work independently without Context7 guidance hints or raw Context7 tools.
 
 ### Dual MCP Architecture
 
@@ -560,7 +560,7 @@ Context7 tools are automatically enabled by default. To disable Context7 integra
 
 **Graceful Design:** Context7 integration is enabled by default, providing guidance hints and raw Context7 tools out of the box. When disabled, Maven tools work independently without Context7 features, providing only core dependency analysis.
 
-### Context7 Guidance Hints (v1.2.0)
+### Context7 Guidance Hints
 
 **Intelligent LLM Orchestration:**
 
@@ -649,7 +649,7 @@ A: Currently only Maven Central.
 A: Maven Central hosts both Maven and Gradle dependencies, so it works for Gradle projects too (using Maven coordinates).
 
 **Q: What is Context7 and how does the guided delegation work?**  
-A: Context7 is an MCP server by Upstash that provides up-to-date documentation and code examples. Maven Tools MCP uses a guided delegation architecture (v1.2.0) - our tools provide Context7 guidance hints to help your AI assistant effectively use the raw Context7 tools when documentation is needed. This keeps the system simple while providing intelligent orchestration.
+A: Context7 is an MCP server by Upstash that provides up-to-date documentation and code examples. Maven Tools MCP uses a guided delegation architecture - our tools provide Context7 guidance hints to help your AI assistant effectively use the raw Context7 tools when documentation is needed. This keeps the system simple while providing intelligent orchestration.
 
 ## Alternative Setup Methods
 
@@ -698,7 +698,7 @@ cd maven-tools-mcp
 ./mvnw clean package -Pfull
 
 # Run the JAR
-java -jar target/maven-tools-mcp-1.2.0.jar
+java -jar target/maven-tools-mcp-1.3.0.jar
 ```
 
 **Claude Desktop configuration for JAR:**
@@ -710,7 +710,7 @@ java -jar target/maven-tools-mcp-1.2.0.jar
       "command": "java",
       "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-1.2.0.jar"
+        "/absolute/path/to/maven-tools-mcp-1.3.0.jar"
       ]
     }
   }
@@ -814,4 +814,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 1.2.0
+- Version: 1.3.0

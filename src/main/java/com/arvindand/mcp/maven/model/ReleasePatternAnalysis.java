@@ -1,6 +1,6 @@
 package com.arvindand.mcp.maven.model;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -28,7 +28,7 @@ public record ReleasePatternAnalysis(
     double releaseVelocity,
     MaintenanceLevel maintenanceLevel,
     ReleaseConsistency releaseConsistency,
-    LocalDateTime lastReleaseDate,
+    Instant lastReleaseDate,
     String nextReleasePrediction,
     List<ReleaseInfo> recentReleases,
     String recommendation) {
@@ -135,7 +135,7 @@ public record ReleasePatternAnalysis(
    * @param releaseDate when this version was released
    * @param daysSincePrevious days since the previous release
    */
-  public record ReleaseInfo(String version, LocalDateTime releaseDate, Long daysSincePrevious) {}
+  public record ReleaseInfo(String version, Instant releaseDate, Long daysSincePrevious) {}
 
   /**
    * Generate recommendation based on maintenance analysis.

@@ -1,5 +1,7 @@
 package com.arvindand.mcp.maven.model;
 
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import java.util.List;
 
 /**
@@ -11,6 +13,7 @@ import java.util.List;
  * @author Arvind Menon
  * @since 1.2.0
  */
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Context7Guidance(
     String suggestedSearch,
     List<String> searchHints,

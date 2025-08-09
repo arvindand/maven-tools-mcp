@@ -2,14 +2,15 @@ package com.arvindand.mcp.maven.service;
 
 import com.arvindand.mcp.maven.config.Context7Properties;
 import com.arvindand.mcp.maven.model.BulkCheckResult;
+import com.arvindand.mcp.maven.model.DependencyAge;
 import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
-import com.arvindand.mcp.maven.model.DependencyAgeResponse;
-import com.arvindand.mcp.maven.model.DependencyExistsResponse;
+import com.arvindand.mcp.maven.model.DependencyInfo;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.MavenSearchResponse;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
 import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
-import com.arvindand.mcp.maven.model.VersionComparisonResponse;
+import com.arvindand.mcp.maven.model.ToolResponse;
+import com.arvindand.mcp.maven.model.VersionComparison;
 import com.arvindand.mcp.maven.model.VersionInfo;
 import com.arvindand.mcp.maven.model.VersionInfo.VersionType;
 import com.arvindand.mcp.maven.model.VersionTimelineAnalysis;
@@ -73,17 +74,14 @@ public class MavenDependencyTools {
   private static final int LOW_STABILITY_THRESHOLD = 50;
   private final MavenCentralService mavenCentralService;
   private final VersionComparator versionComparator;
-  private final JsonResponseService jsonResponseService;
   private final Context7Properties context7Properties;
 
   public MavenDependencyTools(
       MavenCentralService mavenCentralService,
       VersionComparator versionComparator,
-      JsonResponseService jsonResponseService,
       Context7Properties context7Properties) {
     this.mavenCentralService = mavenCentralService;
     this.versionComparator = versionComparator;
-    this.jsonResponseService = jsonResponseService;
     this.context7Properties = context7Properties;
   }
 
@@ -104,7 +102,7 @@ public class MavenDependencyTools {
               + "Shows ALL version types (stable, rc, beta, alpha, milestone) for comprehensive analysis. "
               + "When preferStable=true, prioritizes stable version in response while still including all types. "
               + "Format: 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
-  public String get_latest_version(String dependency, boolean preferStable) {
+  public ToolResponse get_latest_version(String dependency, boolean preferStable) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
       List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
@@ -113,15 +111,15 @@ public class MavenDependencyTools {
         return notFoundResponse(coordinate);
       }
 
-      return jsonResponseService.toJson(buildVersionsByType(coordinate, allVersions, preferStable));
+      return ToolResponse.Success.of(buildVersionsByType(coordinate, allVersions, preferStable));
     } catch (IllegalArgumentException e) {
-      return jsonResponseService.createErrorResponse(
+      return ToolResponse.Error.of(
           INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
     } catch (MavenCentralException e) {
-      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {
       logger.error(UNEXPECTED_ERROR, e);
-      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
     }
   }
 
@@ -139,29 +137,30 @@ public class MavenDependencyTools {
               + "Works with any JVM build tool (Maven, Gradle, SBT, Mill) using Maven Central Repository. "
               + "Format: 'groupId:artifactId' + version. Example: "
               + "dependency='org.springframework:spring-core', version='6.1.4'")
-  public String check_version_exists(String dependency, String version) {
+  public ToolResponse check_version_exists(String dependency, String version) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
       String versionToCheck = coordinate.version() != null ? coordinate.version() : version;
 
       if (versionToCheck == null || versionToCheck.trim().isEmpty()) {
-        return jsonResponseService.createErrorResponse(
+        return ToolResponse.Error.of(
             "Version must be provided either in dependency string or version parameter");
       }
 
       boolean exists = mavenCentralService.checkVersionExists(coordinate, versionToCheck);
       String versionType = versionComparator.getVersionTypeString(versionToCheck);
 
-      return jsonResponseService.toJson(
-          new DependencyExistsResponse(exists, versionToCheck, versionType));
+      DependencyInfo result = 
+          DependencyInfo.success(coordinate, versionToCheck, exists, versionType, versionComparator.isStableVersion(versionToCheck), null);
+      return ToolResponse.Success.of(result);
     } catch (IllegalArgumentException e) {
-      return jsonResponseService.createErrorResponse(
+      return ToolResponse.Error.of(
           INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
     } catch (MavenCentralException e) {
-      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {
       logger.error(UNEXPECTED_ERROR, e);
-      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
     }
   }
 
@@ -180,7 +179,7 @@ public class MavenDependencyTools {
               + "When stableOnly=false, includes ALL version types for comprehensive analysis. "
               + "When stableOnly=true, filters to production-ready versions only. "
               + "Format: 'groupId:artifactId' (NO versions). Example: 'org.springframework:spring-core,junit:junit'")
-  public String check_multiple_dependencies(String dependencies, boolean stableOnly) {
+  public ToolResponse check_multiple_dependencies(String dependencies, boolean stableOnly) {
     try {
       List<String> depList = parseDependencies(dependencies);
 
@@ -201,15 +200,15 @@ public class MavenDependencyTools {
         results = futures.stream().map(CompletableFuture::join).toList();
       }
 
-      return jsonResponseService.toJson(results);
+      return ToolResponse.Success.of(results);
     } catch (IllegalArgumentException e) {
-      return jsonResponseService.createErrorResponse(
+      return ToolResponse.Error.of(
           INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
     } catch (MavenCentralException e) {
-      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {
       logger.error(UNEXPECTED_ERROR, e);
-      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
     }
   }
 
@@ -230,13 +229,13 @@ public class MavenDependencyTools {
               + "When Context7 guidance hints appear in responses, ALWAYS follow up by using the 'resolve-library-id' and 'get-library-docs' tools with the suggested search terms. "
               + "Format: 'groupId:artifactId:version' (MUST include versions). "
               + "Example: 'org.springframework:spring-core:6.0.0,junit:junit:4.12'")
-  public String compare_dependency_versions(String currentDependencies, boolean onlyStableTargets) {
+  public ToolResponse compare_dependency_versions(String currentDependencies, boolean onlyStableTargets) {
     try {
       List<String> depList = parseDependencies(currentDependencies);
 
-      List<VersionComparisonResponse.DependencyComparisonResult> results;
+      List<VersionComparison.DependencyComparisonResult> results;
       try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-        List<CompletableFuture<VersionComparisonResponse.DependencyComparisonResult>> futures =
+        List<CompletableFuture<VersionComparison.DependencyComparisonResult>> futures =
             depList.stream()
                 .distinct()
                 .map(
@@ -247,19 +246,19 @@ public class MavenDependencyTools {
         results = futures.stream().map(CompletableFuture::join).toList();
       }
 
-      VersionComparisonResponse.UpdateSummary summary = calculateUpdateSummary(results);
-      VersionComparisonResponse response =
-          new VersionComparisonResponse(Instant.now(), results, summary);
+      VersionComparison.UpdateSummary summary = calculateUpdateSummary(results);
+      VersionComparison response =
+          new VersionComparison(Instant.now(), results, summary);
 
-      return jsonResponseService.toJson(response);
+      return ToolResponse.Success.of(response);
     } catch (IllegalArgumentException e) {
-      return jsonResponseService.createErrorResponse(
+      return ToolResponse.Error.of(
           INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
     } catch (MavenCentralException e) {
-      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {
       logger.error(UNEXPECTED_ERROR, e);
-      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
     }
   }
 
@@ -278,7 +277,7 @@ public class MavenDependencyTools {
               + "Use maxAgeInDays to set acceptable age threshold (optional). "
               + "When Context7 guidance hints appear in responses for aging/stale dependencies, ALWAYS follow up by using the 'resolve-library-id' and 'get-library-docs' tools with the suggested search terms. "
               + "Format: 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
-  public String analyze_dependency_age(String dependency, Integer maxAgeInDays) {
+  public ToolResponse analyze_dependency_age(String dependency, Integer maxAgeInDays) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
       List<MavenSearchResponse.MavenArtifact> versions =
@@ -311,18 +310,18 @@ public class MavenDependencyTools {
       }
 
       // Create response with basic analysis
-      DependencyAgeResponse response =
-          DependencyAgeResponse.from(analysis, context7Properties.enabled());
+      DependencyAge response =
+          DependencyAge.from(analysis, context7Properties.enabled());
 
-      return jsonResponseService.toJson(response);
+      return ToolResponse.Success.of(response);
     } catch (IllegalArgumentException e) {
-      return jsonResponseService.createErrorResponse(
+      return ToolResponse.Error.of(
           INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
     } catch (MavenCentralException e) {
-      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {
       logger.error(UNEXPECTED_ERROR, e);
-      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
     }
   }
 
@@ -340,7 +339,7 @@ public class MavenDependencyTools {
               + "Provides insights into project health based on historical release data across any JVM build tool. "
               + "Use monthsToAnalyze to specify analysis period (default: 24 months). "
               + "Format: 'groupId:artifactId' (NO version). Example: 'com.fasterxml.jackson.core:jackson-core'")
-  public String analyze_release_patterns(String dependency, Integer monthsToAnalyze) {
+  public ToolResponse analyze_release_patterns(String dependency, Integer monthsToAnalyze) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
       int analysisMonths = monthsToAnalyze != null ? monthsToAnalyze : DEFAULT_ANALYSIS_MONTHS;
@@ -355,15 +354,15 @@ public class MavenDependencyTools {
       ReleasePatternAnalysis analysis =
           analyzeReleasePattern(coordinate.toCoordinateString(), allVersions, analysisMonths);
 
-      return jsonResponseService.toJson(analysis);
+      return ToolResponse.Success.of(analysis);
     } catch (IllegalArgumentException e) {
-      return jsonResponseService.createErrorResponse(
+      return ToolResponse.Error.of(
           INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
     } catch (MavenCentralException e) {
-      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {
       logger.error(UNEXPECTED_ERROR, e);
-      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
     }
   }
 
@@ -381,7 +380,7 @@ public class MavenDependencyTools {
               + "Shows version progression with relative timestamps and trend analysis across any JVM build tool. "
               + "Use versionCount to specify how many recent versions to analyze (default: 20). "
               + "Format: 'groupId:artifactId' (NO version). Example: 'org.junit.jupiter:junit-jupiter'")
-  public String get_version_timeline(String dependency, Integer versionCount) {
+  public ToolResponse get_version_timeline(String dependency, Integer versionCount) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
       int maxVersions = versionCount != null ? versionCount : DEFAULT_VERSION_COUNT;
@@ -396,15 +395,15 @@ public class MavenDependencyTools {
       VersionTimelineAnalysis analysis =
           analyzeVersionTimeline(coordinate.toCoordinateString(), versions);
 
-      return jsonResponseService.toJson(analysis);
+      return ToolResponse.Success.of(analysis);
     } catch (IllegalArgumentException e) {
-      return jsonResponseService.createErrorResponse(
+      return ToolResponse.Error.of(
           INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
     } catch (MavenCentralException e) {
-      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {
       logger.error(UNEXPECTED_ERROR, e);
-      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
     }
   }
 
@@ -424,12 +423,12 @@ public class MavenDependencyTools {
               + "Use maxAgeInDays to set acceptable age threshold (optional). "
               + "When Context7 guidance hints appear in responses, ALWAYS follow up by using the 'resolve-library-id' and 'get-library-docs' tools with the suggested search terms. "
               + "Format: 'groupId:artifactId' (NO versions). Example: 'org.springframework:spring-core,junit:junit'")
-  public String analyze_project_health(String dependencies, Integer maxAgeInDays) {
+  public ToolResponse analyze_project_health(String dependencies, Integer maxAgeInDays) {
     try {
       List<String> depList = parseDependencies(dependencies);
 
       if (depList.isEmpty()) {
-        return jsonResponseService.createErrorResponse("No dependencies provided for analysis");
+        return ToolResponse.Error.of("No dependencies provided for analysis");
       }
 
       // Analyze each dependency for age and patterns
@@ -448,26 +447,26 @@ public class MavenDependencyTools {
 
       ProjectHealthAnalysis healthSummary =
           buildSimpleHealthSummary(dependencyAnalyses, maxAgeInDays);
-      return jsonResponseService.toJson(healthSummary);
+      return ToolResponse.Success.of(healthSummary);
     } catch (IllegalArgumentException e) {
-      return jsonResponseService.createErrorResponse(
+      return ToolResponse.Error.of(
           INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
     } catch (MavenCentralException e) {
-      return jsonResponseService.createErrorResponse(MAVEN_CENTRAL_ERROR + e.getMessage());
+      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {
       logger.error(UNEXPECTED_ERROR, e);
-      return jsonResponseService.createErrorResponse(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
     }
   }
 
-  private String notFoundResponse(MavenCoordinate coordinate) {
+  private ToolResponse notFoundResponse(MavenCoordinate coordinate) {
     String message =
         "No Maven dependency found for %s:%s%s"
             .formatted(
                 coordinate.groupId(),
                 coordinate.artifactId(),
                 coordinate.packaging() != null ? ":" + coordinate.packaging() : "");
-    return jsonResponseService.createNotFoundResponse(message);
+    return ToolResponse.Error.notFound(message);
   }
 
   private VersionsByType buildVersionsByType(
@@ -536,7 +535,7 @@ public class MavenDependencyTools {
     }
   }
 
-  private VersionComparisonResponse.DependencyComparisonResult compareDependencyVersion(
+  private VersionComparison.DependencyComparisonResult compareDependencyVersion(
       String dep, boolean onlyStableTargets) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
@@ -547,12 +546,12 @@ public class MavenDependencyTools {
               : mavenCentralService.getLatestVersion(coordinate);
 
       if (latestVersion == null) {
-        return VersionComparisonResponse.DependencyComparisonResult.notFound(
+        return VersionComparison.DependencyComparisonResult.notFound(
             coordinate.toCoordinateString(), currentVersion);
       }
 
       if (currentVersion == null) {
-        return VersionComparisonResponse.DependencyComparisonResult.noCurrentVersion(
+        return VersionComparison.DependencyComparisonResult.noCurrentVersion(
             coordinate.toCoordinateString());
       }
 
@@ -562,7 +561,7 @@ public class MavenDependencyTools {
 
       // Return basic comparison result
 
-      return VersionComparisonResponse.DependencyComparisonResult.success(
+      return VersionComparison.DependencyComparisonResult.success(
           coordinate.toCoordinateString(),
           currentVersion,
           latestVersion,
@@ -571,7 +570,7 @@ public class MavenDependencyTools {
           updateAvailable,
           context7Properties.enabled());
     } catch (Exception e) {
-      return VersionComparisonResponse.DependencyComparisonResult.error(dep, e.getMessage());
+      return VersionComparison.DependencyComparisonResult.error(dep, e.getMessage());
     }
   }
 
@@ -644,18 +643,18 @@ public class MavenDependencyTools {
     }
   }
 
-  private VersionComparisonResponse.UpdateSummary calculateUpdateSummary(
-      List<VersionComparisonResponse.DependencyComparisonResult> results) {
+  private VersionComparison.UpdateSummary calculateUpdateSummary(
+      List<VersionComparison.DependencyComparisonResult> results) {
 
     Map<String, Long> counts =
         results.stream()
             .filter(result -> "success".equals(result.status()))
             .collect(
                 Collectors.groupingBy(
-                    VersionComparisonResponse.DependencyComparisonResult::updateType,
+                    VersionComparison.DependencyComparisonResult::updateType,
                     Collectors.counting()));
 
-    return new VersionComparisonResponse.UpdateSummary(
+    return new VersionComparison.UpdateSummary(
         counts.getOrDefault("major", 0L).intValue(),
         counts.getOrDefault("minor", 0L).intValue(),
         counts.getOrDefault("patch", 0L).intValue(),
@@ -727,8 +726,7 @@ public class MavenDependencyTools {
             .limit(10)
             .map(
                 v -> {
-                  LocalDateTime releaseDate =
-                      LocalDateTime.ofInstant(Instant.ofEpochMilli(v.timestamp()), ZoneOffset.UTC);
+                  Instant releaseDate = Instant.ofEpochMilli(v.timestamp());
                   return new ReleasePatternAnalysis.ReleaseInfo(v.version(), releaseDate, null);
                 })
             .toList();
@@ -747,7 +745,7 @@ public class MavenDependencyTools {
         releaseVelocity,
         maintenanceLevel,
         consistency,
-        lastReleaseDate,
+        lastReleaseDate.toInstant(ZoneOffset.UTC),
         nextReleasePrediction,
         recentReleases,
         recommendation);
@@ -756,7 +754,7 @@ public class MavenDependencyTools {
   private VersionTimelineAnalysis analyzeVersionTimeline(
       String dependency, List<MavenSearchResponse.MavenArtifact> versions) {
 
-    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+    Instant now = Instant.now();
 
     // Calculate average interval for gap analysis
     List<Long> intervals = new ArrayList<>();
@@ -773,8 +771,7 @@ public class MavenDependencyTools {
     List<VersionTimelineAnalysis.TimelineEntry> timeline = new ArrayList<>();
     for (int i = 0; i < versions.size(); i++) {
       MavenSearchResponse.MavenArtifact version = versions.get(i);
-      LocalDateTime releaseDate =
-          LocalDateTime.ofInstant(Instant.ofEpochMilli(version.timestamp()), ZoneOffset.UTC);
+      Instant releaseDate = Instant.ofEpochMilli(version.timestamp());
 
       String relativeTime = VersionTimelineAnalysis.formatRelativeTime(releaseDate, now);
       VersionType versionType = versionComparator.getVersionType(version.version());
@@ -807,30 +804,24 @@ public class MavenDependencyTools {
     }
 
     // Calculate metrics
-    LocalDateTime oldestDate =
-        LocalDateTime.ofInstant(
-            Instant.ofEpochMilli(versions.get(versions.size() - 1).timestamp()), ZoneOffset.UTC);
+    Instant oldestDate = Instant.ofEpochMilli(versions.get(versions.size() - 1).timestamp());
     int timeSpanMonths = (int) java.time.Duration.between(oldestDate, now).toDays() / DAYS_IN_MONTH;
 
     // Count recent activity
-    LocalDateTime oneMonthAgo = now.minusMonths(1);
-    LocalDateTime threeMonthsAgo = now.minusMonths(3);
+    Instant oneMonthAgo = now.minus(java.time.Duration.ofDays(30));
+    Instant threeMonthsAgo = now.minus(java.time.Duration.ofDays(90));
 
     int releasesLastMonth =
         (int)
             versions.stream()
                 .filter(
-                    v ->
-                        LocalDateTime.ofInstant(Instant.ofEpochMilli(v.timestamp()), ZoneOffset.UTC)
-                            .isAfter(oneMonthAgo))
+                    v -> Instant.ofEpochMilli(v.timestamp()).isAfter(oneMonthAgo))
                 .count();
     int releasesLastQuarter =
         (int)
             versions.stream()
                 .filter(
-                    v ->
-                        LocalDateTime.ofInstant(Instant.ofEpochMilli(v.timestamp()), ZoneOffset.UTC)
-                            .isAfter(threeMonthsAgo))
+                    v -> Instant.ofEpochMilli(v.timestamp()).isAfter(threeMonthsAgo))
                 .count();
 
     // Create analysis objects

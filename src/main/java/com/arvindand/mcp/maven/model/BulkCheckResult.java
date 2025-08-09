@@ -1,5 +1,8 @@
 package com.arvindand.mcp.maven.model;
 
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
+
 /**
  * Represents the result of a bulk dependency check with comprehensive version information.
  *
@@ -18,6 +21,7 @@ package com.arvindand.mcp.maven.model;
  * @author Arvind Menon
  * @since 0.1.0
  */
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record BulkCheckResult(
     String dependency,
     String version,
