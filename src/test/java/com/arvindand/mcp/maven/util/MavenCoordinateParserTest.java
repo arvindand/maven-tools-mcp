@@ -20,7 +20,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 class MavenCoordinateParserTest {
 
   /** Test data for valid coordinate parsing. */
-  @SuppressWarnings("unused")
   private static Stream<Arguments> validCoordinateTestData() {
     return Stream.of(
         // Basic groupId:artifactId

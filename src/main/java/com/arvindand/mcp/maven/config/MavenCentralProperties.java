@@ -5,10 +5,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
- * Configuration properties for Maven Central API integration. Provides configurable settings for
- * API calls to Maven Central search.
+ * Configuration properties for Maven Central integration. Uses direct repository metadata access
+ * for accurate version information.
  *
- * @param baseUrl the base URL for Maven Central search API
+ * @param repositoryBaseUrl the base URL for direct Maven repository access
  * @param timeout the timeout duration for API calls
  * @param maxResults the maximum number of results to retrieve per request
  * @author Arvind Menon
@@ -16,6 +16,6 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  */
 @ConfigurationProperties(prefix = "maven.central")
 public record MavenCentralProperties(
-    @DefaultValue("https://search.maven.org/solrsearch/select") String baseUrl,
+    @DefaultValue("https://repo1.maven.org/maven2") String repositoryBaseUrl,
     @DefaultValue("10s") Duration timeout,
     @DefaultValue("100") int maxResults) {}

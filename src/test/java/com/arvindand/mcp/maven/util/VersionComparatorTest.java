@@ -22,13 +22,11 @@ class VersionComparatorTest {
   private VersionComparator versionComparator;
 
   @BeforeEach
-  @SuppressWarnings("unused")
   void setUp() {
     versionComparator = new VersionComparator();
   }
 
   /** Test data for version comparison. */
-  @SuppressWarnings("unused")
   private static Stream<Arguments> versionComparisonTestData() {
     return Stream.of(
         // Basic numeric comparisons
@@ -367,7 +365,6 @@ class VersionComparatorTest {
     assertThat(parsed2.numericParts()).containsExactly(1, 0, 0);
   }
 
-  @SuppressWarnings("unused")
   private static Stream<Arguments> updateTypeTestData() {
     return Stream.of(
         // Major updates
@@ -406,7 +403,6 @@ class VersionComparatorTest {
     assertThat(isStable).as(description).isEqualTo(expectedStable);
   }
 
-  @SuppressWarnings("unused")
   private static Stream<Arguments> stableVersionTestData() {
     return Stream.of(
         // Stable versions
@@ -438,7 +434,6 @@ class VersionComparatorTest {
     assertThat(versionType).as(description).isEqualTo(expectedType);
   }
 
-  @SuppressWarnings("unused")
   private static Stream<Arguments> versionTypeTestData() {
     return Stream.of(
         // Stable versions
@@ -468,6 +463,6 @@ class VersionComparatorTest {
 
         // Edge cases
         Arguments.of(null, "unknown", "Null version returns unknown"),
-        Arguments.of("1.0.0-custom", "stable", "Unknown qualifier defaults to stable"));
+        Arguments.of("1.0.0-custom", "alpha", "Unknown qualifier defaults to alpha for safety"));
   }
 }

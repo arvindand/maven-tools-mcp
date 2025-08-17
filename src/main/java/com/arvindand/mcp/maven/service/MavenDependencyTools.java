@@ -5,8 +5,8 @@ import com.arvindand.mcp.maven.model.BulkCheckResult;
 import com.arvindand.mcp.maven.model.DependencyAge;
 import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
 import com.arvindand.mcp.maven.model.DependencyInfo;
+import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
-import com.arvindand.mcp.maven.model.MavenSearchResponse;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
 import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
 import com.arvindand.mcp.maven.model.ToolResponse;
@@ -71,6 +71,7 @@ public class MavenDependencyTools {
   // Analysis constants
   private static final int DEFAULT_ANALYSIS_MONTHS = 24;
   private static final int DEFAULT_VERSION_COUNT = 20;
+  private static final int ACCURATE_TIMESTAMP_VERSION_LIMIT = 30;
   private static final int RECENT_VERSIONS_LIMIT = 10;
   private static final int MILLISECONDS_TO_DAYS = 1000 * 60 * 60 * 24;
   private static final int DAYS_IN_MONTH = 30;
@@ -144,15 +145,20 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Get latest version of any Maven Central dependency with version type analysis. Works with all JVM build tools.")
+          "Single dependency. Returns newest versions by type (stable/rc/beta/alpha/milestone). Set"
+              + " preferStable=true to prioritize stable as primary while still including other"
+              + " types. Use when asked: 'what's the latest version of X?' Works with all JVM build"
+              + " tools.")
   public ToolResponse get_latest_version(
       @ToolParam(
               description =
-                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
+                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version)."
+                      + " Example: 'org.springframework:spring-core'")
           String dependency,
       @ToolParam(
               description =
-                  "When true, prioritizes stable version in response while showing all types. When false, shows latest version of any type first (default: false)",
+                  "When true, prioritizes stable version in response while showing all types. When"
+                      + " false, shows latest version of any type first (default: false)",
               required = false)
           boolean preferStable) {
     return executeToolOperation(
@@ -178,15 +184,19 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Check if a specific dependency version exists in Maven Central and identify its stability type.")
+          "Single dependency + version. Validates existence on Maven Central and classifies its"
+              + " stability (stable/rc/beta/alpha/milestone/snapshot). Use when asked: 'does X:Y"
+              + " exist?' or 'is version V stable?'")
   public ToolResponse check_version_exists(
       @ToolParam(
               description =
-                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
+                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version)."
+                      + " Example: 'org.springframework:spring-core'")
           String dependency,
       @ToolParam(
               description =
-                  "Specific version string to check for existence. Example: '6.1.4' or '2.7.18-SNAPSHOT'")
+                  "Specific version string to check for existence. Example: '6.1.4' or"
+                      + " '2.7.18-SNAPSHOT'")
           String version) {
     return executeToolOperation(
         () -> {
@@ -221,15 +231,20 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Check latest versions for multiple dependencies with optional filtering to stable versions only.")
+          "Bulk. For many coordinates (no versions), returns per-dependency latest versions by"
+              + " type. Set stableOnly=true to filter to production-ready (stable) versions only."
+              + " Use for audits of multiple dependencies.")
   public ToolResponse check_multiple_dependencies(
       @ToolParam(
               description =
-                  "Comma or newline separated list of Maven dependency coordinates in format 'groupId:artifactId' (NO versions). Example: 'org.springframework:spring-core,junit:junit'")
+                  "Comma or newline separated list of Maven dependency coordinates in format"
+                      + " 'groupId:artifactId' (NO versions). Example:"
+                      + " 'org.springframework:spring-core,junit:junit'")
           String dependencies,
       @ToolParam(
               description =
-                  "When true, filters results to show only stable (production-ready) versions. When false, includes all version types (default: false)",
+                  "When true, filters results to show only stable (production-ready) versions. When"
+                      + " false, includes all version types (default: false)",
               required = false)
           boolean stableOnly) {
     return executeToolOperation(
@@ -268,15 +283,21 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Compare current dependency versions with latest available and provide upgrade recommendations with migration guidance.")
+          "Bulk compare. Input includes versions. Suggests upgrades and classifies update type"
+              + " (major/minor/patch). Set onlyStableTargets=true to restrict upgrade"
+              + " recommendations to stable releases. Never suggests downgrades.")
   public ToolResponse compare_dependency_versions(
       @ToolParam(
               description =
-                  "Comma or newline separated list of dependency coordinates WITH versions in format 'groupId:artifactId:version'. Example: 'org.springframework:spring-core:6.0.0,junit:junit:4.12'")
+                  "Comma or newline separated list of dependency coordinates WITH versions in"
+                      + " format 'groupId:artifactId:version'. Example:"
+                      + " 'org.springframework:spring-core:6.0.0,junit:junit:4.12'")
           String currentDependencies,
       @ToolParam(
               description =
-                  "When true, only suggests upgrades to stable versions for production safety. When false, suggests upgrades to latest available version of any type (default: false)",
+                  "When true, only suggests upgrades to stable versions for production safety. When"
+                      + " false, suggests upgrades to latest available version of any type"
+                      + " (default: false)",
               required = false)
           boolean onlyStableTargets) {
     return executeToolOperation(
@@ -311,28 +332,33 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Analyze dependency age and classify freshness (fresh/current/aging/stale) with actionable maintenance insights.")
+          "Single dependency. Returns days since last release and freshness"
+              + " (fresh/current/aging/stale), with actionable insights. Use when asked about 'how"
+              + " old' or 'last release' of a library.")
   public ToolResponse analyze_dependency_age(
       @ToolParam(
               description =
-                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version). Example: 'org.springframework:spring-core'")
+                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version)."
+                      + " Example: 'org.springframework:spring-core'")
           String dependency,
       @ToolParam(
               description =
-                  "Optional maximum acceptable age threshold in days. If specified and dependency exceeds this age, additional recommendations are provided. No limit if not specified",
+                  "Optional maximum acceptable age threshold in days. If specified and dependency"
+                      + " exceeds this age, additional recommendations are provided. No limit if"
+                      + " not specified",
               required = false)
           Integer maxAgeInDays) {
     return executeToolOperation(
         () -> {
           MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-          List<MavenSearchResponse.MavenArtifact> versions =
-              mavenCentralService.getRecentVersionsWithTimestamps(coordinate, 1);
+          List<MavenArtifact> versions =
+              mavenCentralService.getRecentVersionsWithAccurateTimestamps(coordinate, 1);
 
           if (versions.isEmpty()) {
             return notFoundResponse(coordinate);
           }
 
-          MavenSearchResponse.MavenArtifact latestVersion = versions.get(0);
+          MavenArtifact latestVersion = versions.get(0);
           DependencyAgeAnalysis basicAnalysis =
               DependencyAgeAnalysis.fromTimestamp(
                   coordinate.toCoordinateString(),
@@ -371,15 +397,18 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Analyze release patterns and maintenance activity to predict future release timeframes and project health.")
+          "Single dependency. Analyzes historical releases to infer cadence, consistency, and"
+              + " likely next-release timeframe. Useful for maintenance and planning.")
   public ToolResponse analyze_release_patterns(
       @ToolParam(
               description =
-                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version). Example: 'com.fasterxml.jackson.core:jackson-core'")
+                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version)."
+                      + " Example: 'com.fasterxml.jackson.core:jackson-core'")
           String dependency,
       @ToolParam(
               description =
-                  "Number of months of historical release data to analyze for patterns and predictions. Default is 24 months if not specified",
+                  "Number of months of historical release data to analyze for patterns and"
+                      + " predictions. Default is 24 months if not specified",
               required = false)
           Integer monthsToAnalyze) {
     return executeToolOperation(
@@ -387,8 +416,9 @@ public class MavenDependencyTools {
           MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
           int analysisMonths = monthsToAnalyze != null ? monthsToAnalyze : DEFAULT_ANALYSIS_MONTHS;
 
-          List<MavenSearchResponse.MavenArtifact> allVersions =
-              mavenCentralService.getAllVersionsWithTimestamps(coordinate);
+          List<MavenArtifact> allVersions =
+              mavenCentralService.getRecentVersionsWithAccurateTimestamps(
+                  coordinate, ACCURATE_TIMESTAMP_VERSION_LIMIT);
 
           if (allVersions.isEmpty()) {
             throw new MavenCentralException(
@@ -410,15 +440,18 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Get detailed version timeline with temporal analysis, release gaps, and stability patterns.")
+          "Single dependency. Returns a timeline of recent versions with dates, gaps, and stability"
+              + " patterns. Use for quick release history snapshots.")
   public ToolResponse get_version_timeline(
       @ToolParam(
               description =
-                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version). Example: 'org.junit.jupiter:junit-jupiter'")
+                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version)."
+                      + " Example: 'org.junit.jupiter:junit-jupiter'")
           String dependency,
       @ToolParam(
               description =
-                  "Number of recent versions to include in timeline analysis. Default is 20 versions if not specified. Typical range: 10-50",
+                  "Number of recent versions to include in timeline analysis. Default is 20"
+                      + " versions if not specified. Typical range: 10-50",
               required = false)
           Integer versionCount) {
     return executeToolOperation(
@@ -426,8 +459,8 @@ public class MavenDependencyTools {
           MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
           int maxVersions = versionCount != null ? versionCount : DEFAULT_VERSION_COUNT;
 
-          List<MavenSearchResponse.MavenArtifact> versions =
-              mavenCentralService.getRecentVersionsWithTimestamps(coordinate, maxVersions);
+          List<MavenArtifact> versions =
+              mavenCentralService.getRecentVersionsWithAccurateTimestamps(coordinate, maxVersions);
 
           if (versions.isEmpty()) {
             throw new MavenCentralException(
@@ -448,15 +481,20 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Analyze overall health of multiple dependencies with combined age analysis and maintenance patterns for quick assessment.")
+          "Bulk project view. Summarizes health across many dependencies using age and maintenance"
+              + " patterns, with concise recommendations. Use for dependency health reports.")
   public ToolResponse analyze_project_health(
       @ToolParam(
               description =
-                  "Comma or newline separated list of Maven dependency coordinates in format 'groupId:artifactId' (NO versions). Example: 'org.springframework:spring-core,junit:junit'")
+                  "Comma or newline separated list of Maven dependency coordinates in format"
+                      + " 'groupId:artifactId' (NO versions). Example:"
+                      + " 'org.springframework:spring-core,junit:junit'")
           String dependencies,
       @ToolParam(
               description =
-                  "Optional maximum acceptable age threshold in days for health scoring. Dependencies exceeding this age receive lower health scores. No age penalty if not specified",
+                  "Optional maximum acceptable age threshold in days for health scoring."
+                      + " Dependencies exceeding this age receive lower health scores. No age"
+                      + " penalty if not specified",
               required = false)
           Integer maxAgeInDays) {
     return executeToolOperation(
@@ -584,7 +622,7 @@ public class MavenDependencyTools {
 
       String latestType = versionComparator.getVersionTypeString(latestVersion);
       String updateType = versionComparator.determineUpdateType(currentVersion, latestVersion);
-      boolean updateAvailable = !currentVersion.equals(latestVersion);
+      boolean updateAvailable = versionComparator.compare(currentVersion, latestVersion) < 0;
 
       // Return basic comparison result
 
@@ -709,13 +747,13 @@ public class MavenDependencyTools {
   }
 
   private ReleasePatternAnalysis analyzeReleasePattern(
-      String dependency, List<MavenSearchResponse.MavenArtifact> allVersions, int analysisMonths) {
+      String dependency, List<MavenArtifact> allVersions, int analysisMonths) {
 
     Instant now = Instant.now();
     Instant cutoffDate = now.minus((long) analysisMonths * DAYS_IN_MONTH, ChronoUnit.DAYS);
 
     // Filter versions within analysis period
-    List<MavenSearchResponse.MavenArtifact> analysisVersions =
+    List<MavenArtifact> analysisVersions =
         allVersions.stream()
             .filter(
                 v -> {
@@ -793,7 +831,7 @@ public class MavenDependencyTools {
   }
 
   private VersionTimelineAnalysis analyzeVersionTimeline(
-      String dependency, List<MavenSearchResponse.MavenArtifact> versions) {
+      String dependency, List<MavenArtifact> versions) {
 
     Instant now = Instant.now();
 
@@ -817,7 +855,7 @@ public class MavenDependencyTools {
     // Build timeline entries using pre-calculated intervals
     List<VersionTimelineAnalysis.TimelineEntry> timeline = new ArrayList<>();
     for (int i = 0; i < versions.size(); i++) {
-      MavenSearchResponse.MavenArtifact version = versions.get(i);
+      MavenArtifact version = versions.get(i);
       Instant releaseDate = Instant.ofEpochMilli(version.timestamp());
 
       String relativeTime = VersionTimelineAnalysis.formatRelativeTime(releaseDate, now);
@@ -937,14 +975,14 @@ public class MavenDependencyTools {
       String dependency, Integer maxAgeInDays) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-      List<MavenSearchResponse.MavenArtifact> versions =
-          mavenCentralService.getRecentVersionsWithTimestamps(coordinate, 10);
+      List<MavenArtifact> versions =
+          mavenCentralService.getRecentVersionsWithAccurateTimestamps(coordinate, 10);
 
       if (versions.isEmpty()) {
         return ProjectHealthAnalysis.DependencyHealthAnalysis.notFound(dependency);
       }
 
-      MavenSearchResponse.MavenArtifact latestVersion = versions.get(0);
+      MavenArtifact latestVersion = versions.get(0);
       DependencyAgeAnalysis ageAnalysis =
           DependencyAgeAnalysis.fromTimestamp(
               coordinate.toCoordinateString(), latestVersion.version(), latestVersion.timestamp());

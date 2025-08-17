@@ -5,8 +5,9 @@ import com.arvindand.mcp.maven.model.Context7Guidance;
 import com.arvindand.mcp.maven.model.DependencyAge;
 import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
 import com.arvindand.mcp.maven.model.DependencyInfo;
+import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
-import com.arvindand.mcp.maven.model.MavenSearchResponse;
+import com.arvindand.mcp.maven.model.MavenMetadata;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
 import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
 import com.arvindand.mcp.maven.model.ToolResponse;
@@ -54,10 +55,14 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, VersionComparison.UpdateSummary.class);
       registerRecordClass(hints, VersionInfo.class);
 
-      // Register MavenSearchResponse and its nested records for Jackson deserialization
-      registerRecordClass(hints, MavenSearchResponse.class);
-      registerRecordClass(hints, MavenSearchResponse.ResponseData.class);
-      registerRecordClass(hints, MavenSearchResponse.MavenArtifact.class);
+      // Register MavenArtifact for timestamp analysis compatibility
+      registerRecordClass(hints, MavenArtifact.class);
+
+      // Register MavenMetadata and its nested records for XML deserialization (v1.4.0)
+      registerRecordClass(hints, MavenMetadata.class);
+      registerRecordClass(hints, MavenMetadata.VersioningInfo.class);
+      registerRecordClass(hints, MavenMetadata.VersionList.class);
+      registerRecordClass(hints, MavenMetadata.SnapshotInfo.class);
 
       // Register VersionComparator record for version parsing
       registerRecordClass(

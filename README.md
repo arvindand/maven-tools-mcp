@@ -10,7 +10,7 @@
 
 ## Universal Maven Central dependency intelligence for JVM build tools
 
-MCP server providing AI assistants with Maven Central dependency intelligence for all JVM build tools (Maven, Gradle, SBT, Mill). Get instant, accurate dependency information that's faster and more reliable than web searches. Features Context7 integration for documentation support.
+MCP server providing AI assistants with Maven Central dependency intelligence for all JVM build tools (Maven, Gradle, SBT, Mill). Get instant, accurate dependency information by reading maven-metadata.xml files directly from Maven Central repository - faster and more reliable than web searches or search APIs. Features Context7 integration for documentation support.
 
 ## 🎯 Why This Matters
 
@@ -620,7 +620,7 @@ A: Those tools create automated PRs. This gives you instant, interactive depende
 A: For single dependencies: from 3-5 seconds (web search) to <100ms. For 20+ dependencies: from 60+ seconds of manual searching to <500ms bulk analysis.
 
 **Q: Why not just search Maven Central directly?**  
-A: This provides structured, cached responses optimized for AI consumption with intelligent version classification and bulk operations - plus the time savings above.
+A: This reads maven-metadata.xml files directly from Maven Central repository, providing structured, cached responses optimized for AI consumption with intelligent version classification and bulk operations - plus the time savings above.
 
 **Q: Can this replace my IDE's dependency management?**  
 A: No, it complements your IDE by providing instant dependency intelligence during natural conversations with AI assistants for planning and decision-making.
@@ -684,7 +684,7 @@ cd maven-tools-mcp
 ./mvnw clean package -Pfull
 
 # Run the JAR
-java -jar target/maven-tools-mcp-1.3.0.jar
+java -jar target/maven-tools-mcp-1.4.0.jar
 ```
 
 **Claude Desktop configuration for JAR:**
@@ -696,7 +696,7 @@ java -jar target/maven-tools-mcp-1.3.0.jar
       "command": "java",
       "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-1.3.0.jar"
+        "/absolute/path/to/maven-tools-mcp-1.4.0.jar"
       ]
     }
   }
@@ -729,11 +729,11 @@ spring:
   cache:
     type: caffeine
 
-# Maven Central API settings
+# Maven Central Repository settings
 maven:
   central:
-    base-url: https://search.maven.org/solrsearch/select
-    timeout: 5s
+    repository-base-url: https://repo1.maven.org/maven2
+    timeout: 10s
     max-results: 100
 
 # Logging (minimal for MCP stdio transport)
@@ -750,7 +750,7 @@ logging:
 - **Transport**: stdio
 - **HTTP Client**: Spring Web RestClient
 - **Cache**: Caffeine (24-hour TTL, 2000 entries max)
-- **API**: Maven Central Search API
+- **Data Source**: Maven Central Repository (maven-metadata.xml files)
 
 ## References & Resources
 
@@ -765,10 +765,11 @@ logging:
 - **Documentation**: [Spring AI MCP Reference](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html)
 - **GitHub**: [spring-projects/spring-ai](https://github.com/spring-projects/spring-ai)
 
-### Maven Central API
+### Maven Central Repository
 
-- **Search API**: [search.maven.org](https://search.maven.org/)
-- **REST API Guide**: [Using the REST API](https://central.sonatype.org/search/rest-api-guide/)
+- **Repository**: [repo1.maven.org](https://repo1.maven.org/maven2/)
+- **Metadata Format**: [Maven Metadata XML Reference](https://maven.apache.org/ref/3.9.6/maven-repository-metadata/)
+- **Search API**: [search.maven.org](https://search.maven.org/) (not used in v1.4.0+)
 
 ### Context7 MCP Server
 
@@ -798,4 +799,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 1.3.0
+- Version: 1.4.0

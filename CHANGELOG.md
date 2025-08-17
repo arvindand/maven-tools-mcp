@@ -15,7 +15,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
-## [1.3.0] - TBD
+## [1.4.0] - 2025-08-17
+
+**Direct Maven Repository Access Release** - All existing MCP tools and features are fully retained with significantly improved accuracy and performance by reading maven-metadata.xml files directly from Maven Central instead of using the search API.
+
+### Added (1.4.0)
+
+- **Maven Metadata XML Parsing:** Now reads maven-metadata.xml files directly from Maven Central repository for accurate version information
+- **Jackson XML Support:** Added XML parsing capabilities for universal JVM build tool support
+- **Direct Repository Tests:** Comprehensive test coverage for maven-metadata.xml access functionality
+- **Improved Version Accuracy:** Eliminates search API delays and version ordering quirks
+
+### Changed (1.4.0)
+
+- **Data Source:** Now uses `https://repo1.maven.org/maven2` maven-metadata.xml files instead of `search.maven.org` Solr API
+- **Timestamp Accuracy:** Implemented a more accurate timestamp retrieval method that fetches real timestamps for recent versions via HTTP HEAD requests.
+- **Enhanced Performance:** Smaller XML metadata files provide faster response times than large JSON search results
+- **Simplified Configuration:** Removed complex strategy patterns for cleaner, more maintainable codebase
+- **Updated Dependencies:** Added Jackson XML module for maven-metadata.xml parsing support
+
+### Fixed (1.4.0)
+
+- **Version Ordering Issues:** Direct repository access provides accurate version ordering without Solr search index delays
+- **Date-like Version Anomalies:** Fixed incorrect "latest" results for artifacts like commons-io with date-like versions
+- **JGit Release Classification:** Service pack releases with `-r` suffix now correctly classified as stable
+- **Timestamp Analysis:** Repository metadata provides authoritative version information for analytical features
+- **Error Handling:** Graceful null returns for non-existent artifacts instead of exceptions for better API consistency
+- **Date/Time Processing:** Improved timestamp parsing using proper Java time APIs for more accurate analytical features
+
+### Removed (1.4.0)
+
+- **Search API Dependency:** Eliminated reliance on `search.maven.org/solrsearch/select` for core functionality
+- **Unused Models:** Removed the obsolete `MavenSearchResponse` model after refactoring.
+- **Strategy Configuration:** Removed complex strategy patterns for simplified architecture  
+- **Legacy Properties:** Deprecated `maven.central.base-url` in favor of `maven.central.repository-base-url`
+
+## [1.3.0] - 2025-08-09
 
 ### Added (1.3.0)
 
@@ -266,7 +301,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/arvindand/maven-tools-mcp/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/arvindand/maven-tools-mcp/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/arvindand/maven-tools-mcp/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/arvindand/maven-tools-mcp/compare/v1.1.0...v1.1.1

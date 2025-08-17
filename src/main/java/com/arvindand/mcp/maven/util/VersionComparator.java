@@ -189,11 +189,30 @@ public final class VersionComparator implements Comparator<String> {
   }
 
   private QualifierType classifyQualifier(String qualifier) {
-    if (qualifier.isEmpty()
-        || STABLE_QUALIFIERS.contains(qualifier)
-        || qualifier.startsWith("sp")) {
+    if (qualifier.isEmpty() || STABLE_QUALIFIERS.contains(qualifier)) {
       return QualifierType.STABLE;
     }
+
+    String lower = qualifier.toLowerCase();
+
+    // Treat service packs as stable (e.g., 1.0.0-SP1)
+    if (lower.startsWith("sp")) {
+      return QualifierType.STABLE;
+    }
+
+    // Common pre-release markers
+    if (lower.contains("snapshot")
+        || lower.contains("rc")
+        || lower.contains("cr")
+        || lower.contains("m")
+        || lower.contains(BETA)
+        || lower.contains(ALPHA)
+        || lower.contains("preview")
+        || lower.contains("dev")) {
+      return QualifierType.PRE_RELEASE;
+    }
+
+    // Unknown qualifier: conservatively treat as pre-release rather than stable
     return QualifierType.PRE_RELEASE;
   }
 
@@ -202,7 +221,7 @@ public final class VersionComparator implements Comparator<String> {
     if (isBetaQualifier(qualifier)) return VersionType.BETA;
     if (isMilestoneQualifier(qualifier)) return VersionType.MILESTONE;
     if (isRcQualifier(qualifier)) return VersionType.RC;
-    return VersionType.STABLE;
+    return VersionType.ALPHA; // Default unknown pre-releases to alpha
   }
 
   private boolean isAlphaQualifier(String qualifier) {

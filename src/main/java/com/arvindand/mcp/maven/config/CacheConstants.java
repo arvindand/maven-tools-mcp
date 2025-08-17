@@ -9,12 +9,9 @@ package com.arvindand.mcp.maven.config;
 public final class CacheConstants {
 
   // Maven Central cache names
-  public static final String MAVEN_LATEST_VERSIONS = "maven-latest-versions";
   public static final String MAVEN_VERSION_CHECKS = "maven-version-checks";
   public static final String MAVEN_ALL_VERSIONS = "maven-all-versions";
-  public static final String MAVEN_VERSIONS_WITH_TIMESTAMPS = "maven-versions-with-timestamps";
-  public static final String MAVEN_RECENT_VERSIONS_WITH_TIMESTAMPS =
-      "maven-recent-versions-with-timestamps";
+  public static final String MAVEN_ACCURATE_HISTORICAL_DATA = "maven-accurate-historical-data";
 
   private CacheConstants() {
     // Utility class

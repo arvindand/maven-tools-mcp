@@ -20,11 +20,9 @@ class MavenCentralServiceUnitTest {
   private MavenCentralProperties properties;
 
   @BeforeEach
-  @SuppressWarnings("unused")
   void setUp() {
     properties =
-        new MavenCentralProperties(
-            "https://search.maven.org/solrsearch/select", Duration.ofSeconds(10), 100);
+        new MavenCentralProperties("https://repo1.maven.org/maven2", Duration.ofSeconds(10), 100);
   }
 
   /** Tests version comparison and ordering. */
@@ -107,7 +105,7 @@ class MavenCentralServiceUnitTest {
   /** Tests properties configuration. */
   @Test
   void testPropertiesConfiguration() {
-    assertThat(properties.baseUrl()).isEqualTo("https://search.maven.org/solrsearch/select");
+    assertThat(properties.repositoryBaseUrl()).isEqualTo("https://repo1.maven.org/maven2");
     assertThat(properties.timeout()).isEqualTo(Duration.ofSeconds(10));
     assertThat(properties.maxResults()).isEqualTo(100);
   }

@@ -32,14 +32,14 @@ public class ClientStdio {
 
     client.initialize(); // List and demonstrate tools
     ListToolsResult toolsList = client.listTools();
-    System.out.println("Available Tools = " + toolsList);
+    System.err.println("Available Tools = " + toolsList);
 
     // Test maven_get_latest tool
     CallToolResult latestVersionResult =
         client.callTool(
             new CallToolRequest(
                 "maven_get_latest", Map.of("dependency", "org.springframework:spring-core")));
-    System.out.println("Latest Version Result: " + latestVersionResult);
+    System.err.println("Latest Version Result: " + latestVersionResult);
 
     // Test maven_check_exists tool
     CallToolResult versionExistsResult =
@@ -47,7 +47,7 @@ public class ClientStdio {
             new CallToolRequest(
                 "maven_check_exists",
                 Map.of("dependency", "org.springframework:spring-core", "version", "6.0.0")));
-    System.out.println("Version Exists Result: " + versionExistsResult);
+    System.err.println("Version Exists Result: " + versionExistsResult);
 
     // Test maven_get_stable tool with Jackson (which often has RC versions)
     CallToolResult stableVersionResult =
@@ -55,7 +55,7 @@ public class ClientStdio {
             new CallToolRequest(
                 "maven_get_stable",
                 Map.of("dependency", "com.fasterxml.jackson.core:jackson-core")));
-    System.out.println("Stable Version Result: " + stableVersionResult);
+    System.err.println("Stable Version Result: " + stableVersionResult);
 
     client.closeGracefully();
   }

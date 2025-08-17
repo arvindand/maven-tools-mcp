@@ -28,11 +28,9 @@ public class CacheConfig {
     CaffeineCacheManager cacheManager = new CaffeineCacheManager();
 
     // Maven Central caches - long TTL since data is stable
-    cacheManager.registerCustomCache(MAVEN_LATEST_VERSIONS, mavenCentralCache());
     cacheManager.registerCustomCache(MAVEN_VERSION_CHECKS, mavenCentralCache());
     cacheManager.registerCustomCache(MAVEN_ALL_VERSIONS, mavenCentralCache());
-    cacheManager.registerCustomCache(MAVEN_VERSIONS_WITH_TIMESTAMPS, mavenCentralCache());
-    cacheManager.registerCustomCache(MAVEN_RECENT_VERSIONS_WITH_TIMESTAMPS, mavenCentralCache());
+    cacheManager.registerCustomCache(MAVEN_ACCURATE_HISTORICAL_DATA, mavenCentralCache());
 
     return cacheManager;
   }
