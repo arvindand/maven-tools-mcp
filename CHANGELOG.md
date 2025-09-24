@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (Unreleased)
 
+- Updated Spring Boot parent to 3.5.6 for the latest maintenance fixes
+- Updated Spring AI BOM to 1.0.2 and fmt-maven-plugin to 2.29
+
 ### Fixed (Unreleased)
 
 ### Removed (Unreleased)
