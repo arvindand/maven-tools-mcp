@@ -47,7 +47,7 @@ Working with **any build tool** that uses Maven Central Repository:
 
 **All tools use standard Maven coordinates** - just provide `groupId:artifactId` and we handle the rest.
 
-## ⚡ Competitive Advantages
+## ⚡ Advantages
 
 ### vs Simple Lookup Tools
 
