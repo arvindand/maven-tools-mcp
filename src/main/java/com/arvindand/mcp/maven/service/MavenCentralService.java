@@ -253,7 +253,7 @@ public class MavenCentralService {
 
     return RestClient.builder()
         .baseUrl(properties.repositoryBaseUrl())
-        .defaultHeader("User-Agent", "Maven-Tools-MCP/1.4.0")
+        .defaultHeader("User-Agent", "Maven-Tools-MCP/1.4.1-SNAPSHOT")
         .requestFactory(requestFactory)
         .build();
   }

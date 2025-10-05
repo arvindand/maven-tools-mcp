@@ -1,7 +1,7 @@
 # Maven Tools MCP Server
 
 [![Java](https://img.shields.io/badge/Java-24-orange.svg)](https://openjdk.java.net/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.4-green.svg)](https://spring.io/projects/spring-boot)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.6-green.svg)](https://spring.io/projects/spring-boot)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/arvindand/maven-tools-mcp)](https://github.com/arvindand/maven-tools-mcp/releases)
@@ -684,7 +684,7 @@ cd maven-tools-mcp
 ./mvnw clean package -Pfull
 
 # Run the JAR
-java -jar target/maven-tools-mcp-1.4.0.jar
+java -jar target/maven-tools-mcp-1.4.1-SNAPSHOT.jar
 ```
 
 **Claude Desktop configuration for JAR:**
@@ -696,7 +696,7 @@ java -jar target/maven-tools-mcp-1.4.0.jar
       "command": "java",
       "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-1.4.0.jar"
+        "/absolute/path/to/maven-tools-mcp-1.4.1-SNAPSHOT.jar"
       ]
     }
   }
@@ -744,7 +744,7 @@ logging:
 
 ## Technical Details
 
-- **Framework**: Spring Boot 3.5.4 with [Spring AI MCP](https://docs.spring.io/spring-ai/reference/api/mcp.html)
+- **Framework**: Spring Boot 3.5.6 with [Spring AI MCP](https://docs.spring.io/spring-ai/reference/api/mcp.html)
 - **MCP Protocol**: 2024-11-05
 - **Java Version**: 24
 - **Transport**: stdio
@@ -799,4 +799,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 1.4.0
+- Version: 1.4.1-SNAPSHOT

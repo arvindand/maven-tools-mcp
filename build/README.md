@@ -62,11 +62,11 @@ Scripts support non-interactive mode for CI/CD by passing the option number:
 
 ## Output Location
 
-Built JAR files are placed in: `target/maven-tools-mcp-1.4.0.jar`
+Built JAR files are placed in: `target/maven-tools-mcp-1.4.1-SNAPSHOT.jar`
 
 ## Native Image Builds
 
-The project now builds **Native Images** by default using GraalVM and Spring Boot 3.5.3's built-in native profile.
+The project now builds **Native Images** by default using GraalVM and Spring Boot 3.5.6's built-in native profile.
 
 ### Build Commands
 

@@ -11,12 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (Unreleased)
 
-- Updated Spring Boot parent to 3.5.6 for the latest maintenance fixes
-- Updated Spring AI BOM to 1.0.2 and fmt-maven-plugin to 2.29
+- **MCP Client Architecture**: Migrated from SYNC to ASYNC client type for improved performance
+- **Transport Layer**: Updated from SSE to streamable-http transport for better compatibility
+- **Configuration**: Simplified Context7 MCP client configuration by removing separate `sse-endpoint` parameter
+- **POM Structure**: Improved organization and readability of dependencies and build configuration
+- Updated Spring Boot parent to 3.5.6 (from 3.5.4) for the latest maintenance fixes
+- Updated fmt-maven-plugin to 2.29
 
 ### Fixed (Unreleased)
 
 ### Removed (Unreleased)
+
+- Removed unused `ClientStdio` test class
 
 ## [1.4.0] - 2025-08-17
 
