@@ -19,11 +19,10 @@ spring:
         enabled: false
         type: SYNC
         request-timeout: 5s
-        sse:
+        streamable-http:
           connections:
             context7:
               url: https://mcp.context7.com
-              sse-endpoint: /sse
     
 # Context7 configuration - enabled by default to match production
 # Individual tests can override via @TestConfiguration if needed

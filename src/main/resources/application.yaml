@@ -16,15 +16,14 @@ spring:
         instructions: "Universal JVM dependency intelligence server for any build tool using Maven Central Repository. Provides comprehensive dependency analysis, latest version lookup, stability filtering, bulk operations, and upgrade recommendations with intelligent caching support. Works with Maven, Gradle, SBT, Mill, and any JVM build tool."
       client:
         enabled: true                     # Enable MCP client with SSE transport (Docker default)
-        type: SYNC
+        type: ASYNC
         request-timeout: 15s
         toolcallback:
           enabled: true                   # Enable exposing Context7 tools as raw MCP tools
-        sse:
+        streamable-http:
           connections:
             context7:
-              url: https://mcp.context7.com
-              sse-endpoint: /sse
+              url: https://mcp.context7.com/
   cache:
     type: caffeine
 

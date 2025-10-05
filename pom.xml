@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>3.5.6</version>
-        <relativePath/> <!-- lookup parent from repository -->
-    </parent>      
+        <relativePath /> <!-- lookup parent from repository -->
+    </parent>
     <groupId>com.arvindand.mcp</groupId>
     <artifactId>maven-tools-mcp</artifactId>
     <version>1.4.0</version>
@@ -17,9 +18,9 @@
     <licenses>
         <license>
             <name>MIT License</name>
-            <url>https://opensource.org/licenses/MIT</url> 
+            <url>https://opensource.org/licenses/MIT</url>
         </license>
-    </licenses> 
+    </licenses>
     <developers>
         <developer>
             <name>Arvind Menon</name>
@@ -28,13 +29,13 @@
     </developers>
     <scm>
         <connection>scm:git:git://github.com/arvindand/maven-tools-mcp.git</connection>
-        <developerConnection>scm:git:ssh://github.com:arvindand/maven-tools-mcp.git</developerConnection> 
+        <developerConnection>scm:git:ssh://github.com:arvindand/maven-tools-mcp.git</developerConnection>
         <tag>HEAD</tag>
         <url>https://github.com/arvindand/maven-tools-mcp</url>
-    </scm>        
+    </scm>
     <properties>
         <java.version>24</java.version>
-        <spring-ai.version>1.0.2</spring-ai.version>
+        <spring-ai.version>1.1.0-SNAPSHOT</spring-ai.version>
         <fmt-maven-plugin.version>2.29</fmt-maven-plugin.version>
         <maven-artifact.version>3.9.11</maven-artifact.version>
         <!-- Test execution properties -->
@@ -49,17 +50,13 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-mcp-client</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-web</artifactId>
+            <artifactId>spring-ai-starter-mcp-client-webflux</artifactId>
         </dependency>
         <!-- Caching support -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-cache</artifactId>
-        </dependency>        
+        </dependency>
 
         <!-- Caffeine cache implementation -->
         <dependency>
@@ -79,19 +76,19 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-json</artifactId>
         </dependency>
-        
+
         <!-- Jackson JDK8 module for Optional support -->
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jdk8</artifactId>
         </dependency>
-        
+
         <!-- Jackson JSR310 module for Java 8 time types -->
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
-        
+
         <!-- Jackson XML module for maven-metadata.xml parsing -->
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
@@ -104,7 +101,7 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-        
+
     </dependencies>
     <dependencyManagement>
         <dependencies>
@@ -114,10 +111,10 @@
                 <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
-            </dependency>   
+            </dependency>
         </dependencies>
     </dependencyManagement>
-    
+
     <profiles>
         <!-- CI Profile: Only unit tests, no integration tests -->
         <profile>
@@ -127,7 +124,7 @@
                 <skipUTs>false</skipUTs>
             </properties>
         </profile>
-        
+
         <!-- Integration Profile: Run integration tests only -->
         <profile>
             <id>integration</id>
@@ -136,8 +133,8 @@
                 <skipUTs>true</skipUTs>
             </properties>
         </profile>
-        
-        <!-- Full Profile: Run all tests --> 
+
+        <!-- Full Profile: Run all tests -->
         <profile>
             <id>full</id>
             <properties>
@@ -146,13 +143,13 @@
             </properties>
         </profile>
     </profiles>
-    
+
     <build>
         <plugins>
             <plugin>
                 <groupId>org.graalvm.buildtools</groupId>
                 <artifactId>native-maven-plugin</artifactId>
-            </plugin>                
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
@@ -171,7 +168,7 @@
                     </docker>
                 </configuration>
             </plugin>
-            
+
             <!-- Surefire for Unit Tests -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -229,5 +226,26 @@
             </plugin>
         </plugins>
     </build>
+    <repositories>
+		<repository>
+			<id>spring-snapshots</id>
+			<name>Spring Snapshots</name>
+			<url>https://repo.spring.io/snapshot</url>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
+		</repository>
+		<repository>
+			<id>spring-milestones</id>
+			<name>Spring Milestones</name>
+			<url>https://repo.spring.io/milestone</url>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
+	</repositories>
 
 </project>
