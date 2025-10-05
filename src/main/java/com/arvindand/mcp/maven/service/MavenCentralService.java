@@ -17,6 +17,7 @@ import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -40,9 +41,11 @@ public class MavenCentralService {
   private final MavenCentralProperties properties;
   private final VersionComparator versionComparator;
   private final ExecutorService virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
+  private final MavenCentralService self;
 
-  public MavenCentralService(MavenCentralProperties properties) {
+  public MavenCentralService(MavenCentralProperties properties, @Lazy MavenCentralService self) {
     this.properties = properties;
+    this.self = self;
     this.restClient = createRestClient();
     this.xmlMapper = new XmlMapper();
     this.versionComparator = new VersionComparator();
@@ -56,7 +59,7 @@ public class MavenCentralService {
    * @return the latest version or null if not found
    */
   public String getLatestVersion(MavenCoordinate coordinate) {
-    List<String> versions = getAllVersions(coordinate);
+    List<String> versions = self.getAllVersions(coordinate);
     return versions.isEmpty() ? null : versions.get(0);
   }
 
@@ -107,7 +110,8 @@ public class MavenCentralService {
    * @return list of artifacts with accurate timestamp information for recent versions
    */
   public List<MavenArtifact> getAllVersionsWithTimestamps(MavenCoordinate coordinate) {
-    return getRecentVersionsWithAccurateTimestamps(coordinate, ACCURATE_TIMESTAMP_VERSION_LIMIT);
+    return self.getRecentVersionsWithAccurateTimestamps(
+        coordinate, ACCURATE_TIMESTAMP_VERSION_LIMIT);
   }
 
   /**
@@ -124,7 +128,7 @@ public class MavenCentralService {
               + " (#coordinate.packaging() ?: 'jar')")
   public List<MavenArtifact> getRecentVersionsWithAccurateTimestamps(
       MavenCoordinate coordinate, int maxVersions) {
-    List<String> allVersions = getAllVersions(coordinate);
+    List<String> allVersions = self.getAllVersions(coordinate);
     List<String> recentVersions = allVersions.stream().limit(maxVersions).toList();
 
     List<CompletableFuture<MavenArtifact>> futures =
