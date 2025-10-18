@@ -21,15 +21,19 @@ public sealed interface ToolResponse permits ToolResponse.Success, ToolResponse.
     }
   }
 
-  /** Error response with status and message. */
+  /** Error response with structured error details. */
   @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-  record Error(String status, String message) implements ToolResponse {
+  record Error(String status, McpError error) implements ToolResponse {
+    public static Error of(McpError error) {
+      return new Error("error", error);
+    }
+
     public static Error of(String message) {
-      return new Error("error", message);
+      return new Error("error", McpError.internalError(message));
     }
 
     public static Error notFound(String message) {
-      return new Error("not_found", message);
+      return new Error("not_found", McpError.invalidInput(message, java.util.Map.of()));
     }
   }
 }

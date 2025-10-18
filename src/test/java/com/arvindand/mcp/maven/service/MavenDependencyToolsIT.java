@@ -28,7 +28,8 @@ class MavenDependencyToolsIT {
   @Test
   void testGetLatestVersion() {
     ToolResponse response =
-        mavenDependencyTools.get_latest_version("org.springframework:spring-core", false);
+        mavenDependencyTools.get_latest_version(
+            "org.springframework:spring-core", StabilityFilter.ALL);
 
     VersionsByType result = getSuccessData(response);
     assertEquals("org.springframework:spring-core", result.dependency());
@@ -70,7 +71,8 @@ class MavenDependencyToolsIT {
   @Test
   void testBulkCheckDependencies() {
     String dependencies = "org.springframework:spring-core,junit:junit";
-    ToolResponse response = mavenDependencyTools.check_multiple_dependencies(dependencies, false);
+    ToolResponse response =
+        mavenDependencyTools.check_multiple_dependencies(dependencies, StabilityFilter.ALL);
 
     List<BulkCheckResult> results = getSuccessData(response);
     assertEquals(2, results.size());
@@ -97,7 +99,8 @@ class MavenDependencyToolsIT {
   @Test
   void testBulkCheckStableOnly() {
     String dependencies = "org.springframework:spring-core,com.fasterxml.jackson.core:jackson-core";
-    ToolResponse response = mavenDependencyTools.check_multiple_dependencies(dependencies, true);
+    ToolResponse response =
+        mavenDependencyTools.check_multiple_dependencies(dependencies, StabilityFilter.STABLE_ONLY);
 
     List<BulkCheckResult> results = getSuccessData(response);
     assertEquals(2, results.size());
@@ -114,7 +117,7 @@ class MavenDependencyToolsIT {
   void testVersionComparison() {
     String currentDependencies = "junit:junit:4.12";
     ToolResponse response =
-        mavenDependencyTools.compare_dependency_versions(currentDependencies, false);
+        mavenDependencyTools.compare_dependency_versions(currentDependencies, StabilityFilter.ALL);
 
     VersionComparison comparison = getSuccessData(response);
     assertNotNull(comparison.comparisonDate());
@@ -152,7 +155,7 @@ class MavenDependencyToolsIT {
   @Test
   void testProjectHealthAnalysis() {
     String dependencies = "junit:junit:4.12,org.slf4j:slf4j-api:1.7.30";
-    ToolResponse response = mavenDependencyTools.analyze_project_health(dependencies, null);
+    ToolResponse response = mavenDependencyTools.analyze_project_health(dependencies, null, null);
 
     ProjectHealthAnalysis result = getSuccessData(response);
     assertNotNull(result.analysisDate());

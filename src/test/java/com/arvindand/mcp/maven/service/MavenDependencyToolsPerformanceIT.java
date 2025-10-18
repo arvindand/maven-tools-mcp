@@ -3,6 +3,7 @@ package com.arvindand.mcp.maven.service;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.arvindand.mcp.maven.model.StabilityFilter;
 import com.arvindand.mcp.maven.model.ToolResponse;
 import java.time.Duration;
 import java.time.Instant;
@@ -40,7 +41,8 @@ class MavenDependencyToolsPerformanceIT {
   void testSmallBulkCheckLatestPerformance() {
     Instant start = Instant.now();
     ToolResponse resp =
-        mavenDependencyTools.check_multiple_dependencies(SMALL_DEPENDENCY_LIST, false);
+        mavenDependencyTools.check_multiple_dependencies(
+            SMALL_DEPENDENCY_LIST, StabilityFilter.ALL);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Small bulk check (2 deps) took: " + duration.toMillis() + "ms");
@@ -52,7 +54,8 @@ class MavenDependencyToolsPerformanceIT {
   void testMediumBulkCheckLatestPerformance() {
     Instant start = Instant.now();
     ToolResponse resp =
-        mavenDependencyTools.check_multiple_dependencies(MEDIUM_DEPENDENCY_LIST, false);
+        mavenDependencyTools.check_multiple_dependencies(
+            MEDIUM_DEPENDENCY_LIST, StabilityFilter.ALL);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Medium bulk check (5 deps) took: " + duration.toMillis() + "ms");
@@ -64,7 +67,8 @@ class MavenDependencyToolsPerformanceIT {
   void testLargeBulkCheckLatestPerformance() {
     Instant start = Instant.now();
     ToolResponse resp =
-        mavenDependencyTools.check_multiple_dependencies(LARGE_DEPENDENCY_LIST, false);
+        mavenDependencyTools.check_multiple_dependencies(
+            LARGE_DEPENDENCY_LIST, StabilityFilter.ALL);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Large bulk check (10 deps) took: " + duration.toMillis() + "ms");
@@ -77,7 +81,7 @@ class MavenDependencyToolsPerformanceIT {
     Instant start = Instant.now();
     ToolResponse resp =
         mavenDependencyTools.check_multiple_dependencies(
-            MEDIUM_DEPENDENCY_LIST, true); // stableOnly=true
+            MEDIUM_DEPENDENCY_LIST, StabilityFilter.STABLE_ONLY);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Bulk stable check (5 deps) took: " + duration.toMillis() + "ms");
@@ -93,7 +97,7 @@ class MavenDependencyToolsPerformanceIT {
 
     Instant start = Instant.now();
     ToolResponse resp =
-        mavenDependencyTools.compare_dependency_versions(currentDependencies, false);
+        mavenDependencyTools.compare_dependency_versions(currentDependencies, StabilityFilter.ALL);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Version comparison (3 deps) took: " + duration.toMillis() + "ms");
@@ -106,7 +110,8 @@ class MavenDependencyToolsPerformanceIT {
     // Test that individual calls are reasonably fast
     Instant start = Instant.now();
     ToolResponse resp =
-        mavenDependencyTools.get_latest_version("org.springframework:spring-core", false);
+        mavenDependencyTools.get_latest_version(
+            "org.springframework:spring-core", StabilityFilter.ALL);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Individual get_latest_version took: " + duration.toMillis() + "ms");
@@ -121,12 +126,14 @@ class MavenDependencyToolsPerformanceIT {
 
     // Use nanosecond precision for more accurate timing
     long start1 = System.nanoTime();
-    ToolResponse r1 = mavenDependencyTools.get_latest_version(uniqueDependency, false);
+    ToolResponse r1 =
+        mavenDependencyTools.get_latest_version(uniqueDependency, StabilityFilter.ALL);
     long duration1Nanos = System.nanoTime() - start1;
 
     // Second call should be faster (cached)
     long start2 = System.nanoTime();
-    ToolResponse r2 = mavenDependencyTools.get_latest_version(uniqueDependency, false);
+    ToolResponse r2 =
+        mavenDependencyTools.get_latest_version(uniqueDependency, StabilityFilter.ALL);
     long duration2Nanos = System.nanoTime() - start2;
 
     // Convert to milliseconds for display

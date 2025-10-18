@@ -11,7 +11,7 @@
     </parent>
     <groupId>com.arvindand.mcp</groupId>
     <artifactId>maven-tools-mcp</artifactId>
-    <version>1.4.1-SNAPSHOT</version>
+    <version>1.5.0</version>
     <name>maven-tools-mcp</name>
     <description>Maven Tools MCP server with universal JVM dependency intelligence. Provides comprehensive dependency analysis for any build tool (Maven, Gradle, SBT, Mill) using Maven Central Repository. Works with Claude Desktop, GitHub Copilot, and other MCP clients.</description>
     <url>https://github.com/arvindand/maven-tools-mcp</url>
@@ -35,9 +35,11 @@
     </scm>
     <properties>
         <java.version>24</java.version>
-        <spring-ai.version>1.1.0-SNAPSHOT</spring-ai.version>
+        <spring-ai.version>1.1.0-M3</spring-ai.version>
         <fmt-maven-plugin.version>2.29</fmt-maven-plugin.version>
         <maven-artifact.version>3.9.11</maven-artifact.version>
+        <okhttp.version>5.2.1</okhttp.version>
+        <resilience4j.version>2.2.0</resilience4j.version>
         <!-- Test execution properties -->
         <skipUTs>false</skipUTs>
         <skipITs>false</skipITs>
@@ -93,6 +95,26 @@
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-xml</artifactId>
+        </dependency>
+
+        <!-- OkHttp for HTTP/2 and connection pooling -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp-jvm</artifactId>
+            <version>${okhttp.version}</version>
+        </dependency>
+
+        <!-- Resilience4j for circuit breaker, retry, rate limiter -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+            <version>${resilience4j.version}</version>
+        </dependency>
+
+        <!-- AOP for @CircuitBreaker, @Retry, @RateLimiter annotations -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
 
         <!-- Test dependencies -->
@@ -227,25 +249,25 @@
         </plugins>
     </build>
     <repositories>
-		<repository>
-			<id>spring-snapshots</id>
-			<name>Spring Snapshots</name>
-			<url>https://repo.spring.io/snapshot</url>
-			<snapshots>
-				<enabled>true</enabled>
-			</snapshots>
-			<releases>
-				<enabled>false</enabled>
-			</releases>
-		</repository>
-		<repository>
-			<id>spring-milestones</id>
-			<name>Spring Milestones</name>
-			<url>https://repo.spring.io/milestone</url>
-			<snapshots>
-				<enabled>false</enabled>
-			</snapshots>
-		</repository>
-	</repositories>
+        <repository>
+            <id>spring-snapshots</id>
+            <name>Spring Snapshots</name>
+            <url>https://repo.spring.io/snapshot</url>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+        </repository>
+        <repository>
+            <id>spring-milestones</id>
+            <name>Spring Milestones</name>
+            <url>https://repo.spring.io/milestone</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
 </project>

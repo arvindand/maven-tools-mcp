@@ -17,6 +17,12 @@
       "description": "The maximum number of results to retrieve per request from the Maven Central repository."
     },
     {
+      "name": "maven.central.connection-pool-size",
+      "type": "java.lang.Integer",
+      "description": "The maximum number of idle connections to maintain in the OkHttp connection pool for Maven Central repository requests.",
+      "defaultValue": 50
+    },
+    {
       "name": "context7.enabled",
       "type": "java.lang.Boolean",
       "description": "Whether Context7 guidance hints are included in Maven tool responses. When enabled, tools include intelligent search suggestions to help LLMs effectively use Context7 tools for migration guidance and upgrade strategies.",

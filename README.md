@@ -748,8 +748,9 @@ logging:
 - **MCP Protocol**: 2024-11-05
 - **Java Version**: 24
 - **Transport**: stdio
-- **HTTP Client**: Spring Web RestClient
+- **HTTP Client**: OkHttp 5.2.1 with HTTP/2 support
 - **Cache**: Caffeine (24-hour TTL, 2000 entries max)
+- **Resilience**: Circuit breaker, retry, and rate limiter patterns
 - **Data Source**: Maven Central Repository (maven-metadata.xml files)
 
 ## References & Resources
@@ -799,4 +800,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 1.4.1-SNAPSHOT
+- Version: 1.5.0

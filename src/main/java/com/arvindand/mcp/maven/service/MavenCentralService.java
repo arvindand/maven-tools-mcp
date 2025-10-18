@@ -8,6 +8,9 @@ import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.MavenMetadata;
 import com.arvindand.mcp.maven.util.VersionComparator;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+import io.github.resilience4j.retry.annotation.Retry;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -17,7 +20,6 @@ import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -41,9 +43,9 @@ public class MavenCentralService {
   private final VersionComparator versionComparator;
   private final ExecutorService virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
-  public MavenCentralService(MavenCentralProperties properties) {
+  public MavenCentralService(MavenCentralProperties properties, RestClient mavenCentralRestClient) {
     this.properties = properties;
-    this.restClient = createRestClient();
+    this.restClient = mavenCentralRestClient;
     this.xmlMapper = new XmlMapper();
     this.versionComparator = new VersionComparator();
   }
@@ -96,8 +98,21 @@ public class MavenCentralService {
       key =
           "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + (#coordinate.packaging()"
               + " ?: 'jar')")
+  @CircuitBreaker(name = "maven-central", fallbackMethod = "getAllVersionsFallback")
+  @Retry(name = "maven-central")
+  @RateLimiter(name = "maven-central")
   public List<String> getAllVersions(MavenCoordinate coordinate) {
     return fetchAllVersionsInternal(coordinate);
+  }
+
+  @SuppressWarnings("unused") // Used via @CircuitBreaker fallbackMethod
+  private List<String> getAllVersionsFallback(MavenCoordinate coordinate, Exception ex) {
+    logger.warn(
+        "Circuit breaker fallback for {}:{} - {}",
+        coordinate.groupId(),
+        coordinate.artifactId(),
+        ex.getMessage());
+    return Collections.emptyList();
   }
 
   /**
@@ -197,6 +212,9 @@ public class MavenCentralService {
    * @param coordinate the Maven coordinate
    * @return optional containing metadata if found and parseable
    */
+  @CircuitBreaker(name = "maven-central")
+  @Retry(name = "maven-central")
+  @RateLimiter(name = "maven-central")
   private Optional<MavenMetadata> fetchRepositoryMetadata(MavenCoordinate coordinate) {
     try {
       String metadataUrl = buildMetadataUrl(coordinate);
@@ -243,18 +261,5 @@ public class MavenCentralService {
         version,
         coordinate.artifactId(),
         version);
-  }
-
-  private RestClient createRestClient() {
-    var requestFactory = new SimpleClientHttpRequestFactory();
-    int timeoutMs = (int) properties.timeout().toMillis();
-    requestFactory.setConnectTimeout(timeoutMs);
-    requestFactory.setReadTimeout(timeoutMs);
-
-    return RestClient.builder()
-        .baseUrl(properties.repositoryBaseUrl())
-        .defaultHeader("User-Agent", "Maven-Tools-MCP/1.4.1-SNAPSHOT")
-        .requestFactory(requestFactory)
-        .build();
   }
 }

@@ -9,6 +9,7 @@ import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
 import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
+import com.arvindand.mcp.maven.model.StabilityFilter;
 import com.arvindand.mcp.maven.model.ToolResponse;
 import com.arvindand.mcp.maven.model.VersionComparison;
 import com.arvindand.mcp.maven.model.VersionInfo;
@@ -134,21 +135,18 @@ public class MavenDependencyTools {
 
   /**
    * Get the latest version of any dependency from Maven Central (works with Maven, Gradle, SBT,
-   * Mill). Consolidates functionality from the former get_stable_version tool - use
-   * preferStable=true for production-ready versions.
+   * Mill).
    *
    * @param dependency the dependency coordinate (groupId:artifactId)
-   * @param preferStable when true, prioritize stable version in response while showing all types
-   *     (default: false)
+   * @param stabilityFilter controls version filtering: ALL (default), STABLE_ONLY, or PREFER_STABLE
    * @return JSON response with latest versions by type
    */
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
           "Single dependency. Returns newest versions by type (stable/rc/beta/alpha/milestone). Set"
-              + " preferStable=true to prioritize stable as primary while still including other"
-              + " types. Use when asked: 'what's the latest version of X?' Works with all JVM build"
-              + " tools.")
+              + " stabilityFilter to ALL (default), STABLE_ONLY, or PREFER_STABLE. Use when asked:"
+              + " 'what's the latest version of X?' Works with all JVM build tools.")
   public ToolResponse get_latest_version(
       @ToolParam(
               description =
@@ -157,10 +155,11 @@ public class MavenDependencyTools {
           String dependency,
       @ToolParam(
               description =
-                  "When true, prioritizes stable version in response while showing all types. When"
-                      + " false, shows latest version of any type first (default: false)",
+                  "Stability filter: ALL (all versions), STABLE_ONLY (production-ready only), or"
+                      + " PREFER_STABLE (prioritize stable, show others too). Default:"
+                      + " PREFER_STABLE",
               required = false)
-          boolean preferStable) {
+          StabilityFilter stabilityFilter) {
     return executeToolOperation(
         () -> {
           MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
@@ -170,7 +169,9 @@ public class MavenDependencyTools {
             return notFoundResponse(coordinate);
           }
 
-          return buildVersionsByType(coordinate, allVersions, preferStable);
+          StabilityFilter filter =
+              stabilityFilter != null ? stabilityFilter : StabilityFilter.PREFER_STABLE;
+          return buildVersionsByType(coordinate, allVersions, filter);
         });
   }
 
@@ -225,14 +226,14 @@ public class MavenDependencyTools {
    * Check latest versions for multiple dependencies with filtering options.
    *
    * @param dependencies comma or newline separated list of dependency coordinates
-   * @param stableOnly when true, only show stable versions (default: false)
+   * @param stabilityFilter controls version filtering: ALL, STABLE_ONLY, or PREFER_STABLE
    * @return JSON response with bulk check results
    */
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
           "Bulk. For many coordinates (no versions), returns per-dependency latest versions by"
-              + " type. Set stableOnly=true to filter to production-ready (stable) versions only."
+              + " type. Set stabilityFilter to ALL (default), STABLE_ONLY, or PREFER_STABLE."
               + " Use for audits of multiple dependencies.")
   public ToolResponse check_multiple_dependencies(
       @ToolParam(
@@ -243,13 +244,14 @@ public class MavenDependencyTools {
           String dependencies,
       @ToolParam(
               description =
-                  "When true, filters results to show only stable (production-ready) versions. When"
-                      + " false, includes all version types (default: false)",
+                  "Stability filter: ALL (all versions), STABLE_ONLY (production-ready only), or"
+                      + " PREFER_STABLE (prioritize stable). Default: ALL",
               required = false)
-          boolean stableOnly) {
+          StabilityFilter stabilityFilter) {
     return executeToolOperation(
         () -> {
           List<String> depList = parseDependencies(dependencies);
+          StabilityFilter filter = stabilityFilter != null ? stabilityFilter : StabilityFilter.ALL;
 
           List<BulkCheckResult> results;
           try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -259,11 +261,7 @@ public class MavenDependencyTools {
                     .map(
                         dep ->
                             CompletableFuture.supplyAsync(
-                                () ->
-                                    stableOnly
-                                        ? processStableVersionCheck(dep)
-                                        : processComprehensiveVersionCheck(dep),
-                                executor))
+                                () -> processVersionCheck(dep, filter), executor))
                     .toList();
             results = futures.stream().map(CompletableFuture::join).toList();
           }
@@ -277,15 +275,15 @@ public class MavenDependencyTools {
    *
    * @param currentDependencies comma or newline separated list of dependency coordinates with
    *     versions
-   * @param onlyStableTargets when true, only upgrade to stable versions (default: false)
+   * @param stabilityFilter controls upgrade targets: ALL, STABLE_ONLY, or PREFER_STABLE
    * @return JSON response with version comparison and update recommendations
    */
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
           "Bulk compare. Input includes versions. Suggests upgrades and classifies update type"
-              + " (major/minor/patch). Set onlyStableTargets=true to restrict upgrade"
-              + " recommendations to stable releases. Never suggests downgrades.")
+              + " (major/minor/patch). Set stabilityFilter to ALL (default), STABLE_ONLY, or"
+              + " PREFER_STABLE. Never suggests downgrades.")
   public ToolResponse compare_dependency_versions(
       @ToolParam(
               description =
@@ -295,14 +293,14 @@ public class MavenDependencyTools {
           String currentDependencies,
       @ToolParam(
               description =
-                  "When true, only suggests upgrades to stable versions for production safety. When"
-                      + " false, suggests upgrades to latest available version of any type"
-                      + " (default: false)",
+                  "Stability filter: ALL (any version), STABLE_ONLY (production-ready only), or"
+                      + " PREFER_STABLE (prioritize stable). Default: ALL",
               required = false)
-          boolean onlyStableTargets) {
+          StabilityFilter stabilityFilter) {
     return executeToolOperation(
         () -> {
           List<String> depList = parseDependencies(currentDependencies);
+          StabilityFilter filter = stabilityFilter != null ? stabilityFilter : StabilityFilter.ALL;
 
           List<VersionComparison.DependencyComparisonResult> results;
           try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -312,7 +310,7 @@ public class MavenDependencyTools {
                     .map(
                         dep ->
                             CompletableFuture.supplyAsync(
-                                () -> compareDependencyVersion(dep, onlyStableTargets), executor))
+                                () -> compareDependencyVersion(dep, filter), executor))
                     .toList();
             results = futures.stream().map(CompletableFuture::join).toList();
           }
@@ -476,13 +474,15 @@ public class MavenDependencyTools {
    *
    * @param dependencies comma or newline separated list of dependency coordinates
    * @param maxAgeInDays optional maximum acceptable age in days for health scoring
+   * @param stabilityFilter controls recommendations: ALL, STABLE_ONLY, or PREFER_STABLE
    * @return JSON response with project health summary and individual dependency analysis
    */
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
           "Bulk project view. Summarizes health across many dependencies using age and maintenance"
-              + " patterns, with concise recommendations. Use for dependency health reports.")
+              + " patterns, with concise recommendations. Set stabilityFilter to ALL (default),"
+              + " STABLE_ONLY, or PREFER_STABLE for upgrade recommendations.")
   public ToolResponse analyze_project_health(
       @ToolParam(
               description =
@@ -496,7 +496,13 @@ public class MavenDependencyTools {
                       + " Dependencies exceeding this age receive lower health scores. No age"
                       + " penalty if not specified",
               required = false)
-          Integer maxAgeInDays) {
+          Integer maxAgeInDays,
+      @ToolParam(
+              description =
+                  "Stability filter: ALL (any version), STABLE_ONLY (production-ready only), or"
+                      + " PREFER_STABLE (prioritize stable). Default: PREFER_STABLE",
+              required = false)
+          StabilityFilter stabilityFilter) {
     return executeToolOperation(
         () -> {
           List<String> depList = parseDependencies(dependencies);
@@ -535,7 +541,7 @@ public class MavenDependencyTools {
 
   @SuppressWarnings("java:S1172") // preferStable is used by VersionsByType.getPreferredVersion()
   private VersionsByType buildVersionsByType(
-      MavenCoordinate coordinate, List<String> allVersions, boolean preferStable) {
+      MavenCoordinate coordinate, List<String> allVersions, StabilityFilter stabilityFilter) {
     Map<VersionType, String> versionsByType = HashMap.newHashMap(5);
 
     for (String version : allVersions) {
@@ -573,6 +579,13 @@ public class MavenDependencyTools {
         .toList();
   }
 
+  private BulkCheckResult processVersionCheck(String dep, StabilityFilter filter) {
+    return switch (filter) {
+      case STABLE_ONLY -> processStableVersionCheck(dep);
+      case ALL, PREFER_STABLE -> processComprehensiveVersionCheck(dep);
+    };
+  }
+
   private BulkCheckResult processStableVersionCheck(String dep) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
@@ -601,12 +614,12 @@ public class MavenDependencyTools {
   }
 
   private VersionComparison.DependencyComparisonResult compareDependencyVersion(
-      String dep, boolean onlyStableTargets) {
+      String dep, StabilityFilter stabilityFilter) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
       String currentVersion = coordinate.version();
       String latestVersion =
-          onlyStableTargets
+          stabilityFilter == StabilityFilter.STABLE_ONLY
               ? getLatestStableVersion(coordinate)
               : mavenCentralService.getLatestVersion(coordinate);
 

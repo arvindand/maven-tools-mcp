@@ -40,7 +40,8 @@ class MavenDependencyToolsContext7EnabledIT {
   void testContext7GuidanceEnabledForVersionComparison() {
     // Use an older Spring Boot version that will trigger Context7 guidance when enabled
     String oldDependencies = "org.springframework.boot:spring-boot-starter:2.5.0";
-    ToolResponse resp = mavenDependencyTools.compare_dependency_versions(oldDependencies, false);
+    ToolResponse resp =
+        mavenDependencyTools.compare_dependency_versions(oldDependencies, StabilityFilter.ALL);
 
     VersionComparison comparison = getSuccessData(resp);
     assertNotNull(comparison);
@@ -66,7 +67,7 @@ class MavenDependencyToolsContext7EnabledIT {
   void testContext7EnabledBasicOperation() {
     // This test just verifies that tools work when Context7 is enabled
     // The main functionality is covered by the Context7 guidance test above
-    ToolResponse resp = mavenDependencyTools.get_latest_version("junit:junit", false);
+    ToolResponse resp = mavenDependencyTools.get_latest_version("junit:junit", StabilityFilter.ALL);
 
     // Just verify we get a successful response
     assertInstanceOf(

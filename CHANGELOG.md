@@ -11,18 +11,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (Unreleased)
 
-- **MCP Client Architecture**: Migrated from SYNC to ASYNC client type for improved performance
-- **Transport Layer**: Updated from SSE to streamable-http transport for better compatibility
-- **Configuration**: Simplified Context7 MCP client configuration by removing separate `sse-endpoint` parameter
-- **POM Structure**: Improved organization and readability of dependencies and build configuration
-- Updated Spring Boot parent to 3.5.6 (from 3.5.4) for the latest maintenance fixes
-- Updated fmt-maven-plugin to 2.29
-
 ### Fixed (Unreleased)
 
 ### Removed (Unreleased)
 
-- Removed unused `ClientStdio` test class
+## [1.5.0] - 2025-10-19
+
+**Performance & Resilience Release** - Introduces OkHttp 5 for HTTP/2 support, circuit breaker patterns, and improved reliability. Includes code quality improvements and dependency updates.
+
+### Added (1.5.0)
+
+- **OkHttp5 Integration**: Direct HTTP/2 support with connection pooling for improved performance and resource efficiency (5.2.1 - latest stable)
+- **Resilience4j Patterns**: Added circuit breaker, retry, and rate limiter patterns to `MavenCentralService` for improved reliability
+- **Connection Pool Configuration**: New `maven.central.connection-pool-size` property (default: 50) for tuning OkHttp connection pooling
+- **Spring Configuration Metadata**: Added `maven.central.connection-pool-size` property documentation for IDE autocomplete support
+
+### Changed (1.5.0)
+
+- **HTTP Client Architecture**: Introduced OkHttp 5.2.1 as the primary HTTP client (replacing SimpleClientHttpRequestFactory) for HTTP/2 support and improved connection pooling
+- **Updated Dependencies**:
+  - Spring Boot parent updated to 3.5.6 (from 3.5.4)
+  - fmt-maven-plugin updated to 2.29 (from 2.27)
+- **MCP Client Transport**: Changed from SYNC SSE client to ASYNC streamable-http transport for better performance and compatibility
+
+### Removed (1.5.0)
+
+- **Test Utilities**: Removed unused `ClientStdio` test class (62 lines)
+- **Legacy REST Configuration**: Removed direct `SimpleClientHttpRequestFactory` bean in favor of OkHttp5-backed RestClient
 
 ## [1.4.0] - 2025-08-17
 
