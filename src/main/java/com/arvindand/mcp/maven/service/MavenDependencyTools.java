@@ -39,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 /**
@@ -159,6 +160,7 @@ public class MavenDependencyTools {
                       + " PREFER_STABLE (prioritize stable, show others too). Default:"
                       + " PREFER_STABLE",
               required = false)
+          @Nullable
           StabilityFilter stabilityFilter) {
     return executeToolOperation(
         () -> {
@@ -247,6 +249,7 @@ public class MavenDependencyTools {
                   "Stability filter: ALL (all versions), STABLE_ONLY (production-ready only), or"
                       + " PREFER_STABLE (prioritize stable). Default: ALL",
               required = false)
+          @Nullable
           StabilityFilter stabilityFilter) {
     return executeToolOperation(
         () -> {
@@ -296,6 +299,7 @@ public class MavenDependencyTools {
                   "Stability filter: ALL (any version), STABLE_ONLY (production-ready only), or"
                       + " PREFER_STABLE (prioritize stable). Default: ALL",
               required = false)
+          @Nullable
           StabilityFilter stabilityFilter) {
     return executeToolOperation(
         () -> {
@@ -345,6 +349,7 @@ public class MavenDependencyTools {
                       + " exceeds this age, additional recommendations are provided. No limit if"
                       + " not specified",
               required = false)
+          @Nullable
           Integer maxAgeInDays) {
     return executeToolOperation(
         () -> {
@@ -408,6 +413,7 @@ public class MavenDependencyTools {
                   "Number of months of historical release data to analyze for patterns and"
                       + " predictions. Default is 24 months if not specified",
               required = false)
+          @Nullable
           Integer monthsToAnalyze) {
     return executeToolOperation(
         () -> {
@@ -451,6 +457,7 @@ public class MavenDependencyTools {
                   "Number of recent versions to include in timeline analysis. Default is 20"
                       + " versions if not specified. Typical range: 10-50",
               required = false)
+          @Nullable
           Integer versionCount) {
     return executeToolOperation(
         () -> {
@@ -496,12 +503,14 @@ public class MavenDependencyTools {
                       + " Dependencies exceeding this age receive lower health scores. No age"
                       + " penalty if not specified",
               required = false)
+          @Nullable
           Integer maxAgeInDays,
       @ToolParam(
               description =
                   "Stability filter: ALL (any version), STABLE_ONLY (production-ready only), or"
                       + " PREFER_STABLE (prioritize stable). Default: PREFER_STABLE",
               required = false)
+          @Nullable
           StabilityFilter stabilityFilter) {
     return executeToolOperation(
         () -> {
