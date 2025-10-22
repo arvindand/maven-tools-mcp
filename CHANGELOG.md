@@ -15,6 +15,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [1.5.1] - 2025-10-22
+
+**Corporate Environment Support Release** - Adds dual-image build strategy and comprehensive documentation for corporate networks with SSL inspection/MITM proxies.
+
+### Added (1.5.1)
+
+- **Corporate Certificate Guide**: Complete documentation (`CORPORATE-CERTIFICATES.md`) for building custom native images with corporate SSL certificates using Paketo buildpack certificate bindings
+- **Dual-Image Build Strategy**: CI/CD now builds 4 image variants (amd64/arm64, with/without Context7) to support different deployment scenarios
+- **Spring Profiles for Context7 Control**:
+  - `application-no-context7.yaml` - Disables Context7 integration for corporate environments
+  - `application-docker.yaml` - Controls Spring Boot banner for clean MCP protocol compliance
+- **Image Variants Documentation**: Added comprehensive table in README explaining when to use each image tag (`latest`, `latest-noc7`, `<version>`, `<version>-noc7`)
+
+### Changed (1.5.1)
+
+- **Build Scripts**: Updated all Unix and Windows build scripts to support `-noc7` image builds with Spring profile activation
+- **README**: Added troubleshooting section for corporate SSL environments and link to certificate guide
+- **CI/CD Workflow**: Enhanced to build and publish 4 multi-architecture image manifests
+- **Updated Dependencies**:
+  - Resilience4j updated to 2.3.0 (from 2.2.0)
+
+### Fixed (1.5.1)
+
+- **SSL Handshake Issues**: Resolved Context7 connection failures in corporate environments with SSL inspection by providing `-noc7` image variants and custom certificate build solution
+- **MCP Protocol Interference**: Fixed Spring Boot banner appearing before logback initialization by using `application-docker.yaml` profile
+
 ## [1.5.0] - 2025-10-19
 
 **Performance & Resilience Release** - Introduces OkHttp 5 for HTTP/2 support, circuit breaker patterns, and improved reliability. Includes code quality improvements and dependency updates.

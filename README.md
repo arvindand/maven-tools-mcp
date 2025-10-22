@@ -819,4 +819,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 1.5.1-SNAPSHOT
+- Version: 1.5.1
