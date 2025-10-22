@@ -97,6 +97,8 @@ Working with **any build tool** that uses Maven Central Repository:
 
 **Troubleshooting:** Context7 integration is enabled by default and contacts `https://mcp.context7.com` during startup. If your network blocks this URL the server prints a Spring stack trace to `stdout`, which causes the MCP handshake to fail. Use the Context7-free native image instead: `arvindand/maven-tools-mcp:latest-noc7`. (Environment-variable toggles only work when running the JVM jar directly.)
 
+**Corporate Networks with SSL Inspection:** If you need Context7 integration but your network uses SSL inspection (MITM proxies), you can build a custom image with your corporate certificates. See the [Corporate Certificate Guide](CORPORATE-CERTIFICATES.md) for detailed instructions.
+
 ## Setup for VS Code with GitHub Copilot
 
 **Option 1: Workspace Configuration** - Create `.vscode/mcp.json`:
