@@ -1,0 +1,15 @@
+# Profile to completely disable Context7 for native image builds
+spring:
+  ai:
+    mcp:
+      client:
+        enabled: false  # Disable MCP client completely
+        toolcallback:
+          enabled: false  # Disable tool callbacks
+  main:
+    banner-mode: "off"  # Disable banner
+    log-startup-info: false
+
+# Disable Context7 guidance hints
+context7:
+  enabled: false

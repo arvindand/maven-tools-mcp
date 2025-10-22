@@ -81,7 +81,7 @@ Working with **any build tool** that uses Maven Central Repository:
     "maven-tools": {
       "command": "docker",
       "args": [
-        "run", "-i", "--rm", "-e", "SPRING_PROFILES_ACTIVE=docker",
+        "run", "-i", "--rm",
         "arvindand/maven-tools-mcp:latest"
       ]
     }
@@ -95,6 +95,8 @@ Working with **any build tool** that uses Maven Central Repository:
 
 **Note:** The Docker image supports both AMD64 (Intel/AMD) and ARM64 (Apple Silicon) architectures. Docker automatically selects the correct version for your platform.
 
+**Troubleshooting:** Context7 integration is enabled by default and contacts `https://mcp.context7.com` during startup. If your network blocks this URL the server prints a Spring stack trace to `stdout`, which causes the MCP handshake to fail. Use the Context7-free native image instead: `arvindand/maven-tools-mcp:latest-noc7`. (Environment-variable toggles only work when running the JVM jar directly.)
+
 ## Setup for VS Code with GitHub Copilot
 
 **Option 1: Workspace Configuration** - Create `.vscode/mcp.json`:
@@ -105,7 +107,7 @@ Working with **any build tool** that uses Maven Central Repository:
     "maven-tools": {
       "type": "stdio",
       "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "SPRING_PROFILES_ACTIVE=docker", "arvindand/maven-tools-mcp:latest"]
+      "args": ["run", "-i", "--rm", "arvindand/maven-tools-mcp:latest"]
     }
   }
 }
@@ -120,7 +122,7 @@ Working with **any build tool** that uses Maven Central Repository:
       "maven-tools": {
         "type": "stdio", 
         "command": "docker",
-        "args": ["run", "-i", "--rm", "-e", "SPRING_PROFILES_ACTIVE=docker", "arvindand/maven-tools-mcp:latest"]
+        "args": ["run", "-i", "--rm", "arvindand/maven-tools-mcp:latest"]
       }
     }
   }
@@ -540,7 +542,7 @@ This dual architecture provides both dependency intelligence and documentation a
 
 ### Context7 Tools (Enabled by Default)
 
-Context7 tools are automatically enabled by default. To disable Context7 integration entirely, set the environment variable:
+Context7 tools are automatically enabled by default. To disable Context7 integration entirely, use the `-noc7` image variant:
 
 ```json
 {
@@ -548,17 +550,24 @@ Context7 tools are automatically enabled by default. To disable Context7 integra
     "maven-tools": {
       "command": "docker",
       "args": [
-        "run", "-i", "--rm", 
-        "-e", "SPRING_PROFILES_ACTIVE=docker",
-        "-e", "CONTEXT7_ENABLED=false",
-        "arvindand/maven-tools-mcp:latest"
+        "run", "-i", "--rm",
+        "arvindand/maven-tools-mcp:latest-noc7"
       ]
     }
   }
 }
 ```
 
-**Graceful Design:** Context7 integration is enabled by default, providing guidance hints and raw Context7 tools out of the box. When disabled, Maven tools work independently without Context7 features, providing only core dependency analysis.
+**Note:** Environment variable toggles (`-e CONTEXT7_ENABLED=false`) only work when running the JVM jar directly, not with native images. Native images have configuration compiled in at build time. Use the `-noc7` image variants for a pure Maven tools experience without Context7 integration.
+
+### Image Variants
+
+| Image Tag | Contents | When to Use |
+|-----------|----------|-------------|
+| `arvindand/maven-tools-mcp:latest` | Native image with Context7 tools enabled | Default experience with documentation integration |
+| `arvindand/maven-tools-mcp:latest-noc7` | Native image without Context7 client/tools | Environments without outbound access to `mcp.context7.com` or where only Maven tools are desired |
+| `arvindand/maven-tools-mcp:<version>` | Version-specific multi-arch image (Context7 enabled) | Pin to an exact release |
+| `arvindand/maven-tools-mcp:<version>-noc7` | Version-specific image without Context7 | Pin to exact release without Context7 |
 
 ### Context7 Orchestration Instructions
 
@@ -684,7 +693,7 @@ cd maven-tools-mcp
 ./mvnw clean package -Pfull
 
 # Run the JAR
-java -jar target/maven-tools-mcp-1.4.1-SNAPSHOT.jar
+java -jar target/maven-tools-mcp-1.5.1-SNAPSHOT.jar
 ```
 
 **Claude Desktop configuration for JAR:**
@@ -696,7 +705,7 @@ java -jar target/maven-tools-mcp-1.4.1-SNAPSHOT.jar
       "command": "java",
       "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-1.4.1-SNAPSHOT.jar"
+        "/absolute/path/to/maven-tools-mcp-1.5.1-SNAPSHOT.jar"
       ]
     }
   }
@@ -707,12 +716,20 @@ java -jar target/maven-tools-mcp-1.4.1-SNAPSHOT.jar
 
 For easier builds, use the provided scripts in the `build/` folder:
 
-```bash
-# Linux/macOS - Complete build helper
-./build/build.sh
+**Linux/macOS:**
 
-# Windows - Complete build helper
-.\build\build.cmd
+```bash
+cd build
+./build.sh        # Complete build helper
+./build-docker.sh # Docker-focused helper
+```
+
+**Windows:**
+
+```cmd
+cd build
+build.cmd         # Complete build helper
+build-docker.cmd  # Docker-focused helper
 ```
 
 ## Enterprise & Custom Clients
@@ -800,4 +817,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 1.5.0
+- Version: 1.5.1-SNAPSHOT

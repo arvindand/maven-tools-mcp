@@ -1,0 +1,6 @@
+# Docker profile - ensures clean JSON-RPC communication on STDIO
+# The banner and startup logs can interfere with JSON-RPC protocol on STDOUT
+spring:
+  main:
+    banner-mode: "off"  # Must be "off" not OFF - disable banner completely
+    log-startup-info: false  # Disable startup info logs on STDOUT

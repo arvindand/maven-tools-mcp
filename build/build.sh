@@ -43,9 +43,10 @@ else
     echo "4. Build JVM Docker image (faster build)"
     echo "5. Clean build artifacts"
     echo "6. Run tests only"
+    echo "7. Build Native Docker image WITHOUT Context7"
     echo ""
 
-    read -p "Choose option (1-6): " choice
+    read -p "Choose option (1-7): " choice
 fi
 
 # Make mvnw executable if it isn't already
@@ -63,20 +64,36 @@ case $choice in
         show_jar_result
         ;;
     3)
-        echo "🐳 Building Native Docker image with buildpacks..."
-        echo "⏳ This may take 10-15 minutes for native compilation..."
+        echo "🐳 Building Native Docker images with buildpacks..."
+        echo "⏳ This may take 20-25 minutes for native compilation (building 2 images)..."
         echo "Step 1: Package application..."
         (cd .. && ./mvnw clean package -DskipTests)
-        
-        echo "Step 2: Build Native Docker image..."
-        (cd .. && ./mvnw -Pnative spring-boot:build-image)
         
         # Get project version for image name
         PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.5.0")
         
-        echo "✅ Native Docker image built successfully!"
         echo ""
-        echo "To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:${PROJECT_VERSION}"
+        echo "Step 2: Build Native Docker image WITH Context7..."
+        (cd .. && SPRING_PROFILES_ACTIVE=docker ./mvnw -Pnative spring-boot:build-image \
+          -Dspring-boot.build-image.imageName=maven-tools-mcp:${PROJECT_VERSION})
+        
+        echo ""
+        echo "Step 3: Build Native Docker image WITHOUT Context7..."
+        (cd .. && SPRING_PROFILES_ACTIVE=docker,no-context7 ./mvnw -Pnative spring-boot:build-image \
+          -Dspring-boot.build-image.imageName=maven-tools-mcp:${PROJECT_VERSION}-noc7)
+        
+        echo ""
+        echo "✅ Native Docker images built successfully!"
+        echo ""
+        echo "Two images created:"
+        echo "  1. maven-tools-mcp:${PROJECT_VERSION} (with Context7)"
+        echo "  2. maven-tools-mcp:${PROJECT_VERSION}-noc7 (without Context7)"
+        echo ""
+        echo "🚀 Run with Context7 enabled:"
+        echo "   docker run -i maven-tools-mcp:${PROJECT_VERSION}"
+        echo ""
+        echo "🚀 Run without Context7:"
+        echo "   docker run -i maven-tools-mcp:${PROJECT_VERSION}-noc7"
         exit 0
         ;;
     4)
@@ -90,9 +107,17 @@ case $choice in
         # Get project version for image name
         PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.5.0")
         
-        echo "✅ JVM Docker image built successfully!"
+        echo "✅ JVM Docker image built successfully: maven-tools-mcp:${PROJECT_VERSION}"
         echo ""
-        echo "To run: docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:${PROJECT_VERSION}"
+        echo "🚀 Run with Context7 enabled (default):"
+        echo "   docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:${PROJECT_VERSION}"
+        echo ""
+        echo "🚀 Run with Context7 disabled:"
+        echo "   docker run -i -e SPRING_PROFILES_ACTIVE=docker \\"
+        echo "     -e SPRING_AI_MCP_CLIENT_ENABLED=false \\"
+        echo "     -e SPRING_AI_MCP_CLIENT_TOOLCALLBACK_ENABLED=false \\"
+        echo "     -e CONTEXT7_ENABLED=false \\"
+        echo "     maven-tools-mcp:${PROJECT_VERSION}"
         exit 0
         ;;
     5)
@@ -105,8 +130,31 @@ case $choice in
         (cd .. && ./mvnw test)
         echo "✅ Tests completed successfully!"
         ;;
+    7)
+        echo "🐳 Building Native Docker image WITHOUT Context7..."
+        echo "⏳ This may take 10-15 minutes for native compilation..."
+        echo "Step 1: Package application..."
+        (cd .. && ./mvnw clean package -DskipTests)
+        
+        # Get project version for image name
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.5.0")
+        
+        echo ""
+        echo "Step 2: Build Native Docker image with no-context7 profile..."
+        (cd .. && SPRING_PROFILES_ACTIVE=docker,no-context7 ./mvnw -Pnative spring-boot:build-image \
+          -Dspring-boot.build-image.imageName=maven-tools-mcp:${PROJECT_VERSION}-noc7)
+        
+        echo ""
+        echo "✅ Native Docker image built successfully!"
+        echo ""
+        echo "Image created: maven-tools-mcp:${PROJECT_VERSION}-noc7"
+        echo ""
+        echo "🚀 Run with:"
+        echo "   docker run -i maven-tools-mcp:${PROJECT_VERSION}-noc7"
+        exit 0
+        ;;
     *)
-        echo "❌ Invalid option. Please choose 1-6."
+        echo "❌ Invalid option. Please choose 1-7."
         exit 1
         ;;
 esac
