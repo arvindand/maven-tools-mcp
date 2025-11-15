@@ -15,6 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [1.5.2] - 2025-11-07
+
+**Docker Metadata Accuracy Release** - Ensures published images surface the actual build timestamp for auditability across all deployment targets.
+
+### Changed (1.5.2)
+
+- **CI/CD Workflow**: Set `spring-boot.build-image.createdDate=now` during Docker image builds so Docker Hub reports the real creation time instead of the reproducible-build epoch
+
+### Fixed (1.5.2)
+
+- **Image Timestamp Drift**: Eliminated misleading "45 years ago" timestamps on published images by stamping actual build times during image creation
+
 ## [1.5.1] - 2025-10-22
 
 **Corporate Environment Support Release** - Adds dual-image build strategy and comprehensive documentation for corporate networks with SSL inspection/MITM proxies.
@@ -351,7 +363,10 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.2...HEAD
+[1.5.2]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.1...v1.5.2
+[1.5.1]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.0...v1.5.1
+[1.5.0]: https://github.com/arvindand/maven-tools-mcp/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/arvindand/maven-tools-mcp/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/arvindand/maven-tools-mcp/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/arvindand/maven-tools-mcp/compare/v1.1.1...v1.2.0

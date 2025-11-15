@@ -45,12 +45,13 @@ jobs:
 
       - name: Build and push AMD64 images (with and without Context7)
         run: |
-          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.4.0")
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.5.2")
 
           # Build AMD64 native image WITH Context7
           SPRING_PROFILES_ACTIVE=docker ./mvnw -Pnative spring-boot:build-image \
             -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64 \
             -Dspring-boot.build-image.env.BP_NATIVE_IMAGE_BUILD_ARGUMENTS="-march=x86-64-v2 --no-fallback" \
+            -Dspring-boot.build-image.createdDate=now \
             -Dspring-boot.build-image.publish=true \
             -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
             -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
@@ -59,6 +60,7 @@ jobs:
           SPRING_PROFILES_ACTIVE=docker,no-context7 ./mvnw -Pnative spring-boot:build-image \
             -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION}-noc7-amd64 \
             -Dspring-boot.build-image.env.BP_NATIVE_IMAGE_BUILD_ARGUMENTS="-march=x86-64-v2 --no-fallback" \
+            -Dspring-boot.build-image.createdDate=now \
             -Dspring-boot.build-image.publish=true \
             -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
             -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
@@ -97,11 +99,12 @@ jobs:
 
       - name: Build and push ARM64 images (with and without Context7)
         run: |
-          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.4.0")
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.5.2")
 
           # Build ARM64 native image WITH Context7
           SPRING_PROFILES_ACTIVE=docker ./mvnw -Pnative spring-boot:build-image \
             -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64 \
+            -Dspring-boot.build-image.createdDate=now \
             -Dspring-boot.build-image.publish=true \
             -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
             -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
@@ -109,6 +112,7 @@ jobs:
           # Build ARM64 native image WITHOUT Context7 (noc7 variant)
           SPRING_PROFILES_ACTIVE=docker,no-context7 ./mvnw -Pnative spring-boot:build-image \
             -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION}-noc7-arm64 \
+            -Dspring-boot.build-image.createdDate=now \
             -Dspring-boot.build-image.publish=true \
             -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
             -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
@@ -132,7 +136,7 @@ jobs:
 
       - name: Create and push multi-architecture manifests
         run: |
-          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.4.0")
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.5.2")
 
           # Create multi-architecture manifest for version tag (WITH Context7)
           docker manifest create arvindand/maven-tools-mcp:${PROJECT_VERSION} \
@@ -187,11 +191,13 @@ jobs:
 
           # Build with Context7 (default)
           SPRING_PROFILES_ACTIVE=docker ./mvnw -Pnative spring-boot:build-image \
-            -Dspring-boot.build-image.imageName=maven-tools-mcp:pr-${{ github.event.number }}
+            -Dspring-boot.build-image.imageName=maven-tools-mcp:pr-${{ github.event.number }} \
+            -Dspring-boot.build-image.createdDate=now
 
           # Build without Context7 (noc7 variant)
           SPRING_PROFILES_ACTIVE=docker,no-context7 ./mvnw -Pnative spring-boot:build-image \
-            -Dspring-boot.build-image.imageName=maven-tools-mcp:pr-${{ github.event.number }}-noc7
+            -Dspring-boot.build-image.imageName=maven-tools-mcp:pr-${{ github.event.number }}-noc7 \
+            -Dspring-boot.build-image.createdDate=now
 
           # Test both images
           echo "Testing image with Context7..."
