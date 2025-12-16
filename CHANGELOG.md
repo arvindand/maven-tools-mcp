@@ -15,6 +15,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [1.5.3] - 2025-12-16
+
+**MCP Protocol Compatibility Release** - Fixes MCP server startup failure with latest Copilot/Claude clients by upgrading to Spring AI 1.1.2 GA.
+
+### Changed (1.5.3)
+
+- **Updated Dependencies**:
+  - Spring AI updated to 1.1.2 (from 1.1.0-M3) - stable GA release with MCP protocol fixes
+  - Spring Boot parent updated to 3.5.8 (from 3.5.6)
+
+### Fixed (1.5.3)
+
+- **MCP Protocol Compatibility**: Fixed `Unrecognized field "form"` error in `McpSchema$ClientCapabilities$Elicitation` that prevented server startup with latest MCP clients (GitHub Copilot, Claude Desktop)
+
 ## [1.5.2] - 2025-11-07
 
 **Docker Metadata Accuracy Release** - Ensures published images surface the actual build timestamp for auditability across all deployment targets.
@@ -363,7 +377,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.2...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.3...HEAD
+[1.5.3]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/arvindand/maven-tools-mcp/compare/v1.4.0...v1.5.0
