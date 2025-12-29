@@ -15,6 +15,13 @@ import com.arvindand.mcp.maven.model.VersionComparison;
 import com.arvindand.mcp.maven.model.VersionInfo;
 import com.arvindand.mcp.maven.model.VersionTimelineAnalysis;
 import com.arvindand.mcp.maven.model.VersionsByType;
+import com.arvindand.mcp.maven.model.license.LicenseFindings;
+import com.arvindand.mcp.maven.model.license.LicenseInfo;
+import com.arvindand.mcp.maven.model.security.SecurityAssessment;
+import com.arvindand.mcp.maven.model.security.SecurityFindings;
+import com.arvindand.mcp.maven.model.security.SecuritySummary;
+import com.arvindand.mcp.maven.model.security.VulnerabilityInfo;
+import com.arvindand.mcp.maven.service.VulnerabilityService;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
@@ -88,6 +95,25 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, ProjectHealthAnalysis.DependencyHealthAnalysis.class);
       registerRecordClass(hints, VersionsByType.class);
 
+      // Register security + license enrichment records (v2.0.0+)
+      registerRecordClass(hints, SecurityAssessment.class);
+      registerRecordClass(hints, SecuritySummary.class);
+      registerRecordClass(hints, SecurityFindings.class);
+      registerRecordClass(hints, LicenseInfo.class);
+      registerRecordClass(hints, LicenseFindings.class);
+      registerRecordClass(hints, VulnerabilityInfo.class);
+
+      // Register OSV API DTOs for native image JSON serialization (v2.0.0)
+      registerRecordClass(hints, VulnerabilityService.OsvRequest.class);
+      registerRecordClass(hints, VulnerabilityService.OsvPackage.class);
+      registerRecordClass(hints, VulnerabilityService.OsvResponse.class);
+      registerRecordClass(hints, VulnerabilityService.OsvVulnerability.class);
+      registerRecordClass(hints, VulnerabilityService.OsvSeverity.class);
+      registerRecordClass(hints, VulnerabilityService.OsvAffected.class);
+      registerRecordClass(hints, VulnerabilityService.OsvRange.class);
+      registerRecordClass(hints, VulnerabilityService.OsvEvent.class);
+      registerRecordClass(hints, VulnerabilityService.OsvReference.class);
+
       registerRecordClass(hints, ToolResponse.class);
       registerRecordClass(hints, ToolResponse.Success.class);
       registerRecordClass(hints, ToolResponse.Error.class);
@@ -99,6 +125,11 @@ public class NativeImageConfiguration {
       // Register enum classes for Jackson serialization and reflection access
       registerEnumClass(hints, VersionInfo.VersionType.class);
       registerEnumClass(hints, BulkCheckResult.Status.class);
+
+      // Register security + license enum classes (v2.0.0+)
+      registerEnumClass(hints, SecurityAssessment.Status.class);
+      registerEnumClass(hints, SecurityAssessment.Severity.class);
+      registerEnumClass(hints, LicenseInfo.LicenseCategory.class);
 
       // Register new analytical intelligence enum classes (v1.1.0)
       registerEnumClass(hints, DependencyAgeAnalysis.AgeClassification.class);

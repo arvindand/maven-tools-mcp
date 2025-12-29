@@ -22,6 +22,12 @@ public record McpError(String code, String message, Map<String, Object> data, In
   public static final String PARSE_ERROR = "PARSE_ERROR";
   public static final String EXTERNAL_SERVICE_UNAVAILABLE = "EXTERNAL_SERVICE_UNAVAILABLE";
   public static final String INTERNAL_ERROR = "INTERNAL_ERROR";
+  public static final String SECURITY_CHECK_FAILED = "SECURITY_CHECK_FAILED";
+  public static final String LICENSE_CHECK_FAILED = "LICENSE_CHECK_FAILED";
+  public static final String RATE_LIMITED = "RATE_LIMITED";
+
+  // Data field constants
+  private static final String SUGGESTION = "suggestion";
 
   /**
    * Create error for invalid input parameters.
@@ -72,5 +78,53 @@ public record McpError(String code, String message, Map<String, Object> data, In
    */
   public static McpError internalError(String message) {
     return new McpError(INTERNAL_ERROR, message, Map.of(), null);
+  }
+
+  /**
+   * Create error for vulnerability service failures.
+   *
+   * @param dependency The dependency that could not be scanned
+   * @param reason Explanation of the failure
+   * @return McpError with SECURITY_CHECK_FAILED code
+   */
+  public static McpError securityCheckError(String dependency, String reason) {
+    return new McpError(
+        SECURITY_CHECK_FAILED,
+        "Could not check vulnerabilities: " + reason,
+        Map.of("dependency", dependency, SUGGESTION, "Verify manually at https://osv.dev"),
+        null);
+  }
+
+  /**
+   * Create error for license extraction failures.
+   *
+   * @param dependency The dependency that could not be analyzed
+   * @param reason Explanation of the failure
+   * @return McpError with LICENSE_CHECK_FAILED code
+   */
+  public static McpError licenseCheckError(String dependency, String reason) {
+    return new McpError(
+        LICENSE_CHECK_FAILED,
+        "Could not extract license: " + reason,
+        Map.of(
+            "dependency",
+            dependency,
+            SUGGESTION,
+            "Check license manually in the dependency's POM file"),
+        null);
+  }
+
+  /**
+   * Create error for rate limit exceeded.
+   *
+   * @param service The service that rate limited the request
+   * @return McpError with RATE_LIMITED code
+   */
+  public static McpError rateLimitError(String service) {
+    return new McpError(
+        RATE_LIMITED,
+        service + " rate limit exceeded",
+        Map.of(SUGGESTION, "Try again in a few seconds or reduce batch size"),
+        5);
   }
 }

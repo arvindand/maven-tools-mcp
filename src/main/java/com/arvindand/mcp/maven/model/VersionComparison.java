@@ -1,5 +1,7 @@
 package com.arvindand.mcp.maven.model;
 
+import com.arvindand.mcp.maven.model.security.SecurityAssessment;
+import com.arvindand.mcp.maven.model.security.SecuritySummary;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import java.time.Instant;
@@ -12,6 +14,7 @@ import java.util.Optional;
  * @param comparisonDate when the comparison was performed
  * @param dependencies individual comparison results for each dependency
  * @param updateSummary overall summary of available updates
+ * @param securitySummary aggregate security findings (null if scanning disabled)
  * @author Arvind Menon
  * @since 1.3.0
  */
@@ -19,7 +22,16 @@ import java.util.Optional;
 public record VersionComparison(
     Instant comparisonDate,
     List<DependencyComparisonResult> dependencies,
-    UpdateSummary updateSummary) {
+    UpdateSummary updateSummary,
+    SecuritySummary securitySummary) {
+
+  /** Constructor without security summary for backward compatibility. */
+  public VersionComparison(
+      Instant comparisonDate,
+      List<DependencyComparisonResult> dependencies,
+      UpdateSummary updateSummary) {
+    this(comparisonDate, dependencies, updateSummary, null);
+  }
 
   /** Individual dependency comparison result. */
   public record DependencyComparisonResult(
@@ -31,6 +43,7 @@ public record VersionComparison(
       boolean updateAvailable,
       String status,
       String error,
+      Optional<SecurityAssessment> security,
       Optional<Context7Guidance> context7Guidance) {
 
     public static DependencyComparisonResult success(
@@ -56,22 +69,84 @@ public record VersionComparison(
           updateAvailable,
           "success",
           null,
+          Optional.empty(),
+          guidance);
+    }
+
+    public static DependencyComparisonResult successWithSecurity(
+        String dependency,
+        String currentVersion,
+        String latestVersion,
+        String latestType,
+        String updateType,
+        boolean updateAvailable,
+        SecurityAssessment security,
+        boolean context7Enabled) {
+      Optional<Context7Guidance> guidance =
+          (updateAvailable && context7Enabled)
+              ? Optional.of(Context7Guidance.forMigration(dependency, updateType))
+              : Optional.empty();
+
+      return new DependencyComparisonResult(
+          dependency,
+          currentVersion,
+          latestVersion,
+          latestType,
+          updateType,
+          updateAvailable,
+          "success",
+          null,
+          Optional.ofNullable(security),
           guidance);
     }
 
     public static DependencyComparisonResult notFound(String dependency, String currentVersion) {
       return new DependencyComparisonResult(
-          dependency, currentVersion, null, null, null, false, "not_found", null, Optional.empty());
+          dependency,
+          currentVersion,
+          null,
+          null,
+          null,
+          false,
+          "not_found",
+          null,
+          Optional.empty(),
+          Optional.empty());
     }
 
     public static DependencyComparisonResult noCurrentVersion(String dependency) {
       return new DependencyComparisonResult(
-          dependency, null, null, null, null, false, "no_current_version", null, Optional.empty());
+          dependency,
+          null,
+          null,
+          null,
+          null,
+          false,
+          "no_current_version",
+          null,
+          Optional.empty(),
+          Optional.empty());
     }
 
     public static DependencyComparisonResult error(String dependency, String error) {
       return new DependencyComparisonResult(
-          dependency, null, null, null, null, false, "error", error, Optional.empty());
+          dependency,
+          null,
+          null,
+          null,
+          null,
+          false,
+          "error",
+          error,
+          Optional.empty(),
+          Optional.empty());
+    }
+
+    /** Check if this dependency requires urgent security action. */
+    public boolean requiresSecurityAction() {
+      return security.isPresent()
+          && security.get().status() == SecurityAssessment.Status.VULNERABLE
+          && security.get().requiresAction();
     }
   }
 

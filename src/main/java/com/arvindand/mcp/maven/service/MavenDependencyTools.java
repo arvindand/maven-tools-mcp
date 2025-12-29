@@ -1,5 +1,6 @@
 package com.arvindand.mcp.maven.service;
 
+import com.arvindand.mcp.maven.MavenToolsConstants;
 import com.arvindand.mcp.maven.config.Context7Properties;
 import com.arvindand.mcp.maven.model.BulkCheckResult;
 import com.arvindand.mcp.maven.model.DependencyAge;
@@ -19,6 +20,12 @@ import com.arvindand.mcp.maven.model.VersionTimelineAnalysis.RecentActivity.Acti
 import com.arvindand.mcp.maven.model.VersionTimelineAnalysis.TimelineEntry.ReleaseGap;
 import com.arvindand.mcp.maven.model.VersionTimelineAnalysis.VelocityTrend.TrendDirection;
 import com.arvindand.mcp.maven.model.VersionsByType;
+import com.arvindand.mcp.maven.model.license.LicenseFindings;
+import com.arvindand.mcp.maven.model.license.LicenseInfo;
+import com.arvindand.mcp.maven.model.license.LicenseInfo.LicenseCategory;
+import com.arvindand.mcp.maven.model.security.SecurityAssessment;
+import com.arvindand.mcp.maven.model.security.SecurityFindings;
+import com.arvindand.mcp.maven.model.security.SecuritySummary;
 import com.arvindand.mcp.maven.util.MavenCoordinateParser;
 import com.arvindand.mcp.maven.util.VersionComparator;
 import java.time.Duration;
@@ -28,12 +35,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +68,8 @@ public class MavenDependencyTools {
   private static final String INVALID_MAVEN_COORDINATE_FORMAT = "Invalid Maven coordinate format: ";
   private static final String SUCCESS_STATUS = "success";
   private static final String ACTIVE_MAINTENANCE = "active";
+  private static final String MODERATE_MAINTENANCE = "moderate";
+  private static final String SLOW_MAINTENANCE = "slow";
 
   // Health level constants
   private static final String EXCELLENT_HEALTH = "excellent";
@@ -98,14 +112,20 @@ public class MavenDependencyTools {
   private final MavenCentralService mavenCentralService;
   private final VersionComparator versionComparator;
   private final Context7Properties context7Properties;
+  private final VulnerabilityService vulnerabilityService;
+
+  private static final int MAX_CONCURRENT_REQUESTS = MavenToolsConstants.MAX_CONCURRENT_REQUESTS;
+  private final Semaphore batchSemaphore = new Semaphore(MAX_CONCURRENT_REQUESTS);
 
   public MavenDependencyTools(
       MavenCentralService mavenCentralService,
       VersionComparator versionComparator,
-      Context7Properties context7Properties) {
+      Context7Properties context7Properties,
+      VulnerabilityService vulnerabilityService) {
     this.mavenCentralService = mavenCentralService;
     this.versionComparator = versionComparator;
     this.context7Properties = context7Properties;
+    this.vulnerabilityService = vulnerabilityService;
   }
 
   /**
@@ -234,9 +254,10 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Bulk. For many coordinates (no versions), returns per-dependency latest versions by"
-              + " type. Set stabilityFilter to ALL (default), STABLE_ONLY, or PREFER_STABLE."
-              + " Use for audits of multiple dependencies.")
+          "Bulk lookup (NO versions in input). Returns latest versions by type for each"
+              + " dependency. Use when you have a list of dependencies without versions and need to"
+              + " find what versions are available. For upgrade checks, use compare_dependency_versions"
+              + " instead.")
   public ToolResponse check_multiple_dependencies(
       @ToolParam(
               description =
@@ -256,20 +277,8 @@ public class MavenDependencyTools {
           List<String> depList = parseDependencies(dependencies);
           StabilityFilter filter = stabilityFilter != null ? stabilityFilter : StabilityFilter.ALL;
 
-          List<BulkCheckResult> results;
-          try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<CompletableFuture<BulkCheckResult>> futures =
-                depList.stream()
-                    .distinct()
-                    .map(
-                        dep ->
-                            CompletableFuture.supplyAsync(
-                                () -> processVersionCheck(dep, filter), executor))
-                    .toList();
-            results = futures.stream().map(CompletableFuture::join).toList();
-          }
-
-          return results;
+          return processBatchWithBackpressure(
+              depList.stream().distinct().toList(), dep -> processVersionCheck(dep, filter));
         });
   }
 
@@ -279,14 +288,15 @@ public class MavenDependencyTools {
    * @param currentDependencies comma or newline separated list of dependency coordinates with
    *     versions
    * @param stabilityFilter controls upgrade targets: ALL, STABLE_ONLY, or PREFER_STABLE
+   * @param includeSecurityScan whether to scan for vulnerabilities (default: true)
    * @return JSON response with version comparison and update recommendations
    */
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Bulk compare. Input includes versions. Suggests upgrades and classifies update type"
-              + " (major/minor/patch). Set stabilityFilter to ALL (default), STABLE_ONLY, or"
-              + " PREFER_STABLE. Never suggests downgrades.")
+          "Bulk upgrade check (versions REQUIRED in input). Compares current versions to latest and"
+              + " suggests upgrades (major/minor/patch). Includes CVE vulnerability scanning."
+              + " Use when user provides their current dependency versions and wants upgrade advice.")
   public ToolResponse compare_dependency_versions(
       @ToolParam(
               description =
@@ -300,28 +310,56 @@ public class MavenDependencyTools {
                       + " PREFER_STABLE (prioritize stable). Default: ALL",
               required = false)
           @Nullable
-          StabilityFilter stabilityFilter) {
+          StabilityFilter stabilityFilter,
+      @ToolParam(
+              description =
+                  "Whether to scan dependencies for known vulnerabilities using OSV.dev. Default:"
+                      + " true",
+              required = false)
+          @Nullable
+          Boolean includeSecurityScan) {
     return executeToolOperation(
         () -> {
           List<String> depList = parseDependencies(currentDependencies);
           StabilityFilter filter = stabilityFilter != null ? stabilityFilter : StabilityFilter.ALL;
+          boolean scanSecurity = includeSecurityScan == null || includeSecurityScan;
 
-          List<VersionComparison.DependencyComparisonResult> results;
-          try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<CompletableFuture<VersionComparison.DependencyComparisonResult>> futures =
-                depList.stream()
-                    .distinct()
-                    .map(
-                        dep ->
-                            CompletableFuture.supplyAsync(
-                                () -> compareDependencyVersion(dep, filter), executor))
-                    .toList();
-            results = futures.stream().map(CompletableFuture::join).toList();
-          }
+          final Map<String, SecurityAssessment> securityAssessments =
+              scanSecurity ? scanDependenciesForVulnerabilityAssessments(depList) : Map.of();
+          final SecuritySummary securitySummary =
+              scanSecurity ? SecuritySummary.fromAssessments(securityAssessments) : null;
+
+          List<VersionComparison.DependencyComparisonResult> results =
+              processBatchWithBackpressure(
+                  depList.stream().distinct().toList(),
+                  dep -> compareDependencyVersion(dep, filter, securityAssessments));
 
           VersionComparison.UpdateSummary summary = calculateUpdateSummary(results);
-          return new VersionComparison(Instant.now(), results, summary);
+
+          return new VersionComparison(Instant.now(), results, summary, securitySummary);
         });
+  }
+
+  private Map<String, SecurityAssessment> scanDependenciesForVulnerabilityAssessments(
+      List<String> dependencies) {
+    List<MavenCoordinate> coordinates =
+        dependencies.stream()
+            .map(
+                dep -> {
+                  try {
+                    return MavenCoordinateParser.parse(dep);
+                  } catch (RuntimeException _) {
+                    return null;
+                  }
+                })
+            .filter(coord -> coord != null && coord.version() != null)
+            .toList();
+
+    if (coordinates.isEmpty()) {
+      return Map.of();
+    }
+
+    return vulnerabilityService.scanBulk(coordinates);
   }
 
   /**
@@ -482,14 +520,17 @@ public class MavenDependencyTools {
    * @param dependencies comma or newline separated list of dependency coordinates
    * @param maxAgeInDays optional maximum acceptable age in days for health scoring
    * @param stabilityFilter controls recommendations: ALL, STABLE_ONLY, or PREFER_STABLE
+   * @param includeSecurityScan whether to scan for vulnerabilities (default: true)
+   * @param includeLicenseScan whether to check license information (default: true)
    * @return JSON response with project health summary and individual dependency analysis
    */
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Bulk project view. Summarizes health across many dependencies using age and maintenance"
-              + " patterns, with concise recommendations. Set stabilityFilter to ALL (default),"
-              + " STABLE_ONLY, or PREFER_STABLE for upgrade recommendations.")
+          "Bulk project view (PREFERRED for full audits). Summarizes health across many"
+              + " dependencies using age and maintenance patterns. Includes CVE vulnerability"
+              + " scanning and license compliance. Use this instead of check_multiple_dependencies"
+              + " when you need security/license info or overall project health assessment.")
   public ToolResponse analyze_project_health(
       @ToolParam(
               description =
@@ -511,7 +552,19 @@ public class MavenDependencyTools {
                       + " PREFER_STABLE (prioritize stable). Default: PREFER_STABLE",
               required = false)
           @Nullable
-          StabilityFilter stabilityFilter) {
+          StabilityFilter stabilityFilter,
+      @ToolParam(
+              description =
+                  "Whether to scan dependencies for known vulnerabilities using OSV.dev. Default:"
+                      + " true",
+              required = false)
+          @Nullable
+          Boolean includeSecurityScan,
+      @ToolParam(
+              description = "Whether to check license information for dependencies. Default: true",
+              required = false)
+          @Nullable
+          Boolean includeLicenseScan) {
     return executeToolOperation(
         () -> {
           List<String> depList = parseDependencies(dependencies);
@@ -520,22 +573,377 @@ public class MavenDependencyTools {
             throw new IllegalArgumentException("No dependencies provided for analysis");
           }
 
+          boolean scanSecurity = includeSecurityScan == null || includeSecurityScan;
+          boolean scanLicenses = includeLicenseScan == null || includeLicenseScan;
+
+          final Map<String, SecurityAssessment> securityByDependency =
+              scanSecurity ? scanLatestDependencySecurity(depList) : Map.of();
+          final Map<String, List<LicenseInfo>> licensesByDependency =
+              scanLicenses ? scanLatestDependencyLicenses(depList) : Map.of();
+
           // Analyze each dependency for age and patterns
-          List<ProjectHealthAnalysis.DependencyHealthAnalysis> dependencyAnalyses;
-          try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<CompletableFuture<ProjectHealthAnalysis.DependencyHealthAnalysis>> futures =
-                depList.stream()
-                    .distinct()
-                    .map(
-                        dep ->
-                            CompletableFuture.supplyAsync(
-                                () -> analyzeSimpleDependencyHealth(dep, maxAgeInDays), executor))
-                    .toList();
-            dependencyAnalyses = futures.stream().map(CompletableFuture::join).toList();
+          List<ProjectHealthAnalysis.DependencyHealthAnalysis> dependencyAnalyses =
+              processBatchWithBackpressure(
+                  depList.stream().distinct().toList(),
+                  dep ->
+                      analyzeDependencyHealthWithSecurityAndLicenses(
+                          dep,
+                          maxAgeInDays,
+                          scanSecurity,
+                          securityByDependency,
+                          scanLicenses,
+                          licensesByDependency));
+
+          // Perform security scan if requested
+          SecurityFindings securityFindings = null;
+          if (scanSecurity) {
+            SecuritySummary summary = SecuritySummary.fromAssessments(securityByDependency);
+            securityFindings = SecurityFindings.fromSummary(summary);
           }
 
-          return buildSimpleHealthSummary(dependencyAnalyses, maxAgeInDays);
+          // Perform license scan if requested
+          LicenseFindings licenseFindings = null;
+          if (scanLicenses) {
+            licenseFindings = buildLicenseFindings(licensesByDependency);
+          }
+
+          return buildSimpleHealthSummary(
+              dependencyAnalyses, maxAgeInDays, securityFindings, licenseFindings);
         });
+  }
+
+  private <T> List<T> processBatchWithBackpressure(
+      List<String> items, Function<String, T> processor) {
+    if (items == null || items.isEmpty()) {
+      return List.of();
+    }
+
+    try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+      List<CompletableFuture<T>> futures =
+          items.stream()
+              .map(
+                  item ->
+                      CompletableFuture.supplyAsync(
+                          () -> {
+                            boolean acquired = false;
+                            try {
+                              batchSemaphore.acquire();
+                              acquired = true;
+                              return processor.apply(item);
+                            } catch (InterruptedException _) {
+                              Thread.currentThread().interrupt();
+                              return null;
+                            } finally {
+                              if (acquired) {
+                                batchSemaphore.release();
+                              }
+                            }
+                          },
+                          executor))
+              .toList();
+
+      return futures.stream()
+          .map(
+              f -> {
+                try {
+                  return f.get(MavenToolsConstants.DEFAULT_BATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                } catch (InterruptedException _) {
+                  Thread.currentThread().interrupt();
+                  logger.warn("Batch interrupted");
+                  return null;
+                } catch (java.util.concurrent.TimeoutException
+                    | java.util.concurrent.ExecutionException
+                    | RuntimeException e) {
+                  logger.warn("Batch item failed: {}", e.getMessage());
+                  return null;
+                }
+              })
+          .filter(Objects::nonNull)
+          .toList();
+    }
+  }
+
+  private ProjectHealthAnalysis.DependencyHealthAnalysis
+      analyzeDependencyHealthWithSecurityAndLicenses(
+          String dependency,
+          Integer maxAgeInDays,
+          boolean scanSecurity,
+          Map<String, SecurityAssessment> securityByDependency,
+          boolean scanLicenses,
+          Map<String, List<LicenseInfo>> licensesByDependency) {
+    try {
+      MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
+      String gaKey = gaKey(coordinate);
+
+      List<MavenArtifact> versions =
+          mavenCentralService.getRecentVersionsWithAccurateTimestamps(coordinate, 10);
+      if (versions.isEmpty()) {
+        return ProjectHealthAnalysis.DependencyHealthAnalysis.notFound(dependency);
+      }
+
+      MavenArtifact latestVersion = versions.get(0);
+      DependencyAgeAnalysis ageAnalysis =
+          DependencyAgeAnalysis.fromTimestamp(
+              coordinate.toCoordinateString(), latestVersion.version(), latestVersion.timestamp());
+
+      String maintenanceStatus = determineMaintenanceStatus(versions);
+      int freshnessScore = calculateFreshnessScore(ageAnalysis, maxAgeInDays);
+      int maintenanceScore = calculateMaintenanceScore(maintenanceStatus);
+
+      SecurityAssessment security =
+          resolveSecurityAssessment(scanSecurity, gaKey, securityByDependency);
+      List<LicenseInfo> licenses = resolveLicenses(scanLicenses, gaKey, licensesByDependency);
+
+      int healthScore =
+          (scanSecurity || scanLicenses)
+              ? calculateHealthScoreWithSecurityAndLicense(
+                  freshnessScore, maintenanceScore, security, licenses)
+              : calculateSimpleHealthScore(ageAnalysis, maintenanceStatus, maxAgeInDays);
+
+      if (scanSecurity || scanLicenses) {
+        return ProjectHealthAnalysis.DependencyHealthAnalysis.successWithSecurityAndLicenses(
+            dependency,
+            latestVersion.version(),
+            ageAnalysis.ageClassification().getName(),
+            ageAnalysis.daysSinceLastRelease(),
+            healthScore,
+            maintenanceStatus,
+            security,
+            licenses,
+            context7Properties.enabled());
+      }
+
+      return ProjectHealthAnalysis.DependencyHealthAnalysis.success(
+          dependency,
+          latestVersion.version(),
+          ageAnalysis.ageClassification().getName(),
+          ageAnalysis.daysSinceLastRelease(),
+          healthScore,
+          maintenanceStatus,
+          context7Properties.enabled());
+    } catch (RuntimeException e) {
+      return ProjectHealthAnalysis.DependencyHealthAnalysis.error(dependency, e.getMessage());
+    }
+  }
+
+  private String determineMaintenanceStatus(List<MavenArtifact> versions) {
+    Instant now = Instant.now();
+    Instant sixMonthsAgo = now.minus(6L * DAYS_IN_MONTH, ChronoUnit.DAYS);
+
+    long recentVersions =
+        versions.stream()
+            .filter(v -> Instant.ofEpochMilli(v.timestamp()).isAfter(sixMonthsAgo))
+            .count();
+
+    if (recentVersions >= 3) {
+      return ACTIVE_MAINTENANCE;
+    }
+    if (recentVersions >= 1) {
+      return MODERATE_MAINTENANCE;
+    }
+    return SLOW_MAINTENANCE;
+  }
+
+  private SecurityAssessment resolveSecurityAssessment(
+      boolean scanSecurity, String gaKey, Map<String, SecurityAssessment> securityByDependency) {
+    if (!scanSecurity) {
+      return null;
+    }
+    SecurityAssessment security =
+        securityByDependency != null ? securityByDependency.get(gaKey) : null;
+    return security != null
+        ? security
+        : SecurityAssessment.unknown("Security assessment unavailable");
+  }
+
+  private List<LicenseInfo> resolveLicenses(
+      boolean scanLicenses, String gaKey, Map<String, List<LicenseInfo>> licensesByDependency) {
+    if (!scanLicenses) {
+      return List.of();
+    }
+    return licensesByDependency != null
+        ? licensesByDependency.getOrDefault(gaKey, List.of())
+        : List.of();
+  }
+
+  private static String gaKey(MavenCoordinate coordinate) {
+    return coordinate.groupId() + ":" + coordinate.artifactId();
+  }
+
+  private int calculateFreshnessScore(DependencyAgeAnalysis ageAnalysis, Integer maxAgeInDays) {
+    int score = PERFECT_HEALTH_SCORE;
+
+    switch (ageAnalysis.ageClassification()) {
+      case FRESH -> score -= 0;
+      case CURRENT -> score -= CURRENT_VERSION_PENALTY;
+      case AGING -> score -= AGING_VERSION_PENALTY;
+      case STALE -> score -= STALE_VERSION_PENALTY;
+    }
+
+    if (maxAgeInDays != null && ageAnalysis.daysSinceLastRelease() > maxAgeInDays) {
+      score -= AGE_THRESHOLD_PENALTY;
+    }
+
+    return Math.max(0, score);
+  }
+
+  private int calculateMaintenanceScore(String maintenanceStatus) {
+    int score = PERFECT_HEALTH_SCORE;
+
+    switch (maintenanceStatus) {
+      case ACTIVE_MAINTENANCE -> score -= 0;
+      case MODERATE_MAINTENANCE -> score -= MODERATE_MAINTENANCE_PENALTY;
+      case SLOW_MAINTENANCE -> score -= SLOW_MAINTENANCE_PENALTY;
+      default -> {
+        // Unknown maintenance status - no penalty
+      }
+    }
+
+    return Math.max(0, score);
+  }
+
+  /**
+   * Updated health score calculation including security and license.
+   *
+   * <p>Weights: freshness 30%, maintenance 25%, security 35%, license 10%.
+   */
+  private int calculateHealthScoreWithSecurityAndLicense(
+      int freshnessScore,
+      int maintenanceScore,
+      SecurityAssessment security,
+      List<LicenseInfo> licenses) {
+    int securityScore = calculateSecurityScore(security);
+    int licenseScore = calculateLicenseScore(licenses);
+
+    return (int)
+        Math.round(
+            freshnessScore * 0.30
+                + maintenanceScore * 0.25
+                + securityScore * 0.35
+                + licenseScore * 0.10);
+  }
+
+  private int calculateSecurityScore(SecurityAssessment security) {
+    if (security == null) {
+      return 100;
+    }
+
+    return switch (security.status()) {
+      case OK -> 100;
+      case UNKNOWN -> 70;
+      case VULNERABLE -> {
+        int penalty =
+            security.criticalCves().size() * MavenToolsConstants.SECURITY_WEIGHT_CRITICAL
+                + security.highCves().size() * MavenToolsConstants.SECURITY_WEIGHT_HIGH;
+        yield Math.max(0, 100 - penalty);
+      }
+    };
+  }
+
+  private int calculateLicenseScore(List<LicenseInfo> licenses) {
+    if (licenses == null || licenses.isEmpty()) {
+      return 50;
+    }
+
+    boolean hasStrongCopyleft =
+        licenses.stream().anyMatch(l -> l.category() == LicenseCategory.STRONG_COPYLEFT);
+    if (hasStrongCopyleft) {
+      return 30;
+    }
+
+    boolean allPermissive =
+        licenses.stream().allMatch(l -> l.category() == LicenseCategory.PERMISSIVE);
+    return allPermissive ? 100 : 70;
+  }
+
+  private Map<String, SecurityAssessment> scanLatestDependencySecurity(List<String> dependencies) {
+    // Resolve latest versions and scan those versions
+    List<MavenCoordinate> coordinatesWithVersions = new ArrayList<>();
+
+    for (String dep : dependencies) {
+      try {
+        MavenCoordinate coord = MavenCoordinateParser.parse(dep);
+        String latestVersion = mavenCentralService.getLatestVersion(coord);
+        if (latestVersion != null) {
+          coordinatesWithVersions.add(
+              MavenCoordinate.of(coord.groupId(), coord.artifactId(), latestVersion));
+        }
+      } catch (Exception e) {
+        logger.debug("Could not resolve version for {}: {}", dep, e.getMessage());
+      }
+    }
+
+    if (coordinatesWithVersions.isEmpty()) {
+      return Map.of();
+    }
+
+    Map<String, SecurityAssessment> versionKeyed =
+        vulnerabilityService.scanBulk(coordinatesWithVersions);
+    Map<String, SecurityAssessment> byGa = new LinkedHashMap<>();
+
+    for (MavenCoordinate c : coordinatesWithVersions) {
+      String ga = gaKey(c);
+      SecurityAssessment assessment = versionKeyed.get(c.toCoordinateString());
+      if (assessment != null) {
+        byGa.put(ga, assessment);
+      }
+    }
+
+    return Map.copyOf(byGa);
+  }
+
+  private Map<String, List<LicenseInfo>> scanLatestDependencyLicenses(List<String> dependencies) {
+    Map<String, List<LicenseInfo>> byGa = new LinkedHashMap<>();
+
+    for (String dep : dependencies) {
+      try {
+        MavenCoordinate coord = MavenCoordinateParser.parse(dep);
+        String ga = gaKey(coord);
+        String latestVersion = mavenCentralService.getLatestVersion(coord);
+        if (latestVersion == null) {
+          byGa.put(ga, List.of());
+          continue;
+        }
+
+        MavenCoordinate coordWithVersion =
+            MavenCoordinate.of(coord.groupId(), coord.artifactId(), latestVersion);
+        byGa.put(ga, mavenCentralService.getLicenses(coordWithVersion));
+      } catch (Exception e) {
+        logger.debug("Could not scan license for {}: {}", dep, e.getMessage());
+      }
+    }
+
+    return Map.copyOf(byGa);
+  }
+
+  private LicenseFindings buildLicenseFindings(
+      Map<String, List<LicenseInfo>> licensesByDependency) {
+    if (licensesByDependency == null || licensesByDependency.isEmpty()) {
+      return LicenseFindings.empty();
+    }
+
+    LicenseFindings.Builder builder = LicenseFindings.builder();
+
+    for (var entry : licensesByDependency.entrySet()) {
+      String dependency = entry.getKey();
+      List<LicenseInfo> licenses = entry.getValue();
+
+      if (licenses == null || licenses.isEmpty()) {
+        builder.addUnknown(dependency);
+        continue;
+      }
+
+      LicenseInfo license = licenses.get(0);
+      if (license.isPermissive()) {
+        builder.addPermissive();
+      } else if (license.isCopyleft()) {
+        builder.addCopyleft(dependency, license.name());
+      } else {
+        builder.addUnknown(dependency);
+      }
+    }
+
+    return builder.build();
   }
 
   private ToolResponse notFoundResponse(MavenCoordinate coordinate) {
@@ -548,15 +956,22 @@ public class MavenDependencyTools {
     return ToolResponse.Error.notFound(message);
   }
 
-  @SuppressWarnings("java:S1172") // preferStable is used by VersionsByType.getPreferredVersion()
   private VersionsByType buildVersionsByType(
       MavenCoordinate coordinate, List<String> allVersions, StabilityFilter stabilityFilter) {
     Map<VersionType, String> versionsByType = HashMap.newHashMap(5);
+    boolean stableOnly = stabilityFilter == StabilityFilter.STABLE_ONLY;
 
     for (String version : allVersions) {
       VersionType type = versionComparator.getVersionType(version);
-      versionsByType.putIfAbsent(type, version);
-      if (versionsByType.size() == 5) break;
+      if (!stableOnly || type == VersionType.STABLE) {
+        versionsByType.putIfAbsent(type, version);
+      }
+
+      boolean done =
+          stableOnly ? versionsByType.containsKey(VersionType.STABLE) : versionsByType.size() == 5;
+      if (done) {
+        break;
+      }
     }
 
     return VersionsByType.create(
@@ -623,7 +1038,9 @@ public class MavenDependencyTools {
   }
 
   private VersionComparison.DependencyComparisonResult compareDependencyVersion(
-      String dep, StabilityFilter stabilityFilter) {
+      String dep,
+      StabilityFilter stabilityFilter,
+      Map<String, SecurityAssessment> securityAssessments) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
       String currentVersion = coordinate.version();
@@ -646,7 +1063,22 @@ public class MavenDependencyTools {
       String updateType = versionComparator.determineUpdateType(currentVersion, latestVersion);
       boolean updateAvailable = versionComparator.compare(currentVersion, latestVersion) < 0;
 
-      // Return basic comparison result
+      SecurityAssessment security = null;
+      if (securityAssessments != null && !securityAssessments.isEmpty()) {
+        security = securityAssessments.get(coordinate.toCoordinateString());
+      }
+
+      if (security != null) {
+        return VersionComparison.DependencyComparisonResult.successWithSecurity(
+            coordinate.toCoordinateString(),
+            currentVersion,
+            latestVersion,
+            latestType,
+            updateType,
+            updateAvailable,
+            security,
+            context7Properties.enabled());
+      }
 
       return VersionComparison.DependencyComparisonResult.success(
           coordinate.toCoordinateString(),
@@ -656,7 +1088,7 @@ public class MavenDependencyTools {
           updateType,
           updateAvailable,
           context7Properties.enabled());
-    } catch (Exception e) {
+    } catch (RuntimeException e) {
       return VersionComparison.DependencyComparisonResult.error(dep, e.getMessage());
     }
   }
@@ -693,7 +1125,7 @@ public class MavenDependencyTools {
           versionInfos.latestBeta(),
           versionInfos.latestAlpha(),
           versionInfos.latestMilestone());
-    } catch (Exception e) {
+    } catch (RuntimeException e) {
       logger.error("Error processing comprehensive version check for {}: {}", dep, e.getMessage());
       return BulkCheckResult.error(dep, e.getMessage());
     }
@@ -993,58 +1425,6 @@ public class MavenDependencyTools {
     return insights;
   }
 
-  private ProjectHealthAnalysis.DependencyHealthAnalysis analyzeSimpleDependencyHealth(
-      String dependency, Integer maxAgeInDays) {
-    try {
-      MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-      List<MavenArtifact> versions =
-          mavenCentralService.getRecentVersionsWithAccurateTimestamps(coordinate, 10);
-
-      if (versions.isEmpty()) {
-        return ProjectHealthAnalysis.DependencyHealthAnalysis.notFound(dependency);
-      }
-
-      MavenArtifact latestVersion = versions.get(0);
-      DependencyAgeAnalysis ageAnalysis =
-          DependencyAgeAnalysis.fromTimestamp(
-              coordinate.toCoordinateString(), latestVersion.version(), latestVersion.timestamp());
-
-      // Simple maintenance assessment based on recent versions
-      Instant now = Instant.now();
-      Instant sixMonthsAgo = now.minus(6L * DAYS_IN_MONTH, ChronoUnit.DAYS);
-
-      long recentVersions =
-          versions.stream()
-              .filter(v -> Instant.ofEpochMilli(v.timestamp()).isAfter(sixMonthsAgo))
-              .count();
-
-      String maintenanceStatus;
-      if (recentVersions >= 3) {
-        maintenanceStatus = ACTIVE_MAINTENANCE;
-      } else if (recentVersions >= 1) {
-        maintenanceStatus = "moderate";
-      } else {
-        maintenanceStatus = "slow";
-      }
-
-      // Health score (0-100)
-      int healthScore = calculateSimpleHealthScore(ageAnalysis, maintenanceStatus, maxAgeInDays);
-
-      // No upgrade strategy in basic analysis
-
-      return ProjectHealthAnalysis.DependencyHealthAnalysis.success(
-          dependency,
-          latestVersion.version(),
-          ageAnalysis.ageClassification().getName(),
-          ageAnalysis.daysSinceLastRelease(),
-          healthScore,
-          maintenanceStatus,
-          context7Properties.enabled());
-    } catch (Exception e) {
-      return ProjectHealthAnalysis.DependencyHealthAnalysis.error(dependency, e.getMessage());
-    }
-  }
-
   private int calculateSimpleHealthScore(
       DependencyAgeAnalysis ageAnalysis, String maintenanceStatus, Integer maxAgeInDays) {
 
@@ -1061,8 +1441,8 @@ public class MavenDependencyTools {
     // Maintenance penalty
     switch (maintenanceStatus) {
       case ACTIVE_MAINTENANCE -> score -= 0; // No penalty
-      case "moderate" -> score -= MODERATE_MAINTENANCE_PENALTY;
-      case "slow" -> score -= SLOW_MAINTENANCE_PENALTY;
+      case MODERATE_MAINTENANCE -> score -= MODERATE_MAINTENANCE_PENALTY;
+      case SLOW_MAINTENANCE -> score -= SLOW_MAINTENANCE_PENALTY;
       default -> {
         // Unknown maintenance status - no penalty
       }
@@ -1078,7 +1458,9 @@ public class MavenDependencyTools {
 
   private ProjectHealthAnalysis buildSimpleHealthSummary(
       List<ProjectHealthAnalysis.DependencyHealthAnalysis> dependencyAnalyses,
-      Integer maxAgeInDays) {
+      Integer maxAgeInDays,
+      SecurityFindings securityFindings,
+      LicenseFindings licenseFindings) {
 
     int totalDependencies = dependencyAnalyses.size();
     int successfulAnalyses =
@@ -1099,7 +1481,9 @@ public class MavenDependencyTools {
           0,
           new ProjectHealthAnalysis.AgeDistribution(0, 0, 0, 0),
           dependencyAnalyses,
-          List.of("Unable to analyze any dependencies"));
+          List.of("Unable to analyze any dependencies"),
+          securityFindings,
+          licenseFindings);
     }
 
     // Single pass through successful dependencies
@@ -1118,7 +1502,13 @@ public class MavenDependencyTools {
 
     // Generate recommendations
     List<String> recommendations =
-        generateHealthRecommendations(metrics, successfulAnalyses, successfulDeps, maxAgeInDays);
+        generateHealthRecommendations(
+            metrics,
+            successfulAnalyses,
+            successfulDeps,
+            maxAgeInDays,
+            securityFindings,
+            licenseFindings);
 
     return new ProjectHealthAnalysis(
         overallHealth,
@@ -1127,7 +1517,9 @@ public class MavenDependencyTools {
         successfulAnalyses,
         ageDistribution,
         dependencyAnalyses,
-        recommendations);
+        recommendations,
+        securityFindings,
+        licenseFindings);
   }
 
   private DependencyMetrics calculateDependencyMetrics(
@@ -1175,8 +1567,30 @@ public class MavenDependencyTools {
       DependencyMetrics metrics,
       int successfulAnalyses,
       List<ProjectHealthAnalysis.DependencyHealthAnalysis> successfulDeps,
-      Integer maxAgeInDays) {
+      Integer maxAgeInDays,
+      SecurityFindings securityFindings,
+      LicenseFindings licenseFindings) {
     List<String> recommendations = new ArrayList<>();
+
+    // Security recommendations (highest priority)
+    if (securityFindings != null && securityFindings.requiresAction()) {
+      recommendations.add(
+          "URGENT: "
+              + securityFindings.vulnerableCount()
+              + " dependencies have security vulnerabilities");
+    }
+
+    // License recommendations
+    if (licenseFindings != null && licenseFindings.needsReview()) {
+      if (licenseFindings.copyleftCount() > 0) {
+        recommendations.add(
+            "Review " + licenseFindings.copyleftCount() + " dependencies with copyleft licenses");
+      }
+      if (licenseFindings.unknownCount() > 0) {
+        recommendations.add(
+            "Check license information for " + licenseFindings.unknownCount() + " dependencies");
+      }
+    }
 
     if (metrics.staleCount() > 0) {
       recommendations.add(

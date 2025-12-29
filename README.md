@@ -1,8 +1,8 @@
 # Maven Tools MCP Server
 
 [![Java](https://img.shields.io/badge/Java-24-orange.svg)](https://openjdk.java.net/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.6-green.svg)](https://spring.io/projects/spring-boot)
-[![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue.svg)](https://modelcontextprotocol.io/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.9-green.svg)](https://spring.io/projects/spring-boot)
+[![MCP Protocol](https://img.shields.io/badge/MCP-2025--06--18-blue.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/arvindand/maven-tools-mcp)](https://github.com/arvindand/maven-tools-mcp/releases)
 [![Docker](https://img.shields.io/badge/Docker-Multi--Arch-blue.svg)](https://hub.docker.com/r/arvindand/maven-tools-mcp)
@@ -155,40 +155,45 @@ Working with **any build tool** that uses Maven Central Repository:
 
 | Tool | Purpose | Key Features |
 |------|---------|--------------|
-| `get_latest_version` | Get newest version by type with stability preferences | preferStable parameter, all version types |
-| `check_version_exists` | Verify if specific version exists with type info | Works with any JVM build tool |
-| `check_multiple_dependencies` | Check multiple dependencies with filtering | stableOnly parameter, bulk operations |
-| `compare_dependency_versions` | Compare current vs latest with upgrade recommendations | includeMigrationGuidance flag |
-| `analyze_dependency_age` | Classify dependencies as fresh/current/aging/stale | includeModernizationGuidance flag |
+| `get_latest_version` | Get newest version by type with stability preferences | stabilityFilter parameter (ALL/STABLE_ONLY/PREFER_STABLE) |
+| `check_version_exists` | Verify if specific version exists with type info | Version type classification |
+| `check_multiple_dependencies` | Bulk lookup (NO versions in input) | stabilityFilter parameter, bulk operations |
+| `compare_dependency_versions` | Bulk upgrade check (versions REQUIRED) | includeSecurityScan (OSV.dev), Context7 guidance |
+| `analyze_dependency_age` | Classify dependencies as fresh/current/aging/stale | maxAgeInDays threshold, Context7 guidance |
 | `analyze_release_patterns` | Analyze maintenance activity and predict releases | monthsToAnalyze parameter, velocity trends |
 | `get_version_timeline` | Enhanced version timeline with temporal analysis | versionCount parameter, release gap detection |
-| `analyze_project_health` | Comprehensive health analysis for multiple dependencies | includeUpgradeStrategy flag |
+| `analyze_project_health` | Bulk project health audit (PREFERRED for full audits) | includeSecurityScan (OSV.dev), includeLicenseScan |
 
 ### Raw Context7 Documentation Tools (2 tools - Enabled by Default)
 
-| Tool | Purpose | Key Features |
-|------|---------|--------------|
-| `resolve-library-id` | Search for library documentation | Always available (context7.enabled=true by default) |
-| `get-library-docs` | Get library documentation by ID | Always available (context7.enabled=true by default) |
+| Tool                   | Purpose                          | Key Features                                       |
+|------------------------|----------------------------------|----------------------------------------------------|
+| `resolve-library-id`   | Search for library documentation | Requires `query` and `libraryName` parameters      |
+| `query-docs`           | Get library documentation by ID  | Uses `libraryId` and `query` parameters            |
 
 ### Tool Parameters
 
-**Core Parameters:**
+**Stability Filter (v2.0.0+):**
 
-- `preferStable` - Prioritize stable versions in analysis
-- `stableOnly` - Filter to production-ready versions only
-- `onlyStableTargets` - Only suggest upgrades to stable versions
+- `stabilityFilter` - Unified stability filtering with enum values:
+  - `ALL` - Include all version types (default for most operations)
+  - `STABLE_ONLY` - Filter to production-ready versions only
+  - `PREFER_STABLE` - Prioritize stable versions, include others too (default for get_latest_version)
 
 **Analytical Parameters:**
 
 - `maxAgeInDays` - Set acceptable age threshold for dependencies
 - `monthsToAnalyze` - Specify analysis period for release patterns (default: 24)
 - `versionCount` - Number of recent versions to analyze in timeline (default: 20)
-- `includeRecommendations` - Include detailed recommendations in health analysis
+
+**Security & License Parameters:**
+
+- `includeSecurityScan` - Include OSV.dev vulnerability scanning (default: true)
+- `includeLicenseScan` - Include license detection/analysis (default: true)
 
 **Context7 Integration:**
 
-Context7 integration is **enabled by default** (`context7.enabled=true`). Maven tools automatically include explicit orchestration instructions in response models when upgrades or modernization are needed. Additionally, the server acts as an MCP client to expose raw Context7 tools (`resolve-library-id`, `get-library-docs`) directly to your AI assistant. When disabled, responses contain only core dependency analysis without orchestration instructions or Context7 tools.
+Context7 integration is **enabled by default** (`context7.enabled=true`). Maven tools automatically include explicit orchestration instructions in response models when upgrades or modernization are needed. Additionally, the server acts as an MCP client to expose raw Context7 tools (`resolve-library-id`, `query-docs`) directly to your AI assistant. When disabled, responses contain only core dependency analysis without orchestration instructions or Context7 tools.
 
 **Universal Compatibility:**
 All tools work with standard Maven coordinates (`groupId:artifactId`) and support any JVM build tool.
@@ -200,21 +205,21 @@ Get latest version of any dependency from Maven Central (works with Maven, Gradl
 **Parameters:**
 
 - `dependency` (string, required): Maven coordinate in format `groupId:artifactId` (NO version)
-- `preferStable` (boolean, optional): When true, prioritizes stable version in response (default: false)
+- `stabilityFilter` (enum, optional): `ALL`, `STABLE_ONLY`, or `PREFER_STABLE` (default: PREFER_STABLE)
 
 **Examples:**
 
 ```json
 {
   "dependency": "org.springframework:spring-core",
-  "preferStable": false
+  "stabilityFilter": "ALL"
 }
 ```
 
 ```json
 {
   "dependency": "org.springframework:spring-boot",
-  "preferStable": true
+  "stabilityFilter": "STABLE_ONLY"
 }
 ```
 
@@ -267,21 +272,21 @@ Check latest versions for multiple dependencies with filtering options. Works wi
 **Parameters:**
 
 - `dependencies` (string, required): Comma- or newline-separated list of Maven coordinates (NO versions)
-- `stableOnly` (boolean, optional): When true, filters to production-ready versions only (default: false)
+- `stabilityFilter` (enum, optional): `ALL`, `STABLE_ONLY`, or `PREFER_STABLE` (default: ALL)
 
 **Examples:**
 
 ```json
 {
   "dependencies": "org.jetbrains.kotlin:kotlin-stdlib,com.squareup.retrofit2:retrofit,org.apache.spark:spark-core_2.13",
-  "stableOnly": false
+  "stabilityFilter": "ALL"
 }
 ```
 
 ```json
 {
   "dependencies": "org.springframework:spring-boot,com.fasterxml.jackson.core:jackson-core",
-  "stableOnly": true
+  "stabilityFilter": "STABLE_ONLY"
 }
 ```
 
@@ -311,22 +316,24 @@ Compare current dependency versions with latest available and show upgrade recom
 
 **Parameters:**
 
-- `currentDependencies` (string, required): Comma- or newline-separated list of Maven coordinates with versions (`groupId:artifactId:version`)
-- `onlyStableTargets` (boolean, optional): When true, only suggests upgrades to stable versions (default: false)
+- `currentDependencies` (string, required): Comma- or newline-separated list of Maven coordinates WITH versions (`groupId:artifactId:version`)
+- `stabilityFilter` (enum, optional): `ALL`, `STABLE_ONLY`, or `PREFER_STABLE` (default: ALL)
+- `includeSecurityScan` (boolean, optional): When true, scans dependencies for known vulnerabilities using OSV.dev (default: true)
 
 **Examples:**
 
 ```json
 {
   "currentDependencies": "org.jetbrains.kotlin:kotlin-stdlib:1.8.0,com.squareup.retrofit2:retrofit:2.9.0",
-  "onlyStableTargets": false
+  "stabilityFilter": "ALL"
 }
 ```
 
 ```json
 {
   "currentDependencies": "org.springframework:spring-boot:2.7.0,org.hibernate:hibernate-core:5.6.0",
-  "onlyStableTargets": true
+  "stabilityFilter": "STABLE_ONLY",
+  "includeSecurityScan": true
 }
 ```
 
@@ -362,37 +369,37 @@ Compare current dependency versions with latest available and show upgrade recom
 
 ### `resolve-library-id`
 
-Search for library documentation using intelligent name resolution.
+Search for library documentation using intelligent name resolution. Returns a Context7-compatible library ID for use with `query-docs`.
 
 **Parameters:**
 
-- `libraryName` (string, required): Search term for library lookup (e.g., "spring boot", "testcontainers")
+- `query` (string, required): The user's question or task to rank results by relevance
+- `libraryName` (string, required): Library name to search for (e.g., "spring-boot", "testcontainers")
 
 **Example:**
 
 ```json
 {
-  "libraryName": "testcontainers postgresql"
+  "query": "how to set up PostgreSQL container for testing",
+  "libraryName": "testcontainers"
 }
 ```
 
-### `get-library-docs`
+### `query-docs`
 
-Get comprehensive documentation for a library using its Context7 ID.
+Get documentation and code examples for a library using its Context7 ID.
 
 **Parameters:**
 
-- `context7CompatibleLibraryID` (string, required): Context7-compatible library ID (from resolve-library-id)
-- `topic` (string, optional): Topic for focused documentation (e.g., "setup", "migration", "configuration")
-- `tokens` (integer, optional): Maximum tokens to retrieve (default: 10000)
+- `libraryId` (string, required): Context7-compatible library ID (from resolve-library-id)
+- `query` (string, required): The question or task you need help with
 
 **Example:**
 
 ```json
 {
-  "context7CompatibleLibraryID": "/testcontainers/testcontainers-java",
-  "topic": "postgresql setup",
-  "tokens": 5000
+  "libraryId": "/testcontainers/testcontainers-java",
+  "query": "PostgreSQL container setup and configuration"
 }
 ```
 
@@ -404,21 +411,21 @@ These tools are automatically available by default through Spring AI MCP client 
 
 **Simple Questions:**
 
-- "Get latest Spring Boot version but prioritize stable releases"
+- "Get latest Spring Boot version with PREFER_STABLE filter"
 - "Check if Kotlin 1.9.0 exists and what stability type it is"
-- "Show me latest stable version of Retrofit for production deployment"
+- "Show me only stable versions of Retrofit for production deployment"
 
 **Multi-Build Tool Support:**
 
 - "Check these Gradle dependencies: org.jetbrains.kotlin:kotlin-stdlib,com.squareup.retrofit2:retrofit"
-- "I need stable versions only for my SBT project dependencies"
-- "Compare my Maven versions but only suggest stable upgrades for production"
+- "I need STABLE_ONLY versions for my SBT project dependencies"
+- "Compare my Maven versions but only show stable upgrade targets"
 
-**Advanced Stability Controls:**
+**Security & License Scanning:**
 
-- "Check multiple dependencies but filter to stable versions only"
-- "Compare my current versions with onlyStableTargets=true for safety"
-- "Get complete analysis but prefer stable versions in results"
+- "Check my dependencies for known vulnerabilities using OSV.dev"
+- "Analyze project health with security scan and license compliance"
+- "Compare versions and show any CVEs that affect my current versions"
 
 ## 🚀 Real-World Use Cases
 
@@ -536,7 +543,7 @@ These tools are automatically available by default through Spring AI MCP client 
 Maven Tools MCP uses a **dual MCP architecture** with guided delegation for Context7 integration:
 
 1. **MCP Server:** Provides 8 Maven dependency analysis tools with intelligent Context7 guidance hints
-2. **MCP Client:** Acts as Context7 MCP client to expose raw Context7 tools (`resolve-library-id`, `get-library-docs`)
+2. **MCP Client:** Acts as Context7 MCP client to expose raw Context7 tools (`resolve-library-id`, `query-docs`)
 3. **Intelligent Integration:** Maven tools include smart Context7 search suggestions when upgrades/modernization are needed
 4. **Direct Access:** Your AI assistant can use both Maven analysis AND Context7 documentation tools in a single connection
 
@@ -588,10 +595,10 @@ Maven Tools MCP provides explicit orchestration instructions in response models 
   "dependencies": [{
     "dependency": "org.springframework.boot:spring-boot-starter:2.7.0",
     "current_version": "2.7.0",
-    "latest_version": "3.2.0", 
+    "latest_version": "3.2.0",
     "update_type": "major",
     "context7_guidance": {
-      "orchestration_instructions": "Use resolve-library-id tool with libraryName='spring-boot-starter' to find documentation ID. Then use get-library-docs tool with the returned Context7 ID and topic='migration guide' to get upgrade instructions. If Context7 doesn't provide sufficient information, perform a web search for 'spring-boot-starter major version upgrade guide'."
+      "orchestration_instructions": "Use resolve-library-id tool with query='spring-boot-starter migration guide breaking changes' and libraryName='spring-boot-starter' to find the library ID. Then use query-docs tool with the returned libraryId and query='spring-boot-starter migration guide breaking changes' to get upgrade instructions. If Context7 doesn't provide sufficient information, perform a web search for 'spring-boot-starter major version upgrade guide'."
     }
   }]
 }
@@ -610,7 +617,7 @@ Maven Tools MCP provides explicit orchestration instructions in response models 
   "days_since_last_release": 180,
   "recommendation": "Consider upgrading - dependency is showing age",
   "context7_guidance": {
-    "orchestration_instructions": "Use resolve-library-id tool with libraryName='hibernate-core' to find documentation ID. Then use get-library-docs tool with the returned Context7 ID and topic='modern usage and best practices' to get modernization guidance. If Context7 doesn't provide sufficient information, perform a web search for 'hibernate-core latest features best practices'."
+    "orchestration_instructions": "Use resolve-library-id tool with query='hibernate-core modern usage best practices' and libraryName='hibernate-core' to find the library ID. Then use query-docs tool with the returned libraryId and query='hibernate-core modern usage best practices' to get modernization guidance. If Context7 doesn't provide sufficient information, perform a web search for 'hibernate-core latest features best practices'."
   }
 }
 ```
@@ -621,6 +628,46 @@ Maven Tools MCP provides explicit orchestration instructions in response models 
 - **Recommended batch sizes:** 10-20 dependencies for bulk operations
 - **First requests:** Build cache (normal), subsequent requests much faster
 - **Cache duration:** 24 hours
+
+## Custom Commands & Prompts
+
+This project includes pre-built commands and prompts for common dependency management tasks.
+
+### Claude Code Slash Commands
+
+Located in `.claude/commands/`, these commands work with Claude Code CLI:
+
+| Command        | Description                                          |
+|----------------|------------------------------------------------------|
+| `/deps-check`  | Quick version lookup for dependencies                |
+| `/deps-health` | Full health audit with security + license analysis   |
+| `/deps-upgrade`| Upgrade recommendations with breaking change warnings|
+| `/deps-age`    | Freshness and maintenance activity analysis          |
+
+**Usage Examples:**
+
+```bash
+# Check versions for specific dependencies
+/deps-check org.springframework:spring-core,com.google.guava:guava
+
+# Full health audit of your project
+/deps-health
+
+# Get upgrade plan for current dependencies
+/deps-upgrade org.springframework:spring-core:6.0.0,junit:junit:4.13.2
+```
+
+### GitHub Copilot Prompts
+
+Located in `.github/prompts/`, these work with GitHub Copilot Chat:
+
+| Prompt                 | Description                                        |
+|------------------------|----------------------------------------------------|
+| `dependency-audit.md`  | Comprehensive dependency audit with health scoring |
+| `security-scan.md`     | CVE vulnerability scanning with remediation plan   |
+| `upgrade-plan.md`      | Phased upgrade plan with breaking change analysis  |
+
+**Usage:** Reference these prompts in Copilot Chat or use them as templates for your own dependency management workflows.
 
 ## 🤔 Frequently Asked Questions
 
@@ -695,7 +742,7 @@ cd maven-tools-mcp
 ./mvnw clean package -Pfull
 
 # Run the JAR
-java -jar target/maven-tools-mcp-1.5.3-SNAPSHOT.jar
+java -jar target/maven-tools-mcp-2.0.0.jar
 ```
 
 **Claude Desktop configuration for JAR:**
@@ -707,7 +754,7 @@ java -jar target/maven-tools-mcp-1.5.3-SNAPSHOT.jar
       "command": "java",
       "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-1.5.3-SNAPSHOT.jar"
+        "/absolute/path/to/maven-tools-mcp-2.0.0.jar"
       ]
     }
   }
@@ -736,7 +783,7 @@ build-docker.cmd  # Docker-focused helper
 
 ## Enterprise & Custom Clients
 
-This server implements MCP Protocol 2024-11-05 with stdio transport, making it compatible with any MCP-compliant client.
+This server implements MCP Protocol 2025-06-18 with stdio transport, making it compatible with any MCP-compliant client.
 
 ## Configuration
 
@@ -763,11 +810,11 @@ logging:
 
 ## Technical Details
 
-- **Framework**: Spring Boot 3.5.6 with [Spring AI MCP](https://docs.spring.io/spring-ai/reference/api/mcp.html)
-- **MCP Protocol**: 2024-11-05
+- **Framework**: Spring Boot 3.5.9 with [Spring AI MCP](https://docs.spring.io/spring-ai/reference/api/mcp.html)
+- **MCP Protocol**: 2025-06-18
 - **Java Version**: 24
 - **Transport**: stdio
-- **HTTP Client**: OkHttp 5.2.1 with HTTP/2 support
+- **HTTP Client**: OkHttp 5.3.2 with HTTP/2 support
 - **Cache**: Caffeine (24-hour TTL, 2000 entries max)
 - **Resilience**: Circuit breaker, retry, and rate limiter patterns
 - **Data Source**: Maven Central Repository (maven-metadata.xml files)
@@ -819,4 +866,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 1.5.3
+- Version: 2.0.0

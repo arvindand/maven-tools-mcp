@@ -45,7 +45,7 @@ jobs:
 
       - name: Build and push AMD64 images (with and without Context7)
         run: |
-          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.5.3")
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.0")
 
           # Build AMD64 native image WITH Context7
           SPRING_PROFILES_ACTIVE=docker ./mvnw -Pnative spring-boot:build-image \
@@ -99,7 +99,7 @@ jobs:
 
       - name: Build and push ARM64 images (with and without Context7)
         run: |
-          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.5.3")
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.0")
 
           # Build ARM64 native image WITH Context7
           SPRING_PROFILES_ACTIVE=docker ./mvnw -Pnative spring-boot:build-image \
@@ -136,7 +136,7 @@ jobs:
 
       - name: Create and push multi-architecture manifests
         run: |
-          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.5.3")
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.0")
 
           # Create multi-architecture manifest for version tag (WITH Context7)
           docker manifest create arvindand/maven-tools-mcp:${PROJECT_VERSION} \

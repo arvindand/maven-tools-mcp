@@ -7,8 +7,17 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
  * Context7 orchestration instructions for LLM tool delegation.
  *
  * <p>Provides explicit step-by-step instructions for LLMs to effectively orchestrate the raw
- * Context7 tools 'resolve-library-id' and 'get-library-docs', including fallback web search
- * instructions when Context7 data is insufficient.
+ * Context7 tools 'resolve-library-id' and 'query-docs', including fallback web search instructions
+ * when Context7 data is insufficient.
+ *
+ * <p>Updated for Context7 MCP Server 2.0.0 which introduced breaking changes:
+ *
+ * <ul>
+ *   <li>Renamed 'get-library-docs' to 'query-docs'
+ *   <li>Added required 'query' parameter to 'resolve-library-id'
+ *   <li>Renamed 'context7CompatibleLibraryID' to 'libraryId'
+ *   <li>Removed 'topic', 'mode', 'page', 'limit' parameters (now query-based)
+ * </ul>
  *
  * @author Arvind Menon
  * @since 1.2.0
@@ -58,22 +67,25 @@ public record Context7Guidance(String orchestrationInstructions) {
   }
 
   private static String generateMigrationOrchestration(String artifactId, String updateType) {
-    String topic = MAJOR.equals(updateType) ? "migration guide" : "upgrade guide";
+    String query =
+        MAJOR.equals(updateType)
+            ? artifactId + " migration guide breaking changes"
+            : artifactId + " upgrade guide";
     String fallbackSearch = artifactId + " " + updateType + " version upgrade guide";
 
     return String.format(
-        "Use resolve-library-id tool with libraryName='%s' to find documentation ID. "
-            + "Then use get-library-docs tool with the returned Context7 ID and topic='%s' to get upgrade instructions. "
+        "Use resolve-library-id tool with query='%s' and libraryName='%s' to find the library ID. "
+            + "Then use query-docs tool with the returned libraryId and query='%s' to get upgrade instructions. "
             + "If Context7 doesn't provide sufficient information, perform a web search for '%s'.",
-        artifactId, topic, fallbackSearch);
+        query, artifactId, query, fallbackSearch);
   }
 
   private static String generateModernizationOrchestration(
       String artifactId, String ageClassification) {
-    String topic =
+    String query =
         STALE.equals(ageClassification)
-            ? "alternatives and replacements"
-            : "modern usage and best practices";
+            ? artifactId + " alternatives replacements deprecated"
+            : artifactId + " modern usage best practices";
     String fallbackSearch =
         artifactId
             + " "
@@ -82,9 +94,9 @@ public record Context7Guidance(String orchestrationInstructions) {
                 : "latest features best practices");
 
     return String.format(
-        "Use resolve-library-id tool with libraryName='%s' to find documentation ID. "
-            + "Then use get-library-docs tool with the returned Context7 ID and topic='%s' to get modernization guidance. "
+        "Use resolve-library-id tool with query='%s' and libraryName='%s' to find the library ID. "
+            + "Then use query-docs tool with the returned libraryId and query='%s' to get modernization guidance. "
             + "If Context7 doesn't provide sufficient information, perform a web search for '%s'.",
-        artifactId, topic, fallbackSearch);
+        query, artifactId, query, fallbackSearch);
   }
 }

@@ -11,7 +11,7 @@ spring:
     mcp:
       server:
         name: maven-tools-mcp
-        version: 1.5.3
+        version: 2.0.0
         type: SYNC
         instructions: "Universal JVM dependency intelligence server for any build tool using Maven Central Repository. Provides comprehensive dependency analysis, latest version lookup, stability filtering, bulk operations, and upgrade recommendations with intelligent caching support. Works with Maven, Gradle, SBT, Mill, and any JVM build tool."
       client:
@@ -50,7 +50,7 @@ maven:
     max-results: 100
     connection-pool-size: 50
 
-# Resilience4j configuration for Maven Central API resilience
+# Resilience4j configuration for Maven Central and OSV API resilience
 resilience4j:
   circuitbreaker:
     instances:
@@ -60,6 +60,15 @@ resilience4j:
         slow-call-duration-threshold: 5s
         wait-duration-in-open-state: 30s
         permitted-number-of-calls-in-half-open-state: 5
+        sliding-window-size: 10
+        sliding-window-type: COUNT_BASED
+      osv:
+        register-health-indicator: true
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: 10s
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 3
         sliding-window-size: 10
         sliding-window-type: COUNT_BASED
 
@@ -79,6 +88,10 @@ resilience4j:
         limit-for-period: 10
         limit-refresh-period: 1s
         timeout-duration: 0s
+      osv:
+        limit-for-period: 5
+        limit-refresh-period: 1s
+        timeout-duration: 10s
 
 # Context7 guidance hints - lightweight suggestions in response models to help LLMs
 # effectively use Context7 tools for migration guidance and upgrade strategies.

@@ -12,12 +12,15 @@ import okhttp3.Protocol;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.OkHttp3ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 /**
  * HTTP client configuration with OkHttp for improved performance and HTTP/2 support.
  *
- * <p>Configures connection pooling, timeouts, and protocols for Maven Central API access.
+ * <p>Configures connection pooling, timeouts, and protocols for Maven Central and OSV API access.
+ * OkHttp3ClientHttpRequestFactory is deprecated but still functional; we use it for superior HTTP/2
+ * support and connection pooling until Spring provides a better alternative.
  *
  * @author Arvind Menon
  * @since 1.5.0
@@ -47,8 +50,14 @@ public class HttpClientConfig {
   }
 
   @Bean
-  RestClient mavenCentralRestClient(OkHttpClient okHttpClient) {
-    return RestClient.builder().build();
+  @SuppressWarnings("removal") // OkHttp3ClientHttpRequestFactory deprecated but still best option
+  RestClient.Builder restClientBuilder(OkHttpClient okHttpClient) {
+    return RestClient.builder().requestFactory(new OkHttp3ClientHttpRequestFactory(okHttpClient));
+  }
+
+  @Bean
+  RestClient mavenCentralRestClient(RestClient.Builder restClientBuilder) {
+    return restClientBuilder.build();
   }
 
   @Bean

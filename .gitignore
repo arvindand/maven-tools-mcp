@@ -28,7 +28,9 @@ logs
 # Environment variables file
 .env
 
-.claude
+# Claude Code config (ignore most, but keep commands for sharing)
+.claude/*
+!.claude/commands/
 
 # Internal planning documents
 improvement.md

@@ -56,7 +56,7 @@ if "%choice%"=="3" (
     
     REM Get project version
     for /f "tokens=*" %%i in ('pushd "%~dp0.." ^& call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul ^& popd') do set PROJECT_VERSION=%%i
-    if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=1.5.3
+    if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=2.0.0
     
     echo.
     echo Step 2: Build Native Docker image WITH Context7...
@@ -103,7 +103,7 @@ if "%choice%"=="4" (
     
     REM Get project version
     for /f "tokens=*" %%i in ('pushd "%~dp0.." ^& call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul ^& popd') do set PROJECT_VERSION=%%i
-    if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=1.5.3
+    if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=2.0.0
     
     echo ✅ JVM Docker image built successfully!
     echo.
@@ -138,7 +138,7 @@ if "%choice%"=="7" (
     
     REM Get project version
     for /f "tokens=*" %%i in ('pushd "%~dp0.." ^& call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul ^& popd') do set PROJECT_VERSION=%%i
-    if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=1.5.3
+    if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=2.0.0
     
     echo.
     echo Step 2: Build Native Docker image with no-context7 profile...

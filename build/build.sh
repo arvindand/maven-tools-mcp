@@ -70,7 +70,7 @@ case $choice in
         (cd .. && ./mvnw clean package -DskipTests)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.5.3")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.0")
         
         echo ""
         echo "Step 2: Build Native Docker image WITH Context7..."
@@ -105,7 +105,7 @@ case $choice in
         (cd .. && ./mvnw spring-boot:build-image)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.5.3")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.0")
         
         echo "✅ JVM Docker image built successfully: maven-tools-mcp:${PROJECT_VERSION}"
         echo ""
@@ -137,7 +137,7 @@ case $choice in
         (cd .. && ./mvnw clean package -DskipTests)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "1.5.3")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.0")
         
         echo ""
         echo "Step 2: Build Native Docker image with no-context7 profile..."

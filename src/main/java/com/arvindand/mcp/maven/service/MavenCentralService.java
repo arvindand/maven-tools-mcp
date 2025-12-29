@@ -1,27 +1,40 @@
 package com.arvindand.mcp.maven.service;
 
-import static com.arvindand.mcp.maven.config.CacheConstants.*;
+import static com.arvindand.mcp.maven.config.CacheConstants.MAVEN_ACCURATE_HISTORICAL_DATA;
+import static com.arvindand.mcp.maven.config.CacheConstants.MAVEN_ALL_VERSIONS;
+import static com.arvindand.mcp.maven.config.CacheConstants.MAVEN_VERSION_CHECKS;
 
+import com.arvindand.mcp.maven.MavenToolsConstants;
 import com.arvindand.mcp.maven.config.MavenCentralProperties;
 import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.MavenMetadata;
+import com.arvindand.mcp.maven.model.license.LicenseInfo;
 import com.arvindand.mcp.maven.util.VersionComparator;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
+import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 /**
  * Service for interacting with Maven Central via direct repository metadata access. Fetches
@@ -43,11 +56,26 @@ public class MavenCentralService {
   private final VersionComparator versionComparator;
   private final ExecutorService virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
-  public MavenCentralService(MavenCentralProperties properties, RestClient mavenCentralRestClient) {
+  private final ObjectProvider<MavenCentralService> selfProvider;
+
+  // Cache for per-artifact timestamps (avoids repeated HEAD requests across calls)
+  private final Cache<String, Long> timestampCache;
+
+  public MavenCentralService(
+      MavenCentralProperties properties,
+      RestClient mavenCentralRestClient,
+      ObjectProvider<MavenCentralService> selfProvider) {
     this.properties = properties;
     this.restClient = mavenCentralRestClient;
     this.xmlMapper = new XmlMapper();
     this.versionComparator = new VersionComparator();
+    this.selfProvider = selfProvider;
+
+    this.timestampCache =
+        Caffeine.newBuilder()
+            .maximumSize(MavenToolsConstants.MAX_CACHE_SIZE)
+            .expireAfterWrite(Duration.ofHours(MavenToolsConstants.TIMESTAMP_CACHE_HOURS))
+            .build();
   }
 
   /**
@@ -58,7 +86,7 @@ public class MavenCentralService {
    * @return the latest version or null if not found
    */
   public String getLatestVersion(MavenCoordinate coordinate) {
-    List<String> versions = getAllVersions(coordinate);
+    List<String> versions = self().getAllVersions(coordinate);
     return versions.isEmpty() ? null : versions.get(0);
   }
 
@@ -122,7 +150,8 @@ public class MavenCentralService {
    * @return list of artifacts with accurate timestamp information for recent versions
    */
   public List<MavenArtifact> getAllVersionsWithTimestamps(MavenCoordinate coordinate) {
-    return getRecentVersionsWithAccurateTimestamps(coordinate, ACCURATE_TIMESTAMP_VERSION_LIMIT);
+    return self()
+        .getRecentVersionsWithAccurateTimestamps(coordinate, ACCURATE_TIMESTAMP_VERSION_LIMIT);
   }
 
   /**
@@ -139,7 +168,7 @@ public class MavenCentralService {
               + " (#coordinate.packaging() ?: 'jar')")
   public List<MavenArtifact> getRecentVersionsWithAccurateTimestamps(
       MavenCoordinate coordinate, int maxVersions) {
-    List<String> allVersions = getAllVersions(coordinate);
+    List<String> allVersions = self().getAllVersions(coordinate);
     List<String> recentVersions = allVersions.stream().limit(maxVersions).toList();
 
     List<CompletableFuture<MavenArtifact>> futures =
@@ -160,15 +189,19 @@ public class MavenCentralService {
 
   private MavenArtifact fetchArtifactWithTimestamp(MavenCoordinate coordinate, String version) {
     String pomUrl = buildPomUrl(coordinate, version);
+    String cacheKey = coordinate.groupId() + ":" + coordinate.artifactId() + ":" + version;
     try {
       long timestamp =
-          restClient
-              .head()
-              .uri(pomUrl)
-              .retrieve()
-              .toBodilessEntity()
-              .getHeaders()
-              .getLastModified();
+          timestampCache.get(
+              cacheKey,
+              _ ->
+                  restClient
+                      .head()
+                      .uri(pomUrl)
+                      .retrieve()
+                      .toBodilessEntity()
+                      .getHeaders()
+                      .getLastModified());
 
       return new MavenArtifact(
           coordinate.groupId() + ":" + coordinate.artifactId() + ":" + version,
@@ -228,14 +261,19 @@ public class MavenCentralService {
       }
 
       return Optional.empty();
-    } catch (Exception e) {
+    } catch (RestClientException | IOException e) {
       logger.debug(
           "Failed to fetch metadata for {}:{}: {}",
           coordinate.groupId(),
           coordinate.artifactId(),
-          e.getMessage());
+          e.getMessage(),
+          e);
       return Optional.empty();
     }
+  }
+
+  private MavenCentralService self() {
+    return selfProvider.getObject();
   }
 
   /**
@@ -261,5 +299,57 @@ public class MavenCentralService {
         version,
         coordinate.artifactId(),
         version);
+  }
+
+  /**
+   * Fetch license information from POM file.
+   *
+   * @param coordinate the Maven coordinate with version
+   * @return list of licenses found in the POM, empty list if none found or error
+   */
+  public List<LicenseInfo> getLicenses(MavenCoordinate coordinate) {
+    if (coordinate.version() == null || coordinate.version().isBlank()) {
+      return List.of();
+    }
+
+    String pomUrl = buildPomUrl(coordinate, coordinate.version());
+
+    try {
+      String pomXml = restClient.get().uri(pomUrl).retrieve().body(String.class);
+      if (pomXml == null || pomXml.isBlank()) {
+        return List.of();
+      }
+      return parseLicensesFromPom(pomXml);
+    } catch (Exception e) {
+      logger.debug(
+          "Could not fetch licenses for {}: {}", coordinate.toCoordinateString(), e.getMessage());
+      return List.of();
+    }
+  }
+
+  private static final Pattern LICENSE_PATTERN =
+      Pattern.compile(
+          "<license>\\s*<name>([^<]*)</name>(?:\\s*<url>([^<]*)</url>)?",
+          Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
+
+  /**
+   * Parse license elements from POM XML using regex.
+   *
+   * @param pomXml POM XML content
+   * @return list of parsed licenses
+   */
+  private List<LicenseInfo> parseLicensesFromPom(String pomXml) {
+    List<LicenseInfo> licenses = new ArrayList<>();
+    Matcher matcher = LICENSE_PATTERN.matcher(pomXml);
+
+    while (matcher.find()) {
+      String name = matcher.group(1).trim();
+      String url = matcher.group(2) != null ? matcher.group(2).trim() : null;
+      if (!name.isEmpty()) {
+        licenses.add(LicenseInfo.fromPom(name, url));
+      }
+    }
+
+    return licenses;
   }
 }

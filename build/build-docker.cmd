@@ -87,7 +87,7 @@ if errorlevel 1 (
 
 REM Get project version
 for /f "tokens=*" %%i in ('call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul') do set PROJECT_VERSION=%%i
-if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=1.5.3
+if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=2.0.0
 
 echo.
 echo Building native image WITH Context7...
@@ -143,7 +143,7 @@ if errorlevel 1 (
 
 REM Get project version
 for /f "tokens=*" %%i in ('call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul') do set PROJECT_VERSION=%%i
-if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=1.5.3
+if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=2.0.0
 
 echo.
 echo Built JVM image: maven-tools-mcp:%PROJECT_VERSION%

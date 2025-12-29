@@ -15,6 +15,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [2.0.0] - 2025-12-29
+
+**Security & License Intelligence Release** - Adds vulnerability scanning via OSV.dev and license compliance analysis to existing tools
+
+### Added (2.0.0)
+
+- **Vulnerability Scanning (OSV.dev)**:
+  - `VulnerabilityService` with OSV.dev API integration for CVE/vulnerability detection
+  - `VulnerabilityInfo` model with CVSS severity mapping (CRITICAL, HIGH, MEDIUM, LOW)
+  - `SecurityAssessment` with factory methods for clean/unknown/vulnerable states
+  - `SecuritySummary` aggregate with builder pattern for bulk results
+  - `SecurityFindings` for project health integration with `requiresAction()` helper
+  - Caffeine caching (6-hour TTL, 5000 max entries) for vulnerability data
+  - Circuit breaker and rate limiter (5 req/s) for OSV API resilience
+  - Bounded parallelism with Semaphore (max 5 concurrent scans)
+
+- **License Compliance Analysis**:
+  - `LicenseInfo` model with automatic categorization (PERMISSIVE, WEAK_COPYLEFT, STRONG_COPYLEFT, UNKNOWN)
+  - `LicenseFindings` aggregate with builder pattern and `needsReview()` helper
+  - POM-based license parsing via regex extraction from Maven Central
+  - Support for common licenses: Apache, MIT, BSD, GPL, LGPL, MPL, EPL, CDDL, etc.
+
+- **Enhanced Tool Parameters**:
+  - `includeSecurityScan` parameter on `compare_dependency_versions` (default: true)
+  - `includeSecurityScan` parameter on `analyze_project_health` (default: true)
+  - `includeLicenseScan` parameter on `analyze_project_health` (default: true)
+
+- **New Error Codes**:
+  - `SECURITY_CHECK_FAILED` for OSV API failures
+  - `LICENSE_CHECK_FAILED` for license parsing failures
+  - `RATE_LIMITED` for API throttling scenarios
+
+- **Custom Commands & Prompts**:
+  - Claude Code slash commands in `.claude/commands/`: `/deps-check`, `/deps-health`, `/deps-upgrade`, `/deps-age`
+  - GitHub Copilot prompts in `.github/prompts/`: dependency-audit, security-scan, upgrade-plan
+  - Pre-built workflows for common dependency management tasks
+
+### Changed (2.0.0)
+
+- **Response Models Enhanced**:
+  - `VersionComparison` now includes optional `SecuritySummary` field
+  - `ProjectHealthAnalysis` now includes `SecurityFindings` and `LicenseFindings` fields
+  - `DependencyHealthAnalysis` now includes optional `SecurityAssessment` field
+  - All changes are backward-compatible via overloaded constructors
+
+- **Health Recommendations**: `buildSimpleHealthSummary()` and `generateHealthRecommendations()` now factor in security and license findings
+
+- **Code Quality**:
+  - Added `SUGGESTION` constant in `McpError` to eliminate string literal duplication
+  - License categorization checks weak copyleft patterns before strong copyleft for correct LGPL handling
+
+- **Updated Dependencies**:
+  - Spring Boot parent updated to 3.5.9 (from 3.5.8)
+  - OkHttp updated to 5.3.2 (from 5.2.1)
+  - Maven Artifact updated to 3.9.12 (from 3.9.11)
+
+- **Context7 MCP Server 2.0.0 Compatibility**:
+  - Updated orchestration instructions for new tool names (`query-docs` replaces `get-library-docs`)
+  - Added required `query` parameter to `resolve-library-id` instructions
+  - Updated parameter names (`libraryId` replaces `context7CompatibleLibraryID`)
+  - Simplified query-based approach (removed `topic`, `mode`, `page`, `limit` references)
+
+- **Improved Tool Descriptions**:
+  - Clearer input requirements: "NO versions in input" vs "versions REQUIRED in input"
+  - Cross-references between related tools to reduce LLM confusion
+  - `analyze_project_health` marked as "PREFERRED for full audits"
+
 ## [1.5.3] - 2025-12-16
 
 **MCP Protocol Compatibility Release** - Fixes MCP server startup failure with latest Copilot/Claude clients by upgrading to Spring AI 1.1.2 GA.
@@ -377,7 +444,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.3...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.3...v2.0.0
 [1.5.3]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.0...v1.5.1

@@ -1,10 +1,14 @@
 package com.arvindand.mcp.maven.service;
 
 import static com.arvindand.mcp.maven.TestHelpers.getSuccessData;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.arvindand.mcp.maven.config.Context7Properties;
-import com.arvindand.mcp.maven.model.*;
+import com.arvindand.mcp.maven.model.StabilityFilter;
+import com.arvindand.mcp.maven.model.ToolResponse;
+import com.arvindand.mcp.maven.model.VersionComparison;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,6 +29,7 @@ import org.springframework.test.context.ActiveProfiles;
 class MavenDependencyToolsContext7EnabledIT {
 
   @TestConfiguration
+  @SuppressWarnings("unused")
   static class Context7EnabledTestConfig {
     @Bean
     @Primary
@@ -41,7 +46,8 @@ class MavenDependencyToolsContext7EnabledIT {
     // Use an older Spring Boot version that will trigger Context7 guidance when enabled
     String oldDependencies = "org.springframework.boot:spring-boot-starter:2.5.0";
     ToolResponse resp =
-        mavenDependencyTools.compare_dependency_versions(oldDependencies, StabilityFilter.ALL);
+        mavenDependencyTools.compare_dependency_versions(
+            oldDependencies, StabilityFilter.ALL, false);
 
     VersionComparison comparison = getSuccessData(resp);
     assertNotNull(comparison);
@@ -57,7 +63,7 @@ class MavenDependencyToolsContext7EnabledIT {
         var guidance = dep.context7Guidance().get();
         assertNotNull(guidance.orchestrationInstructions());
         assertTrue(guidance.orchestrationInstructions().contains("resolve-library-id"));
-        assertTrue(guidance.orchestrationInstructions().contains("get-library-docs"));
+        assertTrue(guidance.orchestrationInstructions().contains("query-docs"));
       }
     }
   }

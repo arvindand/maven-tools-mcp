@@ -27,6 +27,26 @@
       "type": "java.lang.Boolean",
       "description": "Whether Context7 guidance hints are included in Maven tool responses. When enabled, tools include intelligent search suggestions to help LLMs effectively use Context7 tools for migration guidance and upgrade strategies.",
       "defaultValue": true
+    },
+    {
+      "name": "spring.ai.mcp.client.streamable-http.connections.*.url",
+      "type": "java.lang.String",
+      "description": "URL endpoint for Streamable HTTP communication with the MCP server (Spring AI MCP client)."
+    },
+    {
+      "name": "spring.ai.mcp.client.streamable-http.connections.*.endpoint",
+      "type": "java.lang.String",
+      "description": "Optional MCP endpoint path for the Streamable HTTP connection (Spring AI MCP client)."
+    },
+    {
+      "name": "spring.ai.mcp.client.streamable-http.connections.context7.url",
+      "type": "java.lang.String",
+      "description": "URL endpoint for the 'context7' Streamable HTTP MCP connection."
+    },
+    {
+      "name": "spring.ai.mcp.client.streamable-http.connections.context7.endpoint",
+      "type": "java.lang.String",
+      "description": "Optional MCP endpoint path for the 'context7' Streamable HTTP MCP connection."
     }
   ]
 }

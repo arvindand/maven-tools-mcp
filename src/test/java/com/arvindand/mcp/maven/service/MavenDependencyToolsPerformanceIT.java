@@ -97,7 +97,8 @@ class MavenDependencyToolsPerformanceIT {
 
     Instant start = Instant.now();
     ToolResponse resp =
-        mavenDependencyTools.compare_dependency_versions(currentDependencies, StabilityFilter.ALL);
+        mavenDependencyTools.compare_dependency_versions(
+            currentDependencies, StabilityFilter.ALL, false);
     Duration duration = Duration.between(start, Instant.now());
 
     System.out.println("Version comparison (3 deps) took: " + duration.toMillis() + "ms");

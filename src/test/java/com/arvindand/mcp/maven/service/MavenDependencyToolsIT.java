@@ -117,7 +117,8 @@ class MavenDependencyToolsIT {
   void testVersionComparison() {
     String currentDependencies = "junit:junit:4.12";
     ToolResponse response =
-        mavenDependencyTools.compare_dependency_versions(currentDependencies, StabilityFilter.ALL);
+        mavenDependencyTools.compare_dependency_versions(
+            currentDependencies, StabilityFilter.ALL, false);
 
     VersionComparison comparison = getSuccessData(response);
     assertNotNull(comparison.comparisonDate());
@@ -155,7 +156,8 @@ class MavenDependencyToolsIT {
   @Test
   void testProjectHealthAnalysis() {
     String dependencies = "junit:junit:4.12,org.slf4j:slf4j-api:1.7.30";
-    ToolResponse response = mavenDependencyTools.analyze_project_health(dependencies, null, null);
+    ToolResponse response =
+        mavenDependencyTools.analyze_project_health(dependencies, null, null, false, false);
 
     ProjectHealthAnalysis result = getSuccessData(response);
     assertNotNull(result.analysisDate());

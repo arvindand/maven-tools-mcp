@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 /**
  * Unit tests for simplified Context7Guidance model and orchestration instruction generation.
  *
+ * <p>Updated for Context7 MCP Server 2.0.0 compatibility.
+ *
  * @author Arvind Menon
  * @since 1.2.0
  */
@@ -21,7 +23,7 @@ class Context7GuidanceTest {
     assertNotNull(guidance);
     assertNotNull(guidance.orchestrationInstructions());
     assertTrue(guidance.orchestrationInstructions().contains("resolve-library-id"));
-    assertTrue(guidance.orchestrationInstructions().contains("get-library-docs"));
+    assertTrue(guidance.orchestrationInstructions().contains("query-docs"));
     assertTrue(guidance.orchestrationInstructions().contains("spring-boot-starter"));
     assertTrue(guidance.orchestrationInstructions().contains("migration guide"));
     assertTrue(guidance.orchestrationInstructions().contains("web search"));
@@ -35,7 +37,6 @@ class Context7GuidanceTest {
     assertNotNull(guidance.orchestrationInstructions());
     assertTrue(guidance.orchestrationInstructions().contains("jackson-core"));
     assertTrue(guidance.orchestrationInstructions().contains("upgrade guide"));
-    assertTrue(guidance.orchestrationInstructions().contains("minor version"));
   }
 
   @Test
@@ -45,7 +46,7 @@ class Context7GuidanceTest {
 
     assertNotNull(guidance.orchestrationInstructions());
     assertTrue(guidance.orchestrationInstructions().contains("hibernate-core"));
-    assertTrue(guidance.orchestrationInstructions().contains("modern usage and best practices"));
+    assertTrue(guidance.orchestrationInstructions().contains("modern usage best practices"));
     assertTrue(guidance.orchestrationInstructions().contains("latest features best practices"));
   }
 
@@ -56,7 +57,7 @@ class Context7GuidanceTest {
 
     assertNotNull(guidance.orchestrationInstructions());
     assertTrue(guidance.orchestrationInstructions().contains("commons-lang"));
-    assertTrue(guidance.orchestrationInstructions().contains("alternatives and replacements"));
+    assertTrue(guidance.orchestrationInstructions().contains("alternatives replacements"));
     assertTrue(guidance.orchestrationInstructions().contains("modernization alternatives"));
   }
 
@@ -77,14 +78,16 @@ class Context7GuidanceTest {
   }
 
   @Test
-  void testOrchestrationInstructionsContainRequiredElements() {
+  void testOrchestrationInstructionsContainRequiredElements_Context7_2_0() {
     Context7Guidance guidance = Context7Guidance.forMigration("test:test-artifact", "patch");
 
-    // Verify all required orchestration elements are present
+    // Verify all required orchestration elements for Context7 2.0.0 are present
     String instructions = guidance.orchestrationInstructions();
     assertTrue(instructions.contains("resolve-library-id tool"));
-    assertTrue(instructions.contains("get-library-docs tool"));
-    assertTrue(instructions.contains("Context7 ID"));
+    assertTrue(instructions.contains("query=")); // Context7 2.0 requires query param
+    assertTrue(instructions.contains("libraryName=")); // Context7 2.0 requires libraryName param
+    assertTrue(instructions.contains("query-docs tool")); // Renamed from get-library-docs
+    assertTrue(instructions.contains("libraryId")); // Renamed from context7CompatibleLibraryID
     assertTrue(instructions.contains("web search"));
     assertTrue(instructions.contains("test-artifact"));
   }
