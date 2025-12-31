@@ -51,7 +51,6 @@ jobs:
           SPRING_PROFILES_ACTIVE=docker ./mvnw -Pnative spring-boot:build-image \
             -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION}-amd64 \
             -Dspring-boot.build-image.env.BP_NATIVE_IMAGE_BUILD_ARGUMENTS="-march=x86-64-v2 --no-fallback" \
-            -Dspring-boot.build-image.env.BP_IMAGE_LABELS="io.modelcontextprotocol.server.name=io.github.arvindand/maven-tools-mcp" \
             -Dspring-boot.build-image.createdDate=now \
             -Dspring-boot.build-image.publish=true \
             -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
@@ -61,7 +60,6 @@ jobs:
           SPRING_PROFILES_ACTIVE=docker,no-context7 ./mvnw -Pnative spring-boot:build-image \
             -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION}-noc7-amd64 \
             -Dspring-boot.build-image.env.BP_NATIVE_IMAGE_BUILD_ARGUMENTS="-march=x86-64-v2 --no-fallback" \
-            -Dspring-boot.build-image.env.BP_IMAGE_LABELS="io.modelcontextprotocol.server.name=io.github.arvindand/maven-tools-mcp" \
             -Dspring-boot.build-image.createdDate=now \
             -Dspring-boot.build-image.publish=true \
             -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
@@ -106,7 +104,6 @@ jobs:
           # Build ARM64 native image WITH Context7
           SPRING_PROFILES_ACTIVE=docker ./mvnw -Pnative spring-boot:build-image \
             -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION}-arm64 \
-            -Dspring-boot.build-image.env.BP_IMAGE_LABELS="io.modelcontextprotocol.server.name=io.github.arvindand/maven-tools-mcp" \
             -Dspring-boot.build-image.createdDate=now \
             -Dspring-boot.build-image.publish=true \
             -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \
@@ -115,7 +112,6 @@ jobs:
           # Build ARM64 native image WITHOUT Context7 (noc7 variant)
           SPRING_PROFILES_ACTIVE=docker,no-context7 ./mvnw -Pnative spring-boot:build-image \
             -Dspring-boot.build-image.imageName=arvindand/maven-tools-mcp:${PROJECT_VERSION}-noc7-arm64 \
-            -Dspring-boot.build-image.env.BP_IMAGE_LABELS="io.modelcontextprotocol.server.name=io.github.arvindand/maven-tools-mcp" \
             -Dspring-boot.build-image.createdDate=now \
             -Dspring-boot.build-image.publish=true \
             -Ddocker.publishRegistry.username="${{ secrets.DOCKER_HUB_USERNAME }}" \

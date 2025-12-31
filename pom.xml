@@ -179,6 +179,7 @@
                     <image>
                         <env>
                             <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
+                            <BP_IMAGE_LABELS>io.modelcontextprotocol.server.name="io.github.arvindand/maven-tools-mcp"</BP_IMAGE_LABELS>
                         </env>
                     </image>
                     <docker>
