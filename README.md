@@ -8,7 +8,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Multi--Arch-blue.svg)](https://hub.docker.com/r/arvindand/maven-tools-mcp)
 [![GitHub stars](https://img.shields.io/github/stars/arvindand/maven-tools-mcp?style=social)](https://github.com/arvindand/maven-tools-mcp/stargazers)
 
-Production-ready dependency intelligence infrastructure for AI assistants and agents working with JVM projects.
+Dependency intelligence infrastructure for AI assistants and agents working with JVM projects.
 
 ## 🎯 Why This Exists
 
