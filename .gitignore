@@ -35,3 +35,7 @@ logs
 # Internal planning documents
 improvement.md
 .mcp.json
+
+# MCP Registry authentication tokens
+.mcpregistry_github_token
+.mcpregistry_registry_token
