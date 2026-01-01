@@ -229,7 +229,7 @@ wget https://github.com/arvindand/maven-tools-mcp/releases/latest/download/maven
 
 **Native images available** for instant startup (<50ms) - see [Releases](https://github.com/arvindand/maven-tools-mcp/releases).
 
-> **Official MCP Registry:** This server is published in the [Official MCP Registry](https://registry.modelcontextprotocol.io/servers/io.github.arvindand/maven-tools-mcp). Use the installation instructions above - both standard and `latest-noc7` (Context7-free for corporate networks) variants are available.
+> **Official MCP Registry:** This server is published in the [Official MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.arvindand%2Fmaven-tools-mcp/versions/2.0.0). Use the installation instructions above - both standard and `latest-noc7` (Context7-free for corporate networks) variants are available.
 
 ## 🎯 When To Use This
 
