@@ -210,24 +210,26 @@ Traditional bots stop at step 4. AI agents complete the job.
 
 ### Native Binary (No Docker)
 
-For JVM environments or Docker-restricted systems:
+For JVM environments or Docker-restricted systems, build the JAR locally:
 
 ```bash
-# Download latest release
-wget https://github.com/arvindand/maven-tools-mcp/releases/latest/download/maven-tools-mcp.jar
+# Clone and build
+git clone https://github.com/arvindand/maven-tools-mcp.git
+cd maven-tools-mcp
+./mvnw clean package -DskipTests
 
 # Configure Claude Desktop
 {
   "mcpServers": {
     "maven-tools": {
       "command": "java",
-      "args": ["-jar", "/path/to/maven-tools-mcp.jar"]
+      "args": ["-jar", "/absolute/path/to/target/maven-tools-mcp-2.0.0.jar"]
     }
   }
 }
 ```
 
-**Native images available** for instant startup (<50ms) - see [Releases](https://github.com/arvindand/maven-tools-mcp/releases).
+See [Build from Source](#build-from-source-for-contributors) for detailed build options.
 
 > **Official MCP Registry:** This server is published in the [Official MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.arvindand%2Fmaven-tools-mcp/versions/2.0.0). Use the installation instructions above - both standard and `latest-noc7` (Context7-free for corporate networks) variants are available.
 
