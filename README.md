@@ -6,6 +6,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/arvindand/maven-tools-mcp)](https://github.com/arvindand/maven-tools-mcp/releases)
 [![Docker](https://img.shields.io/badge/Docker-Multi--Arch-blue.svg)](https://hub.docker.com/r/arvindand/maven-tools-mcp)
+[![Docker Pulls](https://img.shields.io/docker/pulls/arvindand/maven-tools-mcp)](https://hub.docker.com/r/arvindand/maven-tools-mcp)
 [![GitHub stars](https://img.shields.io/github/stars/arvindand/maven-tools-mcp?style=social)](https://github.com/arvindand/maven-tools-mcp/stargazers)
 
 Dependency intelligence infrastructure for AI assistants and agents working with JVM projects.
@@ -230,8 +231,6 @@ cd maven-tools-mcp
 ```
 
 See [Build from Source](#build-from-source-for-contributors) for detailed build options.
-
-> **Official MCP Registry:** This server is published in the [Official MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.arvindand%2Fmaven-tools-mcp/versions/2.0.0). Use the installation instructions above - both standard and `latest-noc7` (Context7-free for corporate networks) variants are available.
 
 ## 🎯 When To Use This
 
