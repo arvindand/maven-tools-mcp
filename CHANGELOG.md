@@ -15,6 +15,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [2.0.1] - 2026-01-10
+
+**Stability Fixes* - Fixes occassional virtual thread race conditions due to mcp client using ASYNC mode while server uses SYNC. Now both use SYNC.
+
+### Changed (2.0.1)
+
+- **MCP Client Transport**: Changed from ASYNC to SYNC transport as per spring ai guidelines
+
+- **MCP Client Dependency**: Switched from `spring-ai-starter-mcp-client-webflux` to `spring-ai-starter-mcp-client`
+  - Standard HTTP client replaces reactive WebFlux client
+  
+- **Context7 Guidance Hints**: Now available in both image variants
+  - `context7.hints.enabled` property controls orchestration instructions in responses
+  - Enabled by default in both `:latest` and `:latest-noc7` images
+  - Provides actionable guidance even when Context7 tools are unavailable
+
+### Fixed (2.0.1)
+
+- **"Failed to enqueue message" Runtime Error**: Fixed `RuntimeException` from `StdioServerTransportProvider` when multiple async tool calls were made concurrently (e.g., Context7 lookups). Root cause was SYNC server with ASYNC client transport mismatch in MCP Java SDK.
+
 ## [2.0.0] - 2025-12-29
 
 **Security & License Intelligence Release** - Adds vulnerability scanning via OSV.dev and license compliance analysis to existing tools

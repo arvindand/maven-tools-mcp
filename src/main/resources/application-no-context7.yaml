@@ -10,6 +10,6 @@ spring:
     banner-mode: "off"  # Disable banner
     log-startup-info: false
 
-# Disable Context7 guidance hints
+# Keep Context7 guidance hints even if not bundled in image
 context7:
-  enabled: false
+  enabled: true

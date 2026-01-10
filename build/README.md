@@ -64,7 +64,7 @@ Scripts support non-interactive mode for CI/CD by passing the option number:
 
 ## Build Outputs
 
-Built JAR files are placed in: `target/maven-tools-mcp-2.0.0.jar`
+Built JAR files are placed in: `target/maven-tools-mcp-2.0.1.jar`
 
 ## Native Image Builds
 
