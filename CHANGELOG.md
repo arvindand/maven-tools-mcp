@@ -15,6 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [2.0.2] - 2026-01-17
+
+**Bug Fix Release** - Fixes project health analysis and improves cache thread safety
+
+### Fixed (2.0.2)
+
+- **Project Health Analysis**: Fixed parameter ordering bug in `buildSimpleHealthSummary` that caused `dependencyCount` to always be 0 or incorrect values
+- **VulnerabilityService Race Condition**: Fixed potential duplicate OSV requests using atomic `cache.get()` pattern instead of separate check-then-put
+
+### Changed (2.0.2)
+
+- **Code Cleanup**: Removed duplicate `@EnableConfigurationProperties` annotation, improved javadoc clarity
+
 ## [2.0.1] - 2026-01-10
 
 **Stability Fixes* - Fixes occassional virtual thread race conditions due to mcp client using ASYNC mode while server uses SYNC. Now both use SYNC.
@@ -464,7 +477,9 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.1...v2.0.2
+[2.0.1]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.3...v2.0.0
 [1.5.3]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.1...v1.5.2

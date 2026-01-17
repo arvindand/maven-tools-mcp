@@ -63,6 +63,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class MavenDependencyTools {
 
+  private static final Logger logger = LoggerFactory.getLogger(MavenDependencyTools.class);
+
+  // Error message constants
   private static final String UNEXPECTED_ERROR = "Unexpected error";
   private static final String MAVEN_CENTRAL_ERROR = "Maven Central error: ";
   private static final String INVALID_MAVEN_COORDINATE_FORMAT = "Invalid Maven coordinate format: ";
@@ -82,7 +85,6 @@ public class MavenDependencyTools {
   private static final String CURRENT_AGE = "current";
   private static final String AGING_AGE = "aging";
   private static final String STALE_AGE = "stale";
-  private static final Logger logger = LoggerFactory.getLogger(MavenDependencyTools.class);
 
   // Analysis constants
   private static final int DEFAULT_ANALYSIS_MONTHS = 24;
@@ -1476,9 +1478,9 @@ public class MavenDependencyTools {
     if (successfulDeps.isEmpty()) {
       return new ProjectHealthAnalysis(
           "unknown",
-          0,
           totalDependencies,
           0,
+          totalDependencies,
           new ProjectHealthAnalysis.AgeDistribution(0, 0, 0, 0),
           dependencyAnalyses,
           List.of("Unable to analyze any dependencies"),
@@ -1512,9 +1514,9 @@ public class MavenDependencyTools {
 
     return new ProjectHealthAnalysis(
         overallHealth,
-        (int) Math.round(averageHealthScore),
         totalDependencies,
         successfulAnalyses,
+        totalDependencies - successfulAnalyses,
         ageDistribution,
         dependencyAnalyses,
         recommendations,

@@ -93,9 +93,13 @@ public class MavenCentralService {
   /**
    * Checks if a specific version exists for a Maven coordinate.
    *
+   * <p>Note: Returns false for both "version not found" and "service error" cases. Service errors
+   * are logged at debug level. Transient failures are handled by resilience patterns on {@link
+   * #fetchRepositoryMetadata}.
+   *
    * @param coordinate the Maven coordinate
    * @param version the version to check
-   * @return true if the version exists
+   * @return true if the version exists, false otherwise
    */
   @Cacheable(
       value = MAVEN_VERSION_CHECKS,
