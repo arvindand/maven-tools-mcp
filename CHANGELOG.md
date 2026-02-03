@@ -15,6 +15,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [2.0.3] - 2026-02-03
+
+**HTTP Transport Release** - Adds streamable HTTP transport support and Actuator health probes
+
+### Added (2.0.3)
+
+- **Streamable HTTP Transport**: New `http` Spring profile for HTTP-based MCP protocol
+  - Endpoint: `/mcp` on port 8080
+  - Compatible with HTTP-based MCP clients and container deployments
+  - Run with: `--spring.profiles.active=http` or `SPRING_PROFILES_ACTIVE=http`
+- **Actuator Health Endpoints**: Container-ready health probes
+  - `/actuator/health/liveness` for liveness probe
+  - `/actuator/health/readiness` for readiness probe
+- **HTTP Docker Image Variant**: New `:latest-http` and `:{version}-http` multi-arch images with streamable HTTP transport
+
+### Changed (2.0.3)
+
+- Added `spring-boot-starter-actuator` dependency for health endpoints
+- Build option 8 creates HTTP transport Docker image (`-http` suffix)
+
 ## [2.0.2] - 2026-01-17
 
 **Bug Fix Release** - Fixes project health analysis and improves cache thread safety
@@ -477,7 +497,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.2...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.3...HEAD
+[2.0.3]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/arvindand/maven-tools-mcp/compare/v1.5.3...v2.0.0

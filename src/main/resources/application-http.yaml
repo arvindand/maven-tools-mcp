@@ -1,0 +1,43 @@
+# HTTP profile - Streamable HTTP transport for MCP server
+# Use this profile when running as a standalone HTTP server instead of STDIO
+#
+# Run with: java -jar maven-tools-mcp.jar --spring.profiles.active=http
+# Or Docker: docker run -p 8080:8080 -e SPRING_PROFILES_ACTIVE=http arvindand/maven-tools-mcp:latest
+#
+# Connect from SDK with:
+#   mcp_servers:
+#     maven-tools:
+#       type: http
+#       url: http://localhost:8080/mcp
+
+spring:
+  main:
+    web-application-type: servlet
+    banner-mode: off
+  ai:
+    mcp:
+      server:
+        protocol: STREAMABLE
+        streamable-http:
+          mcp-endpoint: /mcp
+          keep-alive-interval: 30s
+
+server:
+  port: 8080
+
+# Health endpoints for container orchestration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true

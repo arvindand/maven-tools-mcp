@@ -44,9 +44,10 @@ else
     echo "5. Clean build artifacts"
     echo "6. Run tests only"
     echo "7. Build Native Docker image WITHOUT Context7"
+    echo "8. Build Native Docker image with HTTP transport"
     echo ""
 
-    read -p "Choose option (1-7): " choice
+    read -p "Choose option (1-8): " choice
 fi
 
 # Make mvnw executable if it isn't already
@@ -70,7 +71,7 @@ case $choice in
         (cd .. && ./mvnw clean package -DskipTests)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.2")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.3")
         
         echo ""
         echo "Step 2: Build Native Docker image WITH Context7..."
@@ -105,7 +106,7 @@ case $choice in
         (cd .. && ./mvnw spring-boot:build-image)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.2")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.3")
         
         echo "✅ JVM Docker image built successfully: maven-tools-mcp:${PROJECT_VERSION}"
         echo ""
@@ -137,7 +138,7 @@ case $choice in
         (cd .. && ./mvnw clean package -DskipTests)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.2")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.3")
         
         echo ""
         echo "Step 2: Build Native Docker image with no-context7 profile..."
@@ -153,8 +154,34 @@ case $choice in
         echo "   docker run -i maven-tools-mcp:${PROJECT_VERSION}-noc7"
         exit 0
         ;;
+    8)
+        echo "🐳 Building Native Docker image with HTTP transport..."
+        echo "⏳ This may take 10-15 minutes for native compilation..."
+        echo "Step 1: Package application..."
+        (cd .. && ./mvnw clean package -DskipTests)
+
+        # Get project version for image name
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.3")
+
+        echo ""
+        echo "Step 2: Build Native Docker image with http profile..."
+        (cd .. && SPRING_PROFILES_ACTIVE=http ./mvnw -Pnative spring-boot:build-image \
+          -Dspring-boot.build-image.imageName=maven-tools-mcp:${PROJECT_VERSION}-http)
+
+        echo ""
+        echo "✅ Native Docker image with HTTP transport built successfully!"
+        echo ""
+        echo "Image created: maven-tools-mcp:${PROJECT_VERSION}-http"
+        echo ""
+        echo "🚀 Run with:"
+        echo "   docker run -p 8080:8080 maven-tools-mcp:${PROJECT_VERSION}-http"
+        echo ""
+        echo "📡 Connect via HTTP:"
+        echo "   curl -X POST http://localhost:8080/mcp -H 'Content-Type: application/json' -d '{...}'"
+        exit 0
+        ;;
     *)
-        echo "❌ Invalid option. Please choose 1-7."
+        echo "❌ Invalid option. Please choose 1-8."
         exit 1
         ;;
 esac

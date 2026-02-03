@@ -189,6 +189,14 @@ Traditional bots stop at step 4. AI agents complete the job.
 
 **Note:** The Docker image supports both AMD64 (Intel/AMD) and ARM64 (Apple Silicon) architectures.
 
+**Available Image Variants:**
+
+| Tag | Transport | Context7 | Use Case |
+|-----|-----------|----------|----------|
+| `:latest` | STDIO | Yes | Default for Claude Desktop, Copilot |
+| `:latest-noc7` | STDIO | No | Corporate networks blocking Context7 |
+| `:latest-http` | HTTP | Yes | Streamable HTTP transport variant |
+
 **Troubleshooting:** If your network blocks `https://mcp.context7.com`, use: `arvindand/maven-tools-mcp:latest-noc7`
 
 ### VS Code + GitHub Copilot
@@ -224,7 +232,7 @@ cd maven-tools-mcp
   "mcpServers": {
     "maven-tools": {
       "command": "java",
-      "args": ["-jar", "/absolute/path/to/target/maven-tools-mcp-2.0.2.jar"]
+      "args": ["-jar", "/absolute/path/to/target/maven-tools-mcp-2.0.3.jar"]
     }
   }
 }
@@ -731,12 +739,18 @@ Response time: <100ms (cached), <500ms (fresh)
 
 ### Deployment Options
 
-**Docker (Recommended):**
+**Docker STDIO (Recommended for Desktop):**
 
 - Multi-arch support (AMD64 + ARM64)
 - Automatic platform selection
 - Isolated environment
 - `docker run -i --rm arvindand/maven-tools-mcp:latest`
+
+**Docker HTTP (Streamable HTTP Transport):**
+
+- HTTP-based MCP protocol on port 8080
+- Health probes: `/actuator/health/liveness`, `/actuator/health/readiness`
+- `docker run -p 8080:8080 arvindand/maven-tools-mcp:latest-http`
 
 **Native Image:**
 
@@ -765,6 +779,7 @@ Response time: <100ms (cached), <500ms (fresh)
 - Proxy configuration supported
 - Custom CA certificates supported (see [CORPORATE-CERTIFICATES.md](CORPORATE-CERTIFICATES.md))
 - Context7-free builds available (`arvindand/maven-tools-mcp:latest-noc7`)
+- HTTP transport variant (`arvindand/maven-tools-mcp:latest-http`)
 
 ## Alternative Setup Methods
 
@@ -813,7 +828,7 @@ cd maven-tools-mcp
 ./mvnw clean package -Pfull
 
 # Run the JAR
-java -jar target/maven-tools-mcp-2.0.2.jar
+java -jar target/maven-tools-mcp-2.0.3.jar
 ```
 
 **Claude Desktop configuration for JAR:**
@@ -825,7 +840,7 @@ java -jar target/maven-tools-mcp-2.0.2.jar
       "command": "java",
       "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-2.0.2.jar"
+        "/absolute/path/to/maven-tools-mcp-2.0.3.jar"
       ]
     }
   }
@@ -933,4 +948,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 2.0.2
+- Version: 2.0.3
