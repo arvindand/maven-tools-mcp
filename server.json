@@ -26,27 +26,6 @@
           "description": "Keep STDIN open for MCP stdio transport"
         }
       ]
-    },
-    {
-      "registryType": "oci",
-      "identifier": "docker.io/arvindand/maven-tools-mcp:latest-http",
-      "transport": {
-        "type": "http",
-        "port": 8080,
-        "path": "/mcp"
-      },
-      "runtimeArguments": [
-        {
-          "type": "named",
-          "name": "--rm",
-          "description": "Remove container after exit"
-        },
-        {
-          "type": "named",
-          "name": "-p",
-          "description": "Expose HTTP port"
-        }
-      ]
     }
   ],
   "_meta": {
