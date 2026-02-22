@@ -15,6 +15,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [2.0.4] - 2026-02-22
+
+**Dogfooding & Context7 Compatibility Release** - Adds automated self-update workflow dogfooding, fixes Context7 MCP client startup compatibility, and improves dependency update selection behavior.
+
+### Added (2.0.4)
+
+- **Dogfooding Self-Update Workflow**: Weekly GitHub Actions workflow that runs a local Python dependency-update agent subproject against Maven Tools MCP itself and opens/updates a bot PR for safe minor/patch changes
+- **Local Dependency Agent Subproject**: `agents/copilot-maven-tools-agent/` (Copilot SDK + Maven Tools MCP) for repository-local dogfooding automation
+- **Server-side Same-Major Fallbacks**: `compare_dependency_versions` can now return a same-major stable fallback suggestion when the latest stable recommendation is a major update (e.g., Spring Boot `3.5.x` patch while `4.x` exists)
+
+### Changed (2.0.4)
+
+- **Context7 MCP Compatibility**: Override MCP Java SDK to `0.17.2` to fix startup failures caused by `202 Accepted` `text/plain` responses for MCP notifications
+- **Context7 API Key Support**: Added optional `CONTEXT7_API_KEY` outbound auth support for Context7 MCP client requests (documented as optional; default run configs remain key-free)
+- **Dogfooding Agent Selection Logic**: Keeps version semantics in Maven Tools MCP and allows configurable dependency ignores (used for temporary MCP SDK BOM override during dogfooding)
+- **Dogfooding Agent Default Model**: Default Copilot model updated to `claude-haiku-4.5`
+
 ## [2.0.3] - 2026-02-03
 
 **HTTP Transport Release** - Adds streamable HTTP transport support and Actuator health probes
@@ -497,7 +514,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.3...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.4...HEAD
+[2.0.4]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.0...v2.0.1

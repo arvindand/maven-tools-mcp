@@ -238,7 +238,7 @@ cd maven-tools-mcp
   "mcpServers": {
     "maven-tools": {
       "command": "java",
-      "args": ["-jar", "/absolute/path/to/target/maven-tools-mcp-2.0.3.jar"]
+      "args": ["-jar", "/absolute/path/to/target/maven-tools-mcp-2.0.4.jar"]
     }
   }
 }
@@ -891,7 +891,7 @@ cd maven-tools-mcp
 ./mvnw clean package -Pfull
 
 # Run the JAR
-java -jar target/maven-tools-mcp-2.0.3.jar
+java -jar target/maven-tools-mcp-2.0.4.jar
 ```
 
 **Claude Desktop configuration for JAR:**
@@ -903,7 +903,7 @@ java -jar target/maven-tools-mcp-2.0.3.jar
       "command": "java",
       "args": [
         "-jar",
-        "/absolute/path/to/maven-tools-mcp-2.0.3.jar"
+        "/absolute/path/to/maven-tools-mcp-2.0.4.jar"
       ]
     }
   }
@@ -1011,4 +1011,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Arvind Menon
 
 - GitHub: [@arvindand](https://github.com/arvindand)
-- Version: 2.0.3
+- Version: 2.0.4
