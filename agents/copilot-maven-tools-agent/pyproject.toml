@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "copilot-maven-tools-agent"
+version = "0.1.0"
+description = "Automated dependency management using Copilot SDK + Maven Tools MCP"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Arvind Menon"}
+]
+keywords = ["copilot", "mcp", "maven", "dependencies", "automation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "aiohttp>=3.13.3",
+    "pydantic>=2.12.5",
+    "click>=8.1.8",
+    "rich>=14.3.2",
+    "github-copilot-sdk>=0.1.25",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=7.0.0",
+    "black>=25.11.0",
+    "ruff>=0.14.14",
+    "mypy>=1.19.1",
+]
+
+[project.scripts]
+maven-agent = "scripts.upgrade:main"
+
+[project.urls]
+Homepage = "https://github.com/arvindand/maven-tools-mcp"
+Repository = "https://github.com/arvindand/maven-tools-mcp"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "scripts*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -286,6 +286,57 @@ Working with **any build tool** that uses Maven Central Repository:
 
 **All tools use standard Maven coordinates** - just provide `groupId:artifactId` and we handle the rest.
 
+## 🤖 Dogfooding: Weekly Self-Updating Dependencies
+
+Maven Tools MCP runs its own dependency agent against itself every week — a live demonstration of AI-agent automation for Maven dependency management.
+
+### How It Works
+
+A scheduled GitHub Actions workflow ([`dependency-agent-self-update.yml`](.github/workflows/dependency-agent-self-update.yml)):
+
+1. Starts the Maven Tools MCP HTTP sidecar (`arvindand/maven-tools-mcp:latest-http`)
+2. Runs the [`copilot-maven-tools-agent`](agents/copilot-maven-tools-agent/) against the root `pom.xml`
+3. Applies all stable minor/patch updates automatically
+4. Creates or updates a persistent PR branch (`bot/dependency-agent-self-update`) via GitHub Actions
+5. Repo CI validates the build on the PR
+
+Major version updates are surfaced in the workflow log but not auto-applied — those require manual review.
+
+### Agent Location
+
+The dependency agent lives at [`agents/copilot-maven-tools-agent/`](agents/copilot-maven-tools-agent/). It is a Python subproject built with the **GitHub Copilot SDK** and Maven Tools MCP for dependency intelligence.
+
+### Why the Copilot SDK (Not the Copilot Agent)?
+
+The agent is implemented using the **GitHub Copilot SDK** directly — not the higher-level Copilot agent/extension. This was a deliberate choice: the Copilot agent approach was considered but the SDK gives full control over the MCP client lifecycle, making the architecture easy to extend to other AI platforms. Swapping the Copilot SDK client for a GitLab Duo client, an Azure OpenAI client, or any other provider requires changing only the AI client layer — the POM parsing, MCP tool calls, and upgrade logic remain identical. The agent is designed to serve as a reference implementation for SDK-based MCP integrations across platforms.
+
+### Parallel to GitHub Agentic Workflows
+
+This follows a similar shape to GitHub Agentic Workflows: GitHub Actions orchestrates a bounded AI-agent task and the output is a reviewable PR. The difference is that this repo uses a hand-authored workflow YAML plus a purpose-built Python agent (Copilot SDK + Maven Tools MCP), rather than authoring in Markdown and compiling via `gh aw`.
+
+### Required Setup
+
+To enable the weekly workflow in your fork or copy of this repo:
+
+1. Create a fine-grained PAT named `COPILOT_BOT_PAT` with:
+   - **Repository permissions:** Contents (write), Pull requests (write), Metadata (read)
+   - **GitHub Copilot:** Requests permission
+2. Add it as a repository secret under **Settings → Secrets → Actions**
+
+### Manual Trigger
+
+Run the workflow manually at any time:
+
+**Via GitHub UI:** Go to **Actions → Dependency Agent Self-Update → Run workflow**
+
+**Via GitHub CLI:**
+
+```bash
+gh workflow run dependency-agent-self-update.yml
+# Or with dry-run (analyze only, no PR):
+gh workflow run dependency-agent-self-update.yml -f dry_run=true
+```
+
 ## 🛠 Available Tools (10 Tools)
 
 ### Core Maven Intelligence Tools (8 tools)
