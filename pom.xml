@@ -146,7 +146,8 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <!-- Override Java MCP SDK to pull in 0.17.2 fix for 202/text-plain notification ACKs -->
+            <!-- Intentionally after spring-ai-bom so this import overrides Spring AI's MCP SDK versions -->
+            <!-- Pulls in the 0.17.2 fix for 202/text-plain notification ACKs -->
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-bom</artifactId>
