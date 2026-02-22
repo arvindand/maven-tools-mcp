@@ -60,7 +60,7 @@ class CopilotSDKClient:
     def __init__(
         self,
         working_dir: Optional[str] = None,
-        model: str = "claude-sonnet-4.5",
+        model: str = "claude-haiku-4.5",
         use_maven_tools_mcp: bool = True,
         mcp_transport: str = "stdio",  # "stdio" or "http"
         mcp_url: Optional[str] = None,  # Override URL for HTTP transport
