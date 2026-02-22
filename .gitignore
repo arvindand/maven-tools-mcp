@@ -40,3 +40,9 @@ improvement.md
 .mcpregistry_github_token
 .mcpregistry_registry_token
 .DS_Store
+
+# Python cache artifacts (vendored agent subproject)
+__pycache__/
+.pytest_cache/
+.venv/
+*.egg-info/

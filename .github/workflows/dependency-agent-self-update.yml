@@ -1,0 +1,138 @@
+name: Dependency Agent Self-Update
+
+on:
+  schedule:
+    # Every Monday at 08:00 UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (analyze only, no PR)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: dependency-agent-self-update
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-dependencies:
+    name: Run Dependency Agent
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.COPILOT_BOT_PAT }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install agent
+        working-directory: agents/copilot-maven-tools-agent
+        run: pip install -e .
+
+      - name: Pull Maven Tools MCP HTTP image
+        run: docker pull arvindand/maven-tools-mcp:latest-http
+
+      - name: Start Maven Tools MCP sidecar
+        run: |
+          docker run -d \
+            --name maven-tools-mcp \
+            -p 8080:8080 \
+            arvindand/maven-tools-mcp:latest-http
+          # Wait for health check
+          ready=false
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+              echo "MCP sidecar is ready"
+              ready=true
+              break
+            fi
+            echo "Waiting for MCP sidecar... ($i/30)"
+            sleep 2
+          done
+          if [ "$ready" != "true" ]; then
+            echo "MCP sidecar failed to become healthy in time"
+            docker logs maven-tools-mcp || true
+            exit 1
+          fi
+
+      - name: Run dependency agent
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_BOT_PAT }}
+        run: |
+          DRY_RUN_FLAG=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          maven-agent \
+            -f pom.xml \
+            --http \
+            --mcp-url http://localhost:8080/mcp \
+            --mode minor_patch \
+            $DRY_RUN_FLAG
+
+      - name: Stop MCP sidecar
+        if: always()
+        run: docker stop maven-tools-mcp || true
+
+      - name: Check for POM changes
+        id: changes
+        run: |
+          if git diff --quiet pom.xml; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No dependency updates applied"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "pom.xml has been updated"
+            git diff pom.xml
+          fi
+
+      - name: Create or update PR
+        if: steps.changes.outputs.changed == 'true' && inputs.dry_run != true
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.COPILOT_BOT_PAT }}
+          branch: bot/dependency-agent-self-update
+          base: main
+          commit-message: |
+            chore(deps): automated dependency updates (minor/patch)
+
+            Applied by copilot-maven-tools-agent weekly workflow.
+          title: 'chore(deps): automated dependency updates (minor/patch)'
+          body: |
+            ## Automated Dependency Updates
+
+            This PR was created by the [copilot-maven-tools-agent](agents/copilot-maven-tools-agent/) weekly workflow.
+
+            ### What changed
+            - Minor and patch dependency updates applied automatically
+            - Major updates are excluded (require manual review)
+
+            ### How to review
+            Check the `pom.xml` diff for the applied version bumps. This workflow relies on the repo's normal PR CI to validate the build. Major updates (if any were available) are listed in the workflow log but not applied.
+
+            ---
+            *Triggered by: `${{ github.event_name }}` | Run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*
+          labels: dependencies,automated
+
+      - name: Summary - no changes
+        if: steps.changes.outputs.changed == 'false'
+        run: echo "All dependencies are up to date. No PR created."
+
+      - name: Upload agent logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-logs-${{ github.run_id }}
+          path: |
+            ~/.local/share/github-copilot/
+          retention-days: 7
