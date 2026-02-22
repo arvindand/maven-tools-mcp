@@ -59,6 +59,7 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, DependencyInfo.class);
       registerRecordClass(hints, VersionComparison.class);
       registerRecordClass(hints, VersionComparison.DependencyComparisonResult.class);
+      registerRecordClass(hints, VersionComparison.SameMajorStableFallback.class);
       registerRecordClass(hints, VersionComparison.UpdateSummary.class);
       registerRecordClass(hints, VersionInfo.class);
 

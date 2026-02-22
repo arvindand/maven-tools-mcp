@@ -270,7 +270,6 @@ Return ONLY the version number, nothing else."""
             return versions[-1]
         return response.strip()
 
-
 def _get_event_type(event: Any) -> str:
     """Extract event type string from event object."""
     return event.type.value if hasattr(event.type, "value") else str(event.type)

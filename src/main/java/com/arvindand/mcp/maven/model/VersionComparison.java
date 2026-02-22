@@ -44,7 +44,8 @@ public record VersionComparison(
       String status,
       String error,
       Optional<SecurityAssessment> security,
-      Optional<Context7Guidance> context7Guidance) {
+      Optional<Context7Guidance> context7Guidance,
+      Optional<SameMajorStableFallback> sameMajorStableFallback) {
 
     public static DependencyComparisonResult success(
         String dependency,
@@ -54,6 +55,26 @@ public record VersionComparison(
         String updateType,
         boolean updateAvailable,
         boolean context7Enabled) {
+      return success(
+          dependency,
+          currentVersion,
+          latestVersion,
+          latestType,
+          updateType,
+          updateAvailable,
+          context7Enabled,
+          null);
+    }
+
+    public static DependencyComparisonResult success(
+        String dependency,
+        String currentVersion,
+        String latestVersion,
+        String latestType,
+        String updateType,
+        boolean updateAvailable,
+        boolean context7Enabled,
+        SameMajorStableFallback sameMajorStableFallback) {
       // Add Context7 guidance if update is available and Context7 is enabled
       Optional<Context7Guidance> guidance =
           (updateAvailable && context7Enabled)
@@ -70,7 +91,8 @@ public record VersionComparison(
           "success",
           null,
           Optional.empty(),
-          guidance);
+          guidance,
+          Optional.ofNullable(sameMajorStableFallback));
     }
 
     public static DependencyComparisonResult successWithSecurity(
@@ -82,6 +104,28 @@ public record VersionComparison(
         boolean updateAvailable,
         SecurityAssessment security,
         boolean context7Enabled) {
+      return successWithSecurity(
+          dependency,
+          currentVersion,
+          latestVersion,
+          latestType,
+          updateType,
+          updateAvailable,
+          security,
+          context7Enabled,
+          null);
+    }
+
+    public static DependencyComparisonResult successWithSecurity(
+        String dependency,
+        String currentVersion,
+        String latestVersion,
+        String latestType,
+        String updateType,
+        boolean updateAvailable,
+        SecurityAssessment security,
+        boolean context7Enabled,
+        SameMajorStableFallback sameMajorStableFallback) {
       Optional<Context7Guidance> guidance =
           (updateAvailable && context7Enabled)
               ? Optional.of(Context7Guidance.forMigration(dependency, updateType))
@@ -97,7 +141,8 @@ public record VersionComparison(
           "success",
           null,
           Optional.ofNullable(security),
-          guidance);
+          guidance,
+          Optional.ofNullable(sameMajorStableFallback));
     }
 
     public static DependencyComparisonResult notFound(String dependency, String currentVersion) {
@@ -110,6 +155,7 @@ public record VersionComparison(
           false,
           "not_found",
           null,
+          Optional.empty(),
           Optional.empty(),
           Optional.empty());
     }
@@ -125,6 +171,7 @@ public record VersionComparison(
           "no_current_version",
           null,
           Optional.empty(),
+          Optional.empty(),
           Optional.empty());
     }
 
@@ -139,6 +186,7 @@ public record VersionComparison(
           "error",
           error,
           Optional.empty(),
+          Optional.empty(),
           Optional.empty());
     }
 
@@ -149,6 +197,10 @@ public record VersionComparison(
           && security.get().requiresAction();
     }
   }
+
+  /** Optional server-computed same-major stable fallback when latest stable is a major upgrade. */
+  @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+  public record SameMajorStableFallback(String latestVersion, String updateType) {}
 
   /** Summary of update types. */
   public record UpdateSummary(

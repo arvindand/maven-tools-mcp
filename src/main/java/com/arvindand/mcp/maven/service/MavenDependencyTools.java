@@ -1064,6 +1064,8 @@ public class MavenDependencyTools {
       String latestType = versionComparator.getVersionTypeString(latestVersion);
       String updateType = versionComparator.determineUpdateType(currentVersion, latestVersion);
       boolean updateAvailable = versionComparator.compare(currentVersion, latestVersion) < 0;
+      VersionComparison.SameMajorStableFallback sameMajorStableFallback =
+          buildSameMajorStableFallback(coordinate, currentVersion, latestVersion, stabilityFilter);
 
       SecurityAssessment security = null;
       if (securityAssessments != null && !securityAssessments.isEmpty()) {
@@ -1079,7 +1081,8 @@ public class MavenDependencyTools {
             updateType,
             updateAvailable,
             security,
-            context7Properties.enabled());
+            context7Properties.enabled(),
+            sameMajorStableFallback);
       }
 
       return VersionComparison.DependencyComparisonResult.success(
@@ -1089,10 +1092,61 @@ public class MavenDependencyTools {
           latestType,
           updateType,
           updateAvailable,
-          context7Properties.enabled());
+          context7Properties.enabled(),
+          sameMajorStableFallback);
     } catch (RuntimeException e) {
       return VersionComparison.DependencyComparisonResult.error(dep, e.getMessage());
     }
+  }
+
+  private VersionComparison.SameMajorStableFallback buildSameMajorStableFallback(
+      MavenCoordinate coordinate,
+      String currentVersion,
+      String latestVersion,
+      StabilityFilter stabilityFilter)
+      throws MavenCentralException {
+    if (stabilityFilter != StabilityFilter.STABLE_ONLY) {
+      return null;
+    }
+
+    if (!"major".equals(versionComparator.determineUpdateType(currentVersion, latestVersion))) {
+      return null;
+    }
+
+    Integer currentMajor = extractMajorVersion(currentVersion);
+    if (currentMajor == null) {
+      return null;
+    }
+
+    List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
+    for (String candidate : allVersions) {
+      if (!versionComparator.isStableVersion(candidate)) {
+        continue;
+      }
+      if (candidate.equals(currentVersion)) {
+        break;
+      }
+      if (!currentMajor.equals(extractMajorVersion(candidate))) {
+        continue;
+      }
+      if (versionComparator.compare(currentVersion, candidate) >= 0) {
+        continue;
+      }
+
+      String fallbackUpdateType = versionComparator.determineUpdateType(currentVersion, candidate);
+      if (!"minor".equals(fallbackUpdateType) && !"patch".equals(fallbackUpdateType)) {
+        continue;
+      }
+
+      return new VersionComparison.SameMajorStableFallback(candidate, fallbackUpdateType);
+    }
+
+    return null;
+  }
+
+  private Integer extractMajorVersion(String version) {
+    int[] numericParts = versionComparator.parseVersion(version).numericParts();
+    return numericParts.length > 0 ? numericParts[0] : null;
   }
 
   private BulkCheckResult processComprehensiveVersionCheck(String dep) {

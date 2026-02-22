@@ -34,6 +34,7 @@ from src.analysis.dependency import DependencyAnalyzer, DependencyUpdate, Parsed
 
 # Constants
 MAX_SECURITY_ISSUES_DISPLAY = 10
+IGNORE_DEPENDENCIES_ENV_VAR = "MAVEN_AGENT_IGNORE_DEPENDENCIES"
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -142,9 +143,18 @@ def _extract_deps_data(response: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _parse_single_dependency(dep: dict[str, Any]) -> Optional[DependencyUpdate]:
     """Parse a single dependency dict into DependencyUpdate, or None if invalid."""
-    current = dep.get("currentVersion", dep.get("current", dep.get("version", "")))
-    latest = dep.get("latestVersion", dep.get("latest", dep.get("recommendedVersion", "")))
-    update_type = dep.get("updateType", dep.get("type", dep.get("upgradeType", "unknown")))
+    current = dep.get(
+        "currentVersion",
+        dep.get("current_version", dep.get("current", dep.get("version", ""))),
+    )
+    latest = dep.get(
+        "latestVersion",
+        dep.get("latest_version", dep.get("latest", dep.get("recommendedVersion", ""))),
+    )
+    update_type = dep.get(
+        "updateType",
+        dep.get("update_type", dep.get("type", dep.get("upgradeType", "unknown"))),
+    )
 
     # Skip if no update available
     if not latest or current == latest:
@@ -244,19 +254,100 @@ def _apply_pom_updates(
     return applied
 
 
-def _parse_pom_dependencies(pom_content: str) -> tuple[list[ParsedDependency], str]:
+def _normalize_dependency_key(value: str) -> str:
+    """Normalize a dependency identifier to 'groupId:artifactId'."""
+    parts = [part.strip() for part in (value or "").split(":")]
+    if len(parts) >= 2 and parts[0] and parts[1]:
+        return f"{parts[0]}:{parts[1]}"
+    return (value or "").strip()
+
+
+def parse_ignored_dependency_keys(
+    ignore_dependencies: tuple[str, ...] = (),
+    env_value: Optional[str] = None,
+) -> set[str]:
+    """
+    Parse ignored dependency coordinates from CLI args and/or env var.
+
+    Supported format:
+      - exact Maven coordinates without version: groupId:artifactId
+      - comma/newline separated in env var (extra whitespace allowed)
+      - if a version is accidentally included, it is ignored
+    """
+    ignored: set[str] = set()
+
+    for raw in ignore_dependencies:
+        normalized = _normalize_dependency_key(raw)
+        if normalized and ":" in normalized:
+            ignored.add(normalized)
+
+    if env_value:
+        for token in re.split(r"[\n,]+", env_value):
+            normalized = _normalize_dependency_key(token)
+            if normalized and ":" in normalized:
+                ignored.add(normalized)
+
+    return ignored
+
+
+def _filter_ignored_parsed_dependencies(
+    parsed_deps: list[ParsedDependency],
+    ignored_dependency_keys: set[str],
+) -> tuple[list[ParsedDependency], list[ParsedDependency]]:
+    """Split parsed dependencies into kept and ignored lists."""
+    if not ignored_dependency_keys:
+        return parsed_deps, []
+
+    kept: list[ParsedDependency] = []
+    ignored: list[ParsedDependency] = []
+    for dep in parsed_deps:
+        if dep.coordinate in ignored_dependency_keys:
+            ignored.append(dep)
+        else:
+            kept.append(dep)
+    return kept, ignored
+
+
+def _filter_ignored_updates(
+    updates: list[DependencyUpdate],
+    ignored_dependency_keys: set[str],
+) -> list[DependencyUpdate]:
+    """Filter updates for ignored coordinates (safety net; usually filtered before MCP call)."""
+    if not ignored_dependency_keys:
+        return updates
+    return [u for u in updates if u.coordinate not in ignored_dependency_keys]
+
+
+def _parse_pom_dependencies(
+    pom_content: str,
+    ignored_dependency_keys: Optional[set[str]] = None,
+) -> tuple[list[ParsedDependency], str]:
     """Parse POM and return dependencies with MCP-formatted string."""
     console.print("\n[bold]Step 1: Parsing dependencies...[/bold]")
     parsed_deps = DependencyAnalyzer.parse_pom_with_properties(pom_content)
+    ignored_dependency_keys = ignored_dependency_keys or set()
 
     if not parsed_deps:
         console.print("[yellow]No dependencies with explicit versions found[/yellow]")
         return [], ""
 
+    filtered_deps, ignored_deps = _filter_ignored_parsed_dependencies(parsed_deps, ignored_dependency_keys)
+
     console.print(f"[green]✓[/green] Found {len(parsed_deps)} dependencies with versions")
-    mcp_input = DependencyAnalyzer.format_for_mcp(parsed_deps)
+    if ignored_deps:
+        ignored_list = ", ".join(sorted({dep.coordinate for dep in ignored_deps}))
+        console.print(
+            f"[yellow]⚠[/yellow] Ignoring {len(ignored_deps)} dependency entries "
+            f"({len({dep.coordinate for dep in ignored_deps})} unique): {ignored_list}"
+        )
+
+    if not filtered_deps:
+        console.print("[yellow]No dependencies remain after ignore filters[/yellow]")
+        return [], ""
+
+    mcp_input = DependencyAnalyzer.format_for_mcp(filtered_deps)
     logger.debug(f"MCP input: {mcp_input}")
-    return parsed_deps, mcp_input
+    return filtered_deps, mcp_input
 
 
 async def _fetch_mcp_updates(
@@ -319,12 +410,65 @@ def parse_mcp_response(response: dict[str, Any]) -> list[DependencyUpdate]:
     return updates
 
 
+def _extract_same_major_fallback_update(dep: dict[str, Any]) -> Optional[DependencyUpdate]:
+    """
+    Parse an optional server-computed same-major stable fallback from a dependency result.
+
+    The Maven Tools MCP server may include this when the latest stable recommendation is a major
+    update but a newer stable version exists on the current major line.
+    """
+    fallback = dep.get("sameMajorStableFallback", dep.get("same_major_stable_fallback"))
+    if not isinstance(fallback, dict):
+        return None
+
+    base_update = _parse_single_dependency(dep)
+    if not base_update or base_update.update_type != "major":
+        return None
+
+    latest = fallback.get("latestVersion", fallback.get("latest_version", ""))
+    update_type = fallback.get("updateType", fallback.get("update_type", ""))
+    if not isinstance(latest, str) or not latest.strip():
+        return None
+
+    normalized_type = str(update_type).strip().lower()
+    if normalized_type not in ("minor", "patch"):
+        return None
+
+    return DependencyUpdate(
+        group_id=base_update.group_id,
+        artifact_id=base_update.artifact_id,
+        current_version=base_update.current_version,
+        latest_version=latest.strip(),
+        update_type=normalized_type,
+    )
+
+
+def extract_server_same_major_fallback_updates(response: dict[str, Any]) -> list[DependencyUpdate]:
+    """Extract server-provided same-major stable fallback updates from compare_dependency_versions response."""
+    if not isinstance(response, dict):
+        return []
+
+    deps_data = _extract_deps_data(response)
+    if not isinstance(deps_data, list):
+        return []
+
+    updates: list[DependencyUpdate] = []
+    for dep in deps_data:
+        if not isinstance(dep, dict):
+            continue
+        fallback_update = _extract_same_major_fallback_update(dep)
+        if fallback_update:
+            updates.append(fallback_update)
+    return updates
+
+
 async def run_upgrade(
     pom_file: str,
     mode: str,
     dry_run: bool,
     mcp_transport: str = "stdio",
     mcp_url: Optional[str] = None,
+    ignore_dependencies: tuple[str, ...] = (),
 ) -> int:
     """Run the complete upgrade workflow."""
     pom_path = Path(pom_file).absolute()
@@ -339,10 +483,18 @@ async def run_upgrade(
     console.print(f"[cyan]Mode:[/cyan] {mode}")
     transport_info = f"HTTP ({mcp_url})" if mcp_transport == "http" else "STDIO (Docker)"
     console.print(f"[cyan]MCP Transport:[/cyan] {transport_info}")
+    ignored_dependency_keys = parse_ignored_dependency_keys(
+        ignore_dependencies=ignore_dependencies,
+        env_value=os.getenv(IGNORE_DEPENDENCIES_ENV_VAR),
+    )
+    if ignored_dependency_keys:
+        console.print(
+            f"[cyan]Ignored Dependencies:[/cyan] {', '.join(sorted(ignored_dependency_keys))}"
+        )
 
     # Step 1: Parse POM
     try:
-        parsed_deps, mcp_input = _parse_pom_dependencies(pom_content)
+        parsed_deps, mcp_input = _parse_pom_dependencies(pom_content, ignored_dependency_keys)
         if not parsed_deps:
             return 0
     except (ValueError, ET.ParseError) as e:
@@ -357,10 +509,28 @@ async def run_upgrade(
         return 1
 
     # Step 3: Parse and filter updates
-    updates = parse_mcp_response(mcp_response)
+    updates = _filter_ignored_updates(parse_mcp_response(mcp_response), ignored_dependency_keys)
     if not updates:
         console.print("\n[green]All dependencies are up to date![/green]")
         return 0
+
+    if mode == "minor_patch":
+        fallback_updates = _filter_ignored_updates(
+            extract_server_same_major_fallback_updates(mcp_response),
+            ignored_dependency_keys,
+        )
+        if fallback_updates:
+            console.print("\n[bold]Step 2b: Server-provided same-major stable fallbacks...[/bold]")
+            existing_pairs = {(u.coordinate, u.latest_version) for u in updates}
+            for fallback in fallback_updates:
+                if (fallback.coordinate, fallback.latest_version) in existing_pairs:
+                    continue
+                updates.append(fallback)
+                existing_pairs.add((fallback.coordinate, fallback.latest_version))
+                console.print(
+                    f"[green]✓[/green] Same-major fallback for {fallback.coordinate}: "
+                    f"{fallback.current_version} → {fallback.latest_version} ({fallback.update_type})"
+                )
 
     minor_patch_updates, major_updates = _filter_updates_by_mode(updates, mode)
 
@@ -464,6 +634,16 @@ def _should_skip_apply(dry_run: bool, mode: str, minor_patch_updates: list[Depen
     help="MCP server URL for HTTP transport (default: http://localhost:8080/mcp)",
 )
 @click.option(
+    "--ignore-dependency",
+    "ignore_dependencies",
+    multiple=True,
+    help=(
+        "Exact dependency coordinate to ignore (groupId:artifactId). "
+        "Repeat option for multiple entries. "
+        f"Also supports {IGNORE_DEPENDENCIES_ENV_VAR} env var (comma/newline separated)."
+    ),
+)
+@click.option(
     "--verbose", "-v",
     is_flag=True,
     help="Enable verbose logging",
@@ -474,6 +654,7 @@ def main(
     dry_run: bool,
     http: bool,
     mcp_url: str,
+    ignore_dependencies: tuple[str, ...],
     verbose: bool,
 ) -> None:
     """
@@ -492,6 +673,7 @@ def main(
         maven-agent -f pom.xml --dry-run
         maven-agent -f pom.xml --mode major --dry-run
         maven-agent -f pom.xml --http --mcp-url http://localhost:8080/mcp
+        maven-agent --ignore-dependency io.modelcontextprotocol.sdk:mcp-bom --dry-run
     """
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -508,6 +690,7 @@ def main(
         dry_run=dry_run,
         mcp_transport="http" if http else "stdio",
         mcp_url=mcp_url if http else None,
+        ignore_dependencies=ignore_dependencies,
     ))
 
     sys.exit(exit_code)
