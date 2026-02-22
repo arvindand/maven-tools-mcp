@@ -185,7 +185,7 @@ class CopilotSDKClient:
             await self._session.send({"prompt": prompt})
             async with asyncio.timeout(timeout):
                 await done.wait()
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
             raise RuntimeError(f"Timeout waiting for response after {timeout}s")
 
         if error_holder["error"]:
