@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scripts.upgrade import PomUpdater, parse_mcp_response
 
 
@@ -60,6 +62,42 @@ def test_update_parent_version_updates_parent_block(tmp_path: Path) -> None:
     updater = PomUpdater(pom_path)
     assert updater.update_parent_version("3.4.2") is True
     assert "<version>3.4.2</version>" in updater.content
+
+
+@pytest.mark.parametrize(
+    ("group_id", "artifact_id", "property_tag"),
+    [
+        ("com.fasterxml.jackson.core", "jackson-databind", "jackson-databind.version"),
+        ("org.springframework", "spring-core", "springframework.version"),
+        ("org.slf4j", "slf4j-api", "slf4j-api-version"),
+    ],
+)
+def test_update_version_fallback_property_name_patterns(
+    tmp_path: Path,
+    group_id: str,
+    artifact_id: str,
+    property_tag: str,
+) -> None:
+    pom_path = _write_pom(
+        tmp_path,
+        f"""
+        <project>
+          <properties>
+            <{property_tag}>1.0.0</{property_tag}>
+          </properties>
+          <dependencies>
+            <dependency>
+              <groupId>{group_id}</groupId>
+              <artifactId>{artifact_id}</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """,
+    )
+
+    updater = PomUpdater(pom_path)
+    assert updater.update_version(group_id, artifact_id, "2.0.0") is True
+    assert f"<{property_tag}>2.0.0</{property_tag}>" in updater.content
 
 
 def test_parse_mcp_response_parses_nested_dependencies() -> None:
