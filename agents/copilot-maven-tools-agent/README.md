@@ -18,7 +18,7 @@ PR creation is handled externally by GitHub Actions (`peter-evans/create-pull-re
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.12+
 - `COPILOT_GITHUB_TOKEN` (or `GH_TOKEN` / `GITHUB_TOKEN`) environment variable with Copilot Requests permission
 - Running Maven Tools MCP server (HTTP transport recommended for CI)
 

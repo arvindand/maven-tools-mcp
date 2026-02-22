@@ -53,6 +53,15 @@ class PomUpdater:
         self.original_content = pom_path.read_text()
         self.content = self.original_content
 
+    def _update_property_by_name(self, prop_name: str, new_version: str) -> bool:
+        """Update an exact property value in the POM."""
+        prop_pattern = rf"(<{re.escape(prop_name)}>)([^<]+)(</{re.escape(prop_name)}>)"
+        new_content, count = re.subn(prop_pattern, rf"\g<1>{new_version}\g<3>", self.content)
+        if count > 0:
+            self.content = new_content
+            return True
+        return False
+
     def update_version(self, group_id: str, artifact_id: str, new_version: str) -> bool:
         """
         Update a dependency version in the POM.
@@ -68,11 +77,18 @@ class PomUpdater:
         """
         regex = re.compile(dep_pattern, re.VERBOSE | re.DOTALL)
 
-        new_content, count = regex.subn(rf"\g<1>{new_version}\g<3>", self.content)
+        match = regex.search(self.content)
+        if match:
+            current_declared_version = match.group(2).strip()
+            prop_ref_match = re.fullmatch(r"\$\{([^}]+)\}", current_declared_version)
+            if prop_ref_match:
+                # Preserve shared property-based versioning by updating the property value instead.
+                return self._update_property_by_name(prop_ref_match.group(1), new_version)
 
-        if count > 0:
-            self.content = new_content
-            return True
+            new_content, count = regex.subn(rf"\g<1>{new_version}\g<3>", self.content)
+            if count > 0:
+                self.content = new_content
+                return True
 
         # Also try updating properties like <jackson-bom.version>X</jackson-bom.version>
         # Common property naming patterns
@@ -83,10 +99,7 @@ class PomUpdater:
         ]
 
         for prop_name in property_names:
-            prop_pattern = rf"(<{re.escape(prop_name)}>)([^<]+)(</{re.escape(prop_name)}>)"
-            new_content, count = re.subn(prop_pattern, rf"\g<1>{new_version}\g<3>", self.content)
-            if count > 0:
-                self.content = new_content
+            if self._update_property_by_name(prop_name, new_version):
                 return True
 
         return False
