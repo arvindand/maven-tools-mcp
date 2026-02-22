@@ -11,7 +11,7 @@ spring:
     mcp:
       server:
         name: maven-tools-mcp
-        version: 2.0.4
+        version: 2.0.5-SNAPSHOT
         type: SYNC                        # SYNC server with SYNC client avoids "Failed to enqueue message" error (MCP SDK issue #686)
         instructions: "Universal JVM dependency intelligence server for any build tool using Maven Central Repository. Provides comprehensive dependency analysis, latest version lookup, stability filtering, bulk operations, and upgrade recommendations with intelligent caching support. Works with Maven, Gradle, SBT, Mill, and any JVM build tool."
       client:
