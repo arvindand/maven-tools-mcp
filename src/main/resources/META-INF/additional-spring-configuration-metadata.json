@@ -29,6 +29,11 @@
       "defaultValue": true
     },
     {
+      "name": "context7.api-key",
+      "type": "java.lang.String",
+      "description": "Optional Context7 API key for outbound MCP client calls to mcp.context7.com. Can also be provided via CONTEXT7_API_KEY environment variable."
+    },
+    {
       "name": "spring.ai.mcp.client.streamable-http.connections.*.url",
       "type": "java.lang.String",
       "description": "URL endpoint for Streamable HTTP communication with the MCP server (Spring AI MCP client)."

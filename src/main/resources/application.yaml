@@ -98,3 +98,4 @@ resilience4j:
 # No external calls are made - only response enrichment with search hints.
 context7:
   enabled: true                       # Set to false to disable Context7 guidance hints in responses
+  api-key: ${CONTEXT7_API_KEY:}       # Optional API key for raw Context7 MCP tools (latest/latest-http images)
