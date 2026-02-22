@@ -28,8 +28,11 @@ class Context7PropertiesTest {
 
   @Test
   void testHasApiKeyFalseWhenNullOrBlank() {
-    assertFalse(new Context7Properties(true, null).hasApiKey(), "null should be treated as no API key");
-    assertFalse(new Context7Properties(true, "").hasApiKey(), "empty string should be treated as no API key");
+    assertFalse(
+        new Context7Properties(true, null).hasApiKey(), "null should be treated as no API key");
+    assertFalse(
+        new Context7Properties(true, "").hasApiKey(),
+        "empty string should be treated as no API key");
     assertFalse(
         new Context7Properties(true, "   ").hasApiKey(),
         "whitespace-only string should be treated as no API key");
@@ -37,6 +40,7 @@ class Context7PropertiesTest {
 
   @Test
   void testHasApiKeyTrueWhenTextPresent() {
-    assertTrue(new Context7Properties(true, "abc123").hasApiKey(), "non-empty text should be an API key");
+    assertTrue(
+        new Context7Properties(true, "abc123").hasApiKey(), "non-empty text should be an API key");
   }
 }

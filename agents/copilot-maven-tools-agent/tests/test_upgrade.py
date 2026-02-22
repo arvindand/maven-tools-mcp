@@ -10,7 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.upgrade import PomUpdater, parse_mcp_response
+from scripts.upgrade import (
+    PomUpdater,
+    extract_server_same_major_fallback_updates,
+    parse_ignored_dependency_keys,
+    parse_mcp_response,
+)
 
 
 def _write_pom(tmp_path: Path, content: str) -> Path:
@@ -121,3 +126,77 @@ def test_parse_mcp_response_parses_nested_dependencies() -> None:
     assert updates[0].current_version == "6.1.0"
     assert updates[0].latest_version == "6.1.3"
     assert updates[0].update_type == "patch"
+
+
+def test_parse_ignored_dependency_keys_merges_cli_and_env() -> None:
+    ignored = parse_ignored_dependency_keys(
+        ignore_dependencies=(
+            "io.modelcontextprotocol.sdk:mcp-bom",
+            " org.springframework.boot:spring-boot-starter-parent:3.5.11 ",
+        ),
+        env_value="""
+            com.fasterxml.jackson.core:jackson-databind,
+            io.modelcontextprotocol.sdk:mcp-bom
+        """,
+    )
+
+    assert ignored == {
+        "io.modelcontextprotocol.sdk:mcp-bom",
+        "org.springframework.boot:spring-boot-starter-parent",
+        "com.fasterxml.jackson.core:jackson-databind",
+    }
+
+def test_extract_server_same_major_fallback_updates_reads_optional_field() -> None:
+    response = {
+        "data": {
+            "dependencies": [
+                {
+                    "coordinate": "org.springframework.boot:spring-boot-starter-parent",
+                    "currentVersion": "3.5.9",
+                    "latestVersion": "4.0.0",
+                    "updateType": "MAJOR",
+                    "sameMajorStableFallback": {
+                        "latestVersion": "3.5.11",
+                        "updateType": "PATCH",
+                    },
+                },
+                {
+                    "coordinate": "org.slf4j:slf4j-api",
+                    "currentVersion": "2.0.16",
+                    "latestVersion": "2.0.17",
+                    "updateType": "PATCH",
+                },
+            ]
+        }
+    }
+
+    fallback_updates = extract_server_same_major_fallback_updates(response)
+
+    assert len(fallback_updates) == 1
+    assert fallback_updates[0].coordinate == "org.springframework.boot:spring-boot-starter-parent"
+    assert fallback_updates[0].current_version == "3.5.9"
+    assert fallback_updates[0].latest_version == "3.5.11"
+    assert fallback_updates[0].update_type == "patch"
+
+
+def test_extract_server_same_major_fallback_updates_supports_snake_case_payload() -> None:
+    response = {
+        "dependencies": [
+            {
+                "dependency": "org.springframework.boot:spring-boot-starter-parent",
+                "current_version": "3.5.9",
+                "latest_version": "4.0.0",
+                "update_type": "major",
+                "same_major_stable_fallback": {
+                    "latest_version": "3.5.11",
+                    "update_type": "patch",
+                },
+            }
+        ]
+    }
+
+    fallback_updates = extract_server_same_major_fallback_updates(response)
+
+    assert len(fallback_updates) == 1
+    assert fallback_updates[0].latest_version == "3.5.11"
+    assert fallback_updates[0].update_type == "patch"

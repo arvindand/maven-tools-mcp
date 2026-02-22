@@ -90,6 +90,8 @@ Traditional dependency bots (Renovate, Dependabot) can update version numbers bu
 
 Traditional bots stop at step 4. AI agents complete the job.
 
+See also: [`🤖 Dogfooding: Weekly Self-Updating Dependencies`](#-dogfooding-weekly-self-updating-dependencies) for the real in-repo GitHub Actions + agent workflow that applies this pattern to Maven Tools MCP itself.
+
 ## 🎬 Real-World Examples
 
 ### Starting a New Feature
@@ -293,6 +295,8 @@ Working with **any build tool** that uses Maven Central Repository:
 ## 🤖 Dogfooding: Weekly Self-Updating Dependencies
 
 Maven Tools MCP runs its own dependency agent against itself every week — a live demonstration of AI-agent automation for Maven dependency management.
+
+If you want the conceptual version first, see [`AI Agent Automation (Emerging Use Case)`](#ai-agent-automation-emerging-use-case) above, then compare it with the concrete workflow below.
 
 ### How It Works
 

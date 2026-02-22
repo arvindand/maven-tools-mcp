@@ -68,6 +68,8 @@ jobs:
       - name: Run dependency agent
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_BOT_PAT }}
+          # Temporary override in this repo while we track the MCP Java SDK fix separately.
+          MAVEN_AGENT_IGNORE_DEPENDENCIES: io.modelcontextprotocol.sdk:mcp-bom
         run: |
           DRY_RUN_FLAG=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then
