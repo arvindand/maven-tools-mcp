@@ -35,7 +35,8 @@ public class Context7McpClientConfig {
 
   @Bean
   @Primary
-  McpAsyncHttpClientRequestCustomizer context7ApiKeyAsyncRequestCustomizer(Context7Properties context7) {
+  McpAsyncHttpClientRequestCustomizer context7ApiKeyAsyncRequestCustomizer(
+      Context7Properties context7) {
     return (builder, method, endpoint, body, transportContext) -> {
       applyContext7Headers(builder, endpoint, context7);
       return Mono.just(builder);
