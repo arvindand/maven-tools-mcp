@@ -34,7 +34,7 @@ class MavenDependencyToolsContext7EnabledIT {
     @Bean
     @Primary
     public Context7Properties context7Properties() {
-      return new Context7Properties(true); // Enable Context7 for this test
+      return new Context7Properties(true, null); // Enable Context7 for this test
     }
   }
 

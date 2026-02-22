@@ -185,6 +185,8 @@ Traditional bots stop at step 4. AI agents complete the job.
 }
 ```
 
+Optional: export `CONTEXT7_API_KEY` before launching Claude Desktop and add `"-e", "CONTEXT7_API_KEY"` to the Docker args if you want to pass a Context7 API key (recommended for auth-required environments and future-proofing). If you don't need Context7 raw tools, use `arvindand/maven-tools-mcp:latest-noc7`.
+
 **Step 3:** Restart Claude Desktop
 
 **Note:** The Docker image supports both AMD64 (Intel/AMD) and ARM64 (Apple Silicon) architectures.
@@ -197,7 +199,7 @@ Traditional bots stop at step 4. AI agents complete the job.
 | `:latest-noc7` | STDIO | No | Corporate networks blocking Context7 |
 | `:latest-http` | HTTP | Yes | Streamable HTTP transport variant |
 
-**Troubleshooting:** If your network blocks `https://mcp.context7.com`, use: `arvindand/maven-tools-mcp:latest-noc7`
+**Troubleshooting:** If your network blocks `https://mcp.context7.com` or you want to disable raw Context7 tools entirely, use: `arvindand/maven-tools-mcp:latest-noc7`
 
 ### VS Code + GitHub Copilot
 
@@ -214,6 +216,8 @@ Traditional bots stop at step 4. AI agents complete the job.
   }
 }
 ```
+
+Optional: add `"-e", "CONTEXT7_API_KEY"` before the image name if you want to pass a Context7 API key.
 
 **Usage:** Open Chat view (Ctrl+Alt+I), enable Agent mode, use Tools button to enable Maven tools.
 
@@ -294,7 +298,7 @@ Maven Tools MCP runs its own dependency agent against itself every week — a li
 
 A scheduled GitHub Actions workflow ([`dependency-agent-self-update.yml`](.github/workflows/dependency-agent-self-update.yml)):
 
-1. Starts the Maven Tools MCP HTTP sidecar (`arvindand/maven-tools-mcp:latest-http`)
+1. Starts the Maven Tools MCP HTTP sidecar (`arvindand/maven-tools-mcp:latest-http`; `CONTEXT7_API_KEY` is optional and can be passed when you want to authenticate raw Context7 tools)
 2. Runs the [`copilot-maven-tools-agent`](agents/copilot-maven-tools-agent/) against the root `pom.xml`
 3. Applies all stable minor/patch updates automatically
 4. Creates or updates a persistent PR branch (`bot/dependency-agent-self-update`) via GitHub Actions
@@ -381,7 +385,7 @@ gh workflow run dependency-agent-self-update.yml -f dry_run=true
 
 **Context7 Integration:**
 
-Context7 integration is **enabled by default** (`context7.enabled=true`). Maven tools automatically include explicit orchestration instructions in response models when upgrades or modernization are needed. Additionally, the server acts as an MCP client to expose raw Context7 tools (`resolve-library-id`, `query-docs`) directly to your AI assistant. When disabled, responses contain only core dependency analysis without orchestration instructions or Context7 tools.
+Context7 integration is **enabled by default** (`context7.enabled=true`). Maven tools automatically include explicit orchestration instructions in response models when upgrades or modernization are needed. Additionally, the server acts as an MCP client to expose raw Context7 tools (`resolve-library-id`, `query-docs`) directly to your AI assistant. A Context7 API key is **optional** for Context7-enabled images and can be provided via `context7.api-key` or the `CONTEXT7_API_KEY` environment variable (recommended for auth-required environments, rate limits, and future-proofing). When disabled, responses contain only core dependency analysis without orchestration instructions or Context7 tools.
 
 ### Detailed Tool Documentation
 
@@ -705,9 +709,9 @@ A: Context7 provides up-to-date library documentation and code examples. Maven T
 
 ### Context7 Connection Issues
 
-**Symptom:** Spring stack trace on startup, MCP handshake fails
-**Cause:** Corporate network blocks <https://mcp.context7.com>
-**Solution:** Use Context7-free native image:
+**Symptom:** Context7 raw tools fail or are unavailable in Context7-enabled images
+**Cause:** A network that blocks <https://mcp.context7.com> or an environment where Context7 requires auth and no API key is provided
+**Solution (skip Context7 raw tools):** Use Context7-free image:
 
 ```json
 {
@@ -719,6 +723,8 @@ A: Context7 provides up-to-date library documentation and code examples. Maven T
   }
 }
 ```
+
+**Solution (keep Context7 enabled):** `CONTEXT7_API_KEY` is optional, but if your environment requires Context7 auth (or you want to avoid anonymous limits), export it and pass it through Docker with `-e CONTEXT7_API_KEY` in your MCP client config.
 
 ### SSL Inspection / Corporate Certificates
 
@@ -796,12 +802,14 @@ Response time: <100ms (cached), <500ms (fresh)
 - Automatic platform selection
 - Isolated environment
 - `docker run -i --rm arvindand/maven-tools-mcp:latest`
+- Optional (pass Context7 API key): `docker run -i --rm -e CONTEXT7_API_KEY arvindand/maven-tools-mcp:latest`
 
 **Docker HTTP (Streamable HTTP Transport):**
 
 - HTTP-based MCP protocol on port 8080
 - Health probes: `/actuator/health/liveness`, `/actuator/health/readiness`
 - `docker run -p 8080:8080 arvindand/maven-tools-mcp:latest-http`
+- Optional (pass Context7 API key): `docker run -p 8080:8080 -e CONTEXT7_API_KEY arvindand/maven-tools-mcp:latest-http`
 
 **Native Image:**
 
