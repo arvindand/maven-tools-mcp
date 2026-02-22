@@ -70,6 +70,10 @@ public class MavenDependencyTools {
   private static final String MAVEN_CENTRAL_ERROR = "Maven Central error: ";
   private static final String INVALID_MAVEN_COORDINATE_FORMAT = "Invalid Maven coordinate format: ";
   private static final String SUCCESS_STATUS = "success";
+  private static final String MAJOR_UPDATE_TYPE = "major";
+  private static final String MINOR_UPDATE_TYPE = "minor";
+  private static final String PATCH_UPDATE_TYPE = "patch";
+  private static final String NO_UPDATE_TYPE = "none";
   private static final String ACTIVE_MAINTENANCE = "active";
   private static final String MODERATE_MAINTENANCE = "moderate";
   private static final String SLOW_MAINTENANCE = "slow";
@@ -1109,7 +1113,8 @@ public class MavenDependencyTools {
       return null;
     }
 
-    if (!"major".equals(versionComparator.determineUpdateType(currentVersion, latestVersion))) {
+    if (!MAJOR_UPDATE_TYPE.equals(
+        versionComparator.determineUpdateType(currentVersion, latestVersion))) {
       return null;
     }
 
@@ -1118,30 +1123,25 @@ public class MavenDependencyTools {
       return null;
     }
 
-    List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
-    for (String candidate : allVersions) {
-      if (!versionComparator.isStableVersion(candidate)) {
-        continue;
-      }
-      if (candidate.equals(currentVersion)) {
-        break;
-      }
-      if (!currentMajor.equals(extractMajorVersion(candidate))) {
-        continue;
-      }
-      if (versionComparator.compare(currentVersion, candidate) >= 0) {
-        continue;
-      }
-
-      String fallbackUpdateType = versionComparator.determineUpdateType(currentVersion, candidate);
-      if (!"minor".equals(fallbackUpdateType) && !"patch".equals(fallbackUpdateType)) {
-        continue;
-      }
-
-      return new VersionComparison.SameMajorStableFallback(candidate, fallbackUpdateType);
-    }
-
-    return null;
+    return mavenCentralService.getAllVersions(coordinate).stream()
+        .takeWhile(candidate -> !candidate.equals(currentVersion))
+        .filter(versionComparator::isStableVersion)
+        .filter(candidate -> currentMajor.equals(extractMajorVersion(candidate)))
+        .filter(candidate -> versionComparator.compare(currentVersion, candidate) < 0)
+        .map(
+            candidate ->
+                Map.entry(
+                    candidate, versionComparator.determineUpdateType(currentVersion, candidate)))
+        .filter(
+            candidateAndType ->
+                MINOR_UPDATE_TYPE.equals(candidateAndType.getValue())
+                    || PATCH_UPDATE_TYPE.equals(candidateAndType.getValue()))
+        .findFirst()
+        .map(
+            candidateAndType ->
+                new VersionComparison.SameMajorStableFallback(
+                    candidateAndType.getKey(), candidateAndType.getValue()))
+        .orElse(null);
   }
 
   private Integer extractMajorVersion(String version) {
@@ -1243,10 +1243,10 @@ public class MavenDependencyTools {
                     Collectors.counting()));
 
     return new VersionComparison.UpdateSummary(
-        counts.getOrDefault("major", 0L).intValue(),
-        counts.getOrDefault("minor", 0L).intValue(),
-        counts.getOrDefault("patch", 0L).intValue(),
-        counts.getOrDefault("none", 0L).intValue());
+        counts.getOrDefault(MAJOR_UPDATE_TYPE, 0L).intValue(),
+        counts.getOrDefault(MINOR_UPDATE_TYPE, 0L).intValue(),
+        counts.getOrDefault(PATCH_UPDATE_TYPE, 0L).intValue(),
+        counts.getOrDefault(NO_UPDATE_TYPE, 0L).intValue());
   }
 
   private String getLatestStableVersion(MavenCoordinate coordinate) throws MavenCentralException {
@@ -1376,7 +1376,7 @@ public class MavenDependencyTools {
           i > 0 ? ReleaseGap.classify(intervalDays[i], averageInterval) : ReleaseGap.NORMAL;
 
       boolean isBreakingChange =
-          versionComparator.determineUpdateType("0.0.0", version.version()).equals("major");
+          MAJOR_UPDATE_TYPE.equals(versionComparator.determineUpdateType("0.0.0", version.version()));
 
       timeline.add(
           new VersionTimelineAnalysis.TimelineEntry(
