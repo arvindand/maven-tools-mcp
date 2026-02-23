@@ -4,3 +4,7 @@ spring:
   main:
     banner-mode: "off"  # Must be "off" not OFF - disable banner completely
     log-startup-info: false  # Disable startup info logs on STDOUT
+  ai:
+    mcp:
+      server:
+        stdio: true  # Enable stdio transport during AOT/native build for docker profile

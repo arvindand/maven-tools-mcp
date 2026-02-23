@@ -11,7 +11,7 @@
     </parent>
     <groupId>com.arvindand.mcp</groupId>
     <artifactId>maven-tools-mcp</artifactId>
-    <version>2.0.5-SNAPSHOT</version>
+    <version>2.0.5</version>
     <name>maven-tools-mcp</name>
     <description>Maven Tools MCP server with universal JVM dependency intelligence. Provides comprehensive dependency analysis for any build tool (Maven, Gradle, SBT, Mill) using Maven Central Repository. Works with Claude Desktop, GitHub Copilot, and other MCP clients.</description>
     <url>https://github.com/arvindand/maven-tools-mcp</url>
@@ -36,7 +36,12 @@
     <properties>
         <java.version>24</java.version>
         <spring-ai.version>1.1.2</spring-ai.version>
+        <!-- Temporary override: fixes Context7 MCP client startup on 202/text-plain notification ACKs.
+             Keep until Spring AI manages MCP Java SDK >= 0.17.2. -->
         <mcp-java-sdk.version>0.17.2</mcp-java-sdk.version>
+        <!-- Temporary override: Logback 1.5.32 emits startup status lines in native stdio images and
+             pollutes MCP stdout (breaks VS Code/Copilot stdio parsing). Keep until upstream fix/workaround. -->
+        <logback.version>1.5.22</logback.version>
         <fmt-maven-plugin.version>2.29</fmt-maven-plugin.version>
         <maven-artifact.version>3.9.12</maven-artifact.version>
         <okhttp.version>5.3.2</okhttp.version>
@@ -146,8 +151,8 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <!-- Intentionally after spring-ai-bom so this import overrides Spring AI's MCP SDK versions -->
-            <!-- Pulls in the 0.17.2 fix for 202/text-plain notification ACKs -->
+            <!-- Temporary override: must remain after spring-ai-bom so it overrides Spring AI's managed
+                 MCP Java SDK version and keeps the Context7 notification ACK fix (0.17.2). -->
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-bom</artifactId>

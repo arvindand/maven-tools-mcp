@@ -15,6 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [2.0.5] - 2026-02-23
+
+**STDIO Docker Reliability Release** - Restores native stdio MCP startup for VS Code/Copilot after recent dependency updates and temporarily pins Logback to avoid stdout protocol pollution.
+
+### Changed (2.0.5)
+
+- **Native STDIO Docker Build Config**: Explicitly enables Spring AI MCP stdio transport in the `docker` profile (`application-docker.yaml`) so native stdio images respond correctly to MCP `initialize`
+- **Self-Update Workflow Ignore List**: Excludes temporary MCP SDK and Logback override dependencies from automated dependency-update PRs
+
+### Fixed (2.0.5)
+
+- **VS Code / Copilot STDIO MCP Startup**: Temporary `logback.version` override to `1.5.22` avoids Logback `1.5.32` startup status output on stdout in native stdio images, which breaks MCP message parsing
+
 ## [2.0.4] - 2026-02-22
 
 **Dogfooding & Context7 Compatibility Release** - Adds automated self-update workflow dogfooding, fixes Context7 MCP client startup compatibility, and improves dependency update selection behavior.
@@ -514,7 +527,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.4...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.5...HEAD
+[2.0.5]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.4...v2.0.5
 [2.0.4]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.1...v2.0.2
