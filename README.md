@@ -133,7 +133,7 @@ That keeps the workflow grounded in live repository data instead of guesswork.
 
 For broader questions like "which library should I choose?", the useful pattern is: let the model use Maven Tools MCP for current coordinates, version/stability signals, and upgrade context, then combine that with Context7 docs (available through the default image's exposed tools) and, when needed, client-side web search for ecosystem context that this server does not provide on its own.
 
-For more real-world prompts and richer examples, see [`docs/examples.md`](docs/examples.md).
+For more prompt examples, see [`docs/examples.md`](docs/examples.md). There is also a [`maven-tools` skill in the separate `agent-skills` repository](https://github.com/arvindand/agent-skills/tree/main/skills/maven-tools) that gives agents general guidance for using Maven Tools MCP effectively across varied use cases, while the local prompt examples and dogfooding agent define more specific or deterministic paths.
 
 ## Dogfooding
 

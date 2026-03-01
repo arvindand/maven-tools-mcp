@@ -15,7 +15,14 @@ Extract all dependency coordinates (groupId:artifactId format) and use the `chec
 
 **Format the response as a table:**
 
-| Dependency | Latest Stable | Latest Any | Version Type |
-|------------|---------------|------------|--------------|
+| Dependency | Recommended Version | Recommended Type | Notes |
+|------------|---------------------|------------------|-------|
 
-Include a summary of how many dependencies are up-to-date vs have updates available.
+For each dependency:
+
+- show the tool's primary recommended version (`version`) and type
+- if `latest_stable.version` differs from the primary recommendation, mention it in the notes
+- if there is a notable prerelease (`latest_rc.version`, `latest_beta.version`, `latest_alpha.version`, or `latest_milestone.version`), mention it only when relevant
+- include `not_found` or `error` status clearly instead of forcing a normal version row
+
+Include a summary of how many dependencies are current, how many have updates available, and how many could not be resolved.

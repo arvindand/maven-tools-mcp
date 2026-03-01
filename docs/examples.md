@@ -120,7 +120,17 @@ A response from `analyze_project_health` may look like:
 }
 ```
 
-## Reusable Commands And Prompts
+## Example Commands And Prompts
+
+These files are kept here as example entry points and showcase material.
+
+They are useful for demonstrating how someone might ask for Maven Tools MCP-driven analysis in Claude Code or GitHub Copilot, but they are not the canonical source of orchestration behavior.
+
+Use this split when thinking about maintenance:
+
+- local `.claude/commands/` and `.github/prompts/` are illustrative examples
+- the [`maven-tools` skill in the separate `agent-skills` repository](https://github.com/arvindand/agent-skills/tree/main/skills/maven-tools) gives agents general guidance for using Maven Tools MCP across varied use cases
+- the local Copilot dependency agent described in [`dogfooding.md`](dogfooding.md) defines the repository's more specific and deterministic automation path
 
 ### Claude Code slash commands
 
@@ -147,9 +157,11 @@ The repository includes prompt templates in `.github/prompts/`:
 
 | Prompt | Purpose |
 |--------|---------|
-| `dependency-audit.md` | Dependency audit with health scoring |
-| `security-scan.md` | CVE scanning and remediation guidance |
-| `upgrade-plan.md` | Phased upgrade planning |
+| `dependency-audit.prompt.md` | Dependency audit with health scoring |
+| `security-scan.prompt.md` | CVE scanning and remediation guidance |
+| `upgrade-plan.prompt.md` | Phased upgrade planning |
+
+If you want broader agent guidance that can adapt across projects and prompts, prefer the `maven-tools` skill in the separate `agent-skills` repository. If you need deterministic repo automation, prefer the explicit policy in the local Copilot agent instead of copying these example prompts into CI.
 
 ## FAQ
 

@@ -19,8 +19,9 @@ Perform a comprehensive dependency audit for this project using the maven-tools-
    - Identify stale or aging dependencies
 
 3. **Version Check**
-   - Use `compare_dependency_versions` to find available updates
-   - Classify updates as major/minor/patch
+   - Use `compare_dependency_versions` with `includeSecurityScan=true` and `stabilityFilter=STABLE_ONLY`
+   - Classify updates as safe-now (patch/minor/same-major fallback) vs manual-review (major)
+   - If `same_major_stable_fallback` is present, treat it as the conservative near-term target and keep the major path separate
 
 4. **Security Scan**
    - Review CVE vulnerabilities from OSV.dev integration
@@ -46,6 +47,9 @@ List dependencies with security vulnerabilities or end-of-life status.
 ### Recommended Upgrades
 
 Prioritized list of upgrades sorted by risk and importance.
+
+- Separate safe-now upgrades from major migration paths
+- If a same-major fallback exists, show it as the immediate recommendation and keep the major target as a later option
 
 ### License Compliance
 

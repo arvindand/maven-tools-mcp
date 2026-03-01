@@ -11,12 +11,13 @@ Generate a phased upgrade plan for project dependencies using maven-tools-mcp.
 
 1. **Analyze Current State**
    - Extract all dependencies with current versions from build file
-   - Use `compare_dependency_versions` to find available updates
+   - Use `compare_dependency_versions` with `includeSecurityScan=true` and `stabilityFilter=STABLE_ONLY` to find available updates
    - Use `analyze_project_health` for health assessment
 
 2. **Categorize Updates**
    - **Patch updates**: Bug fixes, safe to apply
    - **Minor updates**: New features, generally backward compatible
+   - **Same-major fallback updates**: Safer near-term targets when the latest stable release is a major jump
    - **Major updates**: Breaking changes, require migration
 
 3. **Prioritize by Risk**
@@ -27,6 +28,7 @@ Generate a phased upgrade plan for project dependencies using maven-tools-mcp.
 
 4. **Check for Breaking Changes**
    - For major updates, note migration requirements
+   - If `same_major_stable_fallback` exists, keep that as the near-term recommendation and the major target as a separate migration track
    - Use Context7 guidance hints for migration documentation
 
 ## Upgrade Plan Format
@@ -38,16 +40,16 @@ Dependencies with known vulnerabilities that need immediate attention.
 | Dependency | Current | Target | Type | Risk |
 |------------|---------|--------|------|------|
 
-### Phase 2: Patch Updates
+### Phase 2: Immediate Safe Updates
 
-Safe updates with bug fixes only.
+Patch updates and same-major fallback updates that can be taken before any major migration.
 
 | Dependency | Current | Target |
 |------------|---------|--------|
 
-### Phase 3: Minor Updates
+### Phase 3: Planned Minor Updates
 
-New features, test thoroughly before deploying.
+Minor updates that are still worth testing thoroughly before deploying.
 
 | Dependency | Current | Target | Notable Changes |
 |------------|---------|--------|-----------------|

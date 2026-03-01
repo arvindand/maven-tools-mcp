@@ -36,4 +36,5 @@ If no dependencies are specified, extract them from the project's build file (`p
 **Recommendations:**
 
 - Prioritized list of dependencies to upgrade
-- Context7 documentation hints for major upgrades if available
+- Flag dependencies that likely need documentation review before a major upgrade
+- If the user wants a concrete upgrade path after the audit, suggest `compare_dependency_versions` as a follow-up step

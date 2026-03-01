@@ -14,7 +14,7 @@ Scan project dependencies for known security vulnerabilities using maven-tools-m
    - Include both direct and managed dependencies if possible
 
 2. **Run Security Scan**
-   - Use `compare_dependency_versions` with `includeSecurityScan=true`
+   - Use `compare_dependency_versions` with `includeSecurityScan=true` and `stabilityFilter=STABLE_ONLY`
    - Or use `analyze_project_health` with `includeSecurityScan=true` for bulk analysis
 
 3. **Analyze Results**
@@ -48,6 +48,8 @@ For each vulnerable dependency, list:
 1. **Immediate** (Critical/High): Upgrade these first
 2. **Soon** (Medium): Plan for next release
 3. **Monitor** (Low): Track but lower priority
+
+When the newest stable version is a major upgrade but `same_major_stable_fallback` exists, prefer the fallback as the immediate remediation target and keep the major upgrade as a separate planned change.
 
 ### Next Steps
 
