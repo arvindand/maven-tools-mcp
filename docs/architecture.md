@@ -116,7 +116,7 @@ Key points:
 
 ## Technical Snapshot
 
-- Framework: Spring Boot 3.5.11
+- Framework: Spring Boot 3.5.12
 - Java: 24
 - Protocol: MCP 2025-06-18
 - Default transport for desktop images: stdio
