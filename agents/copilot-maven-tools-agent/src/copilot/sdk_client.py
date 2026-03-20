@@ -86,57 +86,46 @@ class CopilotSDKClient:
     async def start(self) -> None:
         """Start the Copilot client."""
         try:
-            from copilot import CopilotClient
+            from copilot import CopilotClient, PermissionHandler, SubprocessConfig
         except ImportError:
             raise ImportError(
                 "github-copilot-sdk not installed. Run: pip install github-copilot-sdk"
             )
 
-        client_options = {
-            "use_stdio": True,
-            "auto_start": True,
-            "log_level": "warning",
-        }
-
-        # Pass GitHub token explicitly (SDK doesn't auto-read env vars)
+        # Build subprocess config for the Copilot CLI (SDK 0.2.0+ dataclass API)
         token = get_github_token()
-        if token:
-            client_options["github_token"] = token
-            logger.debug("Using GitHub token from environment")
-        else:
+        if not token:
             logger.warning("No GitHub token found in COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN")
 
-        if self.working_dir:
-            client_options["cwd"] = self.working_dir
+        subprocess_config = SubprocessConfig(
+            cwd=self.working_dir,
+            log_level="warning",
+            github_token=token,
+        )
 
-        self._client = CopilotClient(client_options)
+        self._client = CopilotClient(subprocess_config)
         await self._client.start()
         logger.info("Copilot SDK client started")
 
-        # Create session with MCP config
-        session_config: dict[str, Any] = {
-            "model": self.model,
-            "streaming": True,
-        }
-
-        # Auto-approve all MCP tool permission requests (unattended CI agent).
-        # The Copilot backend requires an on_permission_request handler for MCP sessions.
-        session_config["on_permission_request"] = _auto_approve_permission
-
+        # Build MCP server config
+        mcp_servers = None
         if self.use_maven_tools_mcp:
             if self.mcp_transport == "http":
-                # Use HTTP transport - connect to running MCP server
-                mcp_config = copy.deepcopy(self.MAVEN_TOOLS_MCP_HTTP)
+                mcp_servers = copy.deepcopy(self.MAVEN_TOOLS_MCP_HTTP)
                 if self.mcp_url:
-                    mcp_config["maven-tools"]["url"] = self.mcp_url
-                session_config["mcp_servers"] = mcp_config
-                logger.info(f"Using HTTP transport: {mcp_config['maven-tools']['url']}")
+                    mcp_servers["maven-tools"]["url"] = self.mcp_url
+                logger.info(f"Using HTTP transport: {mcp_servers['maven-tools']['url']}")
             else:
-                # Use STDIO transport - spawn Docker container
-                session_config["mcp_servers"] = self.MAVEN_TOOLS_MCP_STDIO
+                mcp_servers = self.MAVEN_TOOLS_MCP_STDIO
                 logger.info("Using STDIO transport (Docker)")
 
-        self._session = await self._client.create_session(session_config)
+        # Auto-approve all MCP tool permission requests (unattended CI agent)
+        self._session = await self._client.create_session(
+            on_permission_request=PermissionHandler.approve_all,
+            model=self.model,
+            streaming=True,
+            mcp_servers=mcp_servers,
+        )
         logger.info(f"Session created with model {self.model}")
 
     async def stop(self) -> None:
@@ -186,7 +175,7 @@ class CopilotSDKClient:
         self._session.on(handler)
 
         try:
-            await self._session.send({"prompt": prompt})
+            await self._session.send(prompt)
             async with asyncio.timeout(timeout):
                 await done.wait()
         except (TimeoutError, asyncio.TimeoutError):
@@ -273,13 +262,6 @@ Return ONLY the version number, nothing else."""
         if versions:
             return versions[-1]
         return response.strip()
-
-def _auto_approve_permission(
-    request: dict[str, Any], context: dict[str, str]
-) -> dict[str, str]:
-    """Auto-approve MCP tool permission requests for unattended CI usage."""
-    return {"kind": "approved"}
-
 
 def _get_event_type(event: Any) -> str:
     """Extract event type string from event object."""
