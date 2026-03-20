@@ -22,7 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed (2.0.6)
 
 - **Spring AI**: Upgraded from 1.1.2 to 1.1.3 (latest stable)
-- **Copilot SDK**: Updated agent dependency pin to >= 0.2.0 (aligns with backend permission changes)
+- **Spring Boot**: Upgraded from 3.5.11 to 3.5.12 (patch)
+- **maven-artifact**: Upgraded from 3.9.12 to 3.9.14 (patch)
+- **Resilience4j**: Upgraded from 2.3.0 to 2.4.0 (minor)
+- **Copilot SDK**: Migrated agent to SDK 0.2.0 API (dataclass configs, `PermissionHandler.approve_all`)
 - **Workaround Documentation**: Improved pom.xml comments with clear "remove when" conditions for MCP SDK and Logback temporary overrides
 
 ### Fixed (2.0.6)
