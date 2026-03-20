@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.11</version>
+        <version>3.5.12</version>
         <relativePath /> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.arvindand.mcp</groupId>
@@ -46,9 +46,9 @@
              a version with the fix. -->
         <logback.version>1.5.22</logback.version>
         <fmt-maven-plugin.version>2.29</fmt-maven-plugin.version>
-        <maven-artifact.version>3.9.12</maven-artifact.version>
+        <maven-artifact.version>3.9.14</maven-artifact.version>
         <okhttp.version>5.3.2</okhttp.version>
-        <resilience4j.version>2.3.0</resilience4j.version>
+        <resilience4j.version>2.4.0</resilience4j.version>
         <!-- Test execution properties -->
         <skipUTs>false</skipUTs>
         <skipITs>false</skipITs>
