@@ -119,6 +119,10 @@ class CopilotSDKClient:
             "streaming": True,
         }
 
+        # Auto-approve all MCP tool permission requests (unattended CI agent).
+        # The Copilot backend requires an on_permission_request handler for MCP sessions.
+        session_config["on_permission_request"] = _auto_approve_permission
+
         if self.use_maven_tools_mcp:
             if self.mcp_transport == "http":
                 # Use HTTP transport - connect to running MCP server
@@ -269,6 +273,13 @@ Return ONLY the version number, nothing else."""
         if versions:
             return versions[-1]
         return response.strip()
+
+def _auto_approve_permission(
+    request: dict[str, Any], context: dict[str, str]
+) -> dict[str, str]:
+    """Auto-approve MCP tool permission requests for unattended CI usage."""
+    return {"kind": "approved"}
+
 
 def _get_event_type(event: Any) -> str:
     """Extract event type string from event object."""

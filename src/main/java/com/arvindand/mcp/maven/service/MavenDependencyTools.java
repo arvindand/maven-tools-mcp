@@ -1376,7 +1376,8 @@ public class MavenDependencyTools {
           i > 0 ? ReleaseGap.classify(intervalDays[i], averageInterval) : ReleaseGap.NORMAL;
 
       boolean isBreakingChange =
-          MAJOR_UPDATE_TYPE.equals(versionComparator.determineUpdateType("0.0.0", version.version()));
+          MAJOR_UPDATE_TYPE.equals(
+              versionComparator.determineUpdateType("0.0.0", version.version()));
 
       timeline.add(
           new VersionTimelineAnalysis.TimelineEntry(

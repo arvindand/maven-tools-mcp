@@ -15,6 +15,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [2.0.6] - 2026-03-20
+
+**Dependency Update & Dogfood Agent Fix Release** - Upgrades Spring AI to latest stable, fixes three weeks of dogfood agent CI failures caused by Copilot backend requiring permission request handling.
+
+### Changed (2.0.6)
+
+- **Spring AI**: Upgraded from 1.1.2 to 1.1.3 (latest stable)
+- **Copilot SDK**: Updated agent dependency pin to >= 0.2.0 (aligns with backend permission changes)
+- **Workaround Documentation**: Improved pom.xml comments with clear "remove when" conditions for MCP SDK and Logback temporary overrides
+
+### Fixed (2.0.6)
+
+- **Dogfood Agent CI Failures**: Added `on_permission_request` handler to Copilot SDK session config. The Copilot backend now requires explicit permission handling for MCP tool calls; without it, all tool invocations were denied with "An on_permission_request handler is required"
+
+### Notes (2.0.6)
+
+- **Workaround status review**: MCP SDK 0.17.2 pin and Logback 1.5.22 pin still required. Spring AI 1.1.3 manages MCP SDK 0.17.0 (need >= 0.17.2). Logback 1.5.32 (latest) still has stdout pollution in native stdio images. Both workarounds expected to resolve with Spring AI 2.0.0 GA (~2-3 months)
+
 ## [2.0.5] - 2026-02-23
 
 **STDIO Docker Reliability Release** - Restores native stdio MCP startup for VS Code/Copilot after recent dependency updates and temporarily pins Logback to avoid stdout protocol pollution.
@@ -527,7 +545,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.5...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.6...HEAD
+[2.0.6]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.5...v2.0.6
 [2.0.5]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.4...v2.0.5
 [2.0.4]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.2...v2.0.3
