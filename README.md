@@ -89,6 +89,10 @@ Create `.vscode/mcp.json` in your workspace:
 
 For fuller setup guidance, including JAR/native usage, Docker Compose, and environment notes, see [`docs/setup.md`](docs/setup.md).
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/arvindand-maven-tools-mcp).
+
 ## Core Tools
 
 The server exposes 10 MCP tools.
