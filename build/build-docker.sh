@@ -63,7 +63,7 @@ case $choice in
         echo "📦 Running Maven package (skipping tests for faster build)..."
         ../mvnw clean package -DskipTests
         
-        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.6")
+        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.7")
         
         echo ""
         echo "🐳 Building native image WITH Context7..."
@@ -105,7 +105,7 @@ case $choice in
         echo "🐳 Building JVM Docker image with buildpacks..."
         (cd .. && SPRING_PROFILES_ACTIVE=docker ./mvnw spring-boot:build-image)
         
-        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.6")
+        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "2.0.7")
         echo ""
         echo "✅ Built JVM image: maven-tools-mcp:${PROJECT_VERSION}"
         echo ""

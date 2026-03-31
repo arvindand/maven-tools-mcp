@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [2.0.7] - 2026-04-01
+
+**Dependency Patch Release** - Bumps Spring Boot and Spring AI to latest stable patch versions, pins Copilot SDK for dogfood agent reliability.
+
+### Changed (2.0.7)
+
+- **Spring Boot**: Upgraded from 3.5.12 to 3.5.13 (patch)
+- **Spring AI**: Upgraded from 1.1.3 to 1.1.4 (patch)
+- **Copilot SDK**: Pinned dogfood agent to ==0.2.0 (ensures correct manylinux_2_28 wheel on CI)
+
 ## [2.0.6] - 2026-03-20
 
 **Dependency Update & Dogfood Agent Fix Release** - Upgrades Spring AI to latest stable, fixes three weeks of dogfood agent CI failures caused by Copilot backend requiring permission request handling.
