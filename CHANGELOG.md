@@ -15,6 +15,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [2.1.0] - 2026-04-06
+
+**Private Repository Authentication** - Adds support for private Maven repositories (Nexus, Artifactory, GitHub Packages) with configurable authentication.
+
+### Added (2.1.0)
+
+- **Repository Authentication**: Bearer and Basic auth support for private Maven repositories via OkHttp interceptor
+- **Configuration Properties**: `maven.central.auth.type`, `maven.central.auth.username`, `maven.central.auth.password`, `maven.central.auth.token`
+- **Native Image Support**: Auth config records and enums registered for GraalVM native image compatibility
+- **Spring Configuration Metadata**: IDE autocomplete for all new auth properties
+
+### Changed (2.1.0)
+
+- **HttpClientConfig**: Now accepts `MavenCentralProperties` for auth-aware OkHttp client construction
+- **MavenCentralProperties**: Extended with nested `Auth` record supporting `NONE`, `BASIC`, and `BEARER` auth types
+
 ## [2.0.7] - 2026-04-01
 
 **Dependency Patch Release** - Bumps Spring Boot and Spring AI to latest stable patch versions, pins Copilot SDK for dogfood agent reliability.

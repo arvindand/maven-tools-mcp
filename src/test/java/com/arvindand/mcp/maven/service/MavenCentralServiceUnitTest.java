@@ -22,7 +22,8 @@ class MavenCentralServiceUnitTest {
   @BeforeEach
   void setUp() {
     properties =
-        new MavenCentralProperties("https://repo1.maven.org/maven2", Duration.ofSeconds(10), 100);
+        new MavenCentralProperties(
+            "https://repo1.maven.org/maven2", Duration.ofSeconds(10), 100, null);
   }
 
   /** Tests version comparison and ordering. */

@@ -23,6 +23,27 @@
       "defaultValue": 50
     },
     {
+      "name": "maven.central.auth.type",
+      "type": "java.lang.String",
+      "description": "Authentication type for private Maven repositories. Supported values: none, basic, bearer.",
+      "defaultValue": "none"
+    },
+    {
+      "name": "maven.central.auth.username",
+      "type": "java.lang.String",
+      "description": "Username for basic authentication against a private Maven repository."
+    },
+    {
+      "name": "maven.central.auth.password",
+      "type": "java.lang.String",
+      "description": "Password for basic authentication against a private Maven repository."
+    },
+    {
+      "name": "maven.central.auth.token",
+      "type": "java.lang.String",
+      "description": "Token for bearer authentication against a private Maven repository (e.g., GitHub Packages PAT, JFrog access token)."
+    },
+    {
       "name": "context7.enabled",
       "type": "java.lang.Boolean",
       "description": "Whether Context7 guidance hints are included in Maven tool responses. When enabled, tools include intelligent search suggestions to help LLMs effectively use Context7 tools for migration guidance and upgrade strategies.",

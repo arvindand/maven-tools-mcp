@@ -189,6 +189,33 @@ logging:
     root: ERROR
 ```
 
+### Private Repository Authentication
+
+You can point the server at any Maven-compatible repository (Nexus, Artifactory, GitHub Packages) by overriding the base URL and providing authentication credentials via environment variables:
+
+**Bearer auth** (JFrog Artifactory, GitHub Packages):
+
+```bash
+docker run -i --rm \
+  -e MAVEN_CENTRAL_REPOSITORY_BASE_URL=https://maven.pkg.github.com/your-org/your-repo \
+  -e MAVEN_CENTRAL_AUTH_TYPE=bearer \
+  -e MAVEN_CENTRAL_AUTH_TOKEN=your-token \
+  arvindand/maven-tools-mcp:latest
+```
+
+**Basic auth** (Nexus, Artifactory):
+
+```bash
+docker run -i --rm \
+  -e MAVEN_CENTRAL_REPOSITORY_BASE_URL=https://nexus.internal.corp/repository/maven/ \
+  -e MAVEN_CENTRAL_AUTH_TYPE=basic \
+  -e MAVEN_CENTRAL_AUTH_USERNAME=admin \
+  -e MAVEN_CENTRAL_AUTH_PASSWORD=secret \
+  arvindand/maven-tools-mcp:latest
+```
+
+This works with both JVM and native Docker images. Any repository that serves standard `maven-metadata.xml` files is supported.
+
 Context7-specific settings can also be configured through Spring properties:
 
 ```yaml

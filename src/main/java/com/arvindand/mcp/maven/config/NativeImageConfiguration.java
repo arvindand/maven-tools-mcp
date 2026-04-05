@@ -121,7 +121,11 @@ public class NativeImageConfiguration {
 
       // Register configuration properties record classes
       registerRecordClass(hints, MavenCentralProperties.class);
+      registerRecordClass(hints, MavenCentralProperties.Auth.class);
       registerRecordClass(hints, Context7Properties.class);
+
+      // Register auth enum for native image property binding
+      registerEnumClass(hints, MavenCentralProperties.Auth.AuthType.class);
 
       // Register enum classes for Jackson serialization and reflection access
       registerEnumClass(hints, VersionInfo.VersionType.class);
