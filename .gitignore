@@ -46,7 +46,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 *.egg-info/
-build/
+agents/copilot-maven-tools-agent/build/
 
 # Local AI agent scratch (skills, AGENTS.md memory, etc.)
 .agents/
