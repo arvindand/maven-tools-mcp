@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (Unreleased)
 
+- **Java**: Upgraded toolchain from Java 24 to Java 25 (LTS). `<java.version>` bumped in `pom.xml`; `actions/setup-java` pinned to `25` in CI and Docker workflows; README badge updated. Buildpack JDK image is selected automatically from `<java.version>`.
+
 ### Fixed (Unreleased)
 
 ### Removed (Unreleased)
