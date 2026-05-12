@@ -68,9 +68,6 @@ jobs:
       - name: Run dependency agent
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_BOT_PAT }}
-          # Temporary dependency override in this repo (MCP SDK BOM).
-          # Note: the Logback stdio workaround is a POM property override (`logback.version`), not a dependency coordinate.
-          MAVEN_AGENT_IGNORE_DEPENDENCIES: io.modelcontextprotocol.sdk:mcp-bom
         run: |
           DRY_RUN_FLAG=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then

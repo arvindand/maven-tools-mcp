@@ -15,6 +15,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [2.1.1] - 2026-05-12
+
+**Dependency Patch Release** - Bumps Spring Boot and Spring AI to the latest stable patch line and retires the temporary MCP SDK BOM override.
+
+### Changed (2.1.1)
+
+- **Spring Boot**: Upgraded from 3.5.13 to 3.5.14 (patch)
+- **Spring AI**: Upgraded from 1.1.4 to 1.1.6 (patch)
+- **MCP Java SDK**: Removed the manual `mcp-bom` 0.17.2 override; Spring AI 1.1.6 now brings MCP SDK 0.18.2 directly
+- **Release Metadata**: Updated project, MCP registry, runtime server, Docker workflow, and build helper fallback versions to 2.1.1
+
+### Notes (2.1.1)
+
+- **Logback STDIO workaround remains**: `logback.version` stays pinned to 1.5.22 because Spring Boot still manages Logback 1.5.32, which previously emitted native-image startup status output on stdout and broke MCP stdio JSON-RPC parsing.
+
 ## [2.1.0] - 2026-04-06
 
 **Private Repository Authentication** - Adds support for private Maven repositories (Nexus, Artifactory, GitHub Packages) with configurable authentication.
