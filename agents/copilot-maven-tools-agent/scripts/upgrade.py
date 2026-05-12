@@ -11,7 +11,6 @@ PR creation and build validation are handled externally (e.g. by GitHub Actions)
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import re
@@ -29,8 +28,9 @@ from rich.table import Table
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.copilot.sdk_client import CopilotSDKClient
 from src.analysis.dependency import DependencyAnalyzer, DependencyUpdate, ParsedDependency
+from src.copilot.sdk_client import CopilotSDKClient
+from src.mcp.direct_client import DirectMcpClient
 
 # Constants
 MAX_SECURITY_ISSUES_DISPLAY = 10
@@ -206,7 +206,9 @@ def _display_security_issues(mcp_response: dict[str, Any]) -> None:
     if isinstance(mcp_response, dict):
         response_data = mcp_response.get("data", mcp_response)
         if isinstance(response_data, dict):
-            security_issues = response_data.get("securityIssues", response_data.get("vulnerabilities", []))
+            security_issues = response_data.get(
+                "securityIssues", response_data.get("vulnerabilities", [])
+            )
 
     if not security_issues:
         return
@@ -236,20 +238,28 @@ def _apply_pom_updates(
     applied = []
     for update in updates:
         is_parent = any(
-            p.source == "parent" and p.group_id == update.group_id and p.artifact_id == update.artifact_id
+            p.source == "parent"
+            and p.group_id == update.group_id
+            and p.artifact_id == update.artifact_id
             for p in parsed_deps
         )
 
         if is_parent:
             success = pom_updater.update_parent_version(update.latest_version)
         else:
-            success = pom_updater.update_version(update.group_id, update.artifact_id, update.latest_version)
+            success = pom_updater.update_version(
+                update.group_id, update.artifact_id, update.latest_version
+            )
 
         if success:
             applied.append(update)
-            console.print(f"  [green]✓[/green] {update.coordinate}: {update.current_version} → {update.latest_version}")
+            console.print(
+                f"  [green]✓[/green] {update.coordinate}: {update.current_version} → {update.latest_version}"
+            )
         else:
-            console.print(f"  [yellow]⚠[/yellow] Could not update {update.coordinate} (may be managed by BOM)")
+            console.print(
+                f"  [yellow]⚠[/yellow] Could not update {update.coordinate} (may be managed by BOM)"
+            )
 
     return applied
 
@@ -331,7 +341,9 @@ def _parse_pom_dependencies(
         console.print("[yellow]No dependencies with explicit versions found[/yellow]")
         return [], ""
 
-    filtered_deps, ignored_deps = _filter_ignored_parsed_dependencies(parsed_deps, ignored_dependency_keys)
+    filtered_deps, ignored_deps = _filter_ignored_parsed_dependencies(
+        parsed_deps, ignored_dependency_keys
+    )
 
     console.print(f"[green]✓[/green] Found {len(parsed_deps)} dependencies with versions")
     if ignored_deps:
@@ -350,15 +362,46 @@ def _parse_pom_dependencies(
     return filtered_deps, mcp_input
 
 
-async def _fetch_mcp_updates(
+def should_use_copilot_session(mode: str) -> bool:
+    """Return whether a mode should use an AI session instead of direct MCP."""
+    return mode == "major"
+
+
+async def _fetch_direct_mcp_updates(
     project_dir: Path,
     mcp_input: str,
     mode: str,
     mcp_transport: str,
     mcp_url: Optional[str],
 ) -> dict[str, Any]:
-    """Fetch dependency updates from MCP server."""
-    console.print("\n[bold]Step 2: Checking for updates via MCP...[/bold]")
+    """Fetch dependency updates directly from MCP server."""
+    console.print("\n[bold]Step 2: Checking for updates via direct MCP...[/bold]")
+    stability_filter = "STABLE_ONLY" if mode in ("minor_patch", "major") else "ALL"
+
+    async with DirectMcpClient(
+        transport=mcp_transport,
+        url=mcp_url,
+    ) as client:
+        console.print("[green]✓[/green] Connected directly to Maven Tools MCP")
+        mcp_response = await client.compare_versions(
+            dependencies=mcp_input,
+            stability_filter=stability_filter,
+            include_security=True,
+        )
+        console.print("[green]✓[/green] Received MCP response")
+        logger.debug(f"MCP response: {mcp_response}")
+        return mcp_response
+
+
+async def _fetch_copilot_mcp_updates(
+    project_dir: Path,
+    mcp_input: str,
+    mode: str,
+    mcp_transport: str,
+    mcp_url: Optional[str],
+) -> dict[str, Any]:
+    """Fetch dependency updates through Copilot SDK for major-review mode."""
+    console.print("\n[bold]Step 2: Checking for updates via Copilot SDK + MCP...[/bold]")
     stability_filter = "STABLE_ONLY" if mode in ("minor_patch", "major") else "ALL"
 
     async with CopilotSDKClient(
@@ -375,6 +418,21 @@ async def _fetch_mcp_updates(
         console.print("[green]✓[/green] Received MCP response")
         logger.debug(f"MCP response: {mcp_response}")
         return mcp_response
+
+
+async def _fetch_mcp_updates(
+    project_dir: Path,
+    mcp_input: str,
+    mode: str,
+    mcp_transport: str,
+    mcp_url: Optional[str],
+) -> dict[str, Any]:
+    """Fetch dependency updates through the deterministic or Copilot-backed path."""
+    if should_use_copilot_session(mode):
+        return await _fetch_copilot_mcp_updates(
+            project_dir, mcp_input, mode, mcp_transport, mcp_url
+        )
+    return await _fetch_direct_mcp_updates(project_dir, mcp_input, mode, mcp_transport, mcp_url)
 
 
 def _filter_updates_by_mode(
@@ -503,7 +561,9 @@ async def run_upgrade(
 
     # Step 2: Fetch updates from MCP
     try:
-        mcp_response = await _fetch_mcp_updates(project_dir, mcp_input, mode, mcp_transport, mcp_url)
+        mcp_response = await _fetch_mcp_updates(
+            project_dir, mcp_input, mode, mcp_transport, mcp_url
+        )
     except (RuntimeError, ValueError, ImportError) as e:
         console.print(f"[red]Error calling MCP tool: {e}[/red]")
         return 1
@@ -573,10 +633,16 @@ def _display_upgrade_findings(
 
     if major_updates:
         is_minor_patch_mode = mode == "minor_patch"
-        title = "Major Updates (requires manual review)" if is_minor_patch_mode else "Available Updates (report only)"
+        title = (
+            "Major Updates (requires manual review)"
+            if is_minor_patch_mode
+            else "Available Updates (report only)"
+        )
         _display_updates_table(major_updates, title, is_major_warning=is_minor_patch_mode)
         if is_minor_patch_mode:
-            console.print("[yellow]Major updates require manual review and won't be applied automatically[/yellow]")
+            console.print(
+                "[yellow]Major updates require manual review and won't be applied automatically[/yellow]"
+            )
 
     _display_security_issues(mcp_response)
 
@@ -584,15 +650,19 @@ def _display_upgrade_findings(
 def _print_upgrade_summary(applied_count: int, major_count: int) -> None:
     """Print the upgrade summary panel."""
     console.print("\n" + "=" * 50)
-    console.print(Panel(
-        f"[green]Applied:[/green] {applied_count} minor/patch updates\n"
-        f"[yellow]Skipped:[/yellow] {major_count} major updates (manual review required)",
-        title="Upgrade Summary",
-        expand=False,
-    ))
+    console.print(
+        Panel(
+            f"[green]Applied:[/green] {applied_count} minor/patch updates\n"
+            f"[yellow]Skipped:[/yellow] {major_count} major updates (manual review required)",
+            title="Upgrade Summary",
+            expand=False,
+        )
+    )
 
 
-def _should_skip_apply(dry_run: bool, mode: str, minor_patch_updates: list[DependencyUpdate]) -> bool:
+def _should_skip_apply(
+    dry_run: bool, mode: str, minor_patch_updates: list[DependencyUpdate]
+) -> bool:
     """Check if we should skip applying updates and print appropriate message."""
     if dry_run:
         console.print("\n[yellow]Dry run - no changes will be made[/yellow]")
@@ -601,19 +671,23 @@ def _should_skip_apply(dry_run: bool, mode: str, minor_patch_updates: list[Depen
         console.print(f"\n[yellow]Mode '{mode}' is report-only - no changes will be made[/yellow]")
         return True
     if not minor_patch_updates:
-        console.print("\n[yellow]No minor/patch updates to apply. Only major updates found.[/yellow]")
+        console.print(
+            "\n[yellow]No minor/patch updates to apply. Only major updates found.[/yellow]"
+        )
         return True
     return False
 
 
 @click.command()
 @click.option(
-    "--pom-file", "-f",
+    "--pom-file",
+    "-f",
     default="pom.xml",
     help="Path to pom.xml file to analyze and update",
 )
 @click.option(
-    "--mode", "-m",
+    "--mode",
+    "-m",
     type=click.Choice(["minor_patch", "major", "all"]),
     default="minor_patch",
     help="Upgrade mode: minor_patch (auto-apply safe updates), major (report only), all (include pre-release)",
@@ -644,7 +718,8 @@ def _should_skip_apply(dry_run: bool, mode: str, minor_patch_updates: list[Depen
     ),
 )
 @click.option(
-    "--verbose", "-v",
+    "--verbose",
+    "-v",
     is_flag=True,
     help="Enable verbose logging",
 )
@@ -678,20 +753,24 @@ def main(
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    console.print(Panel(
-        "[bold blue]Copilot Maven Tools Agent[/bold blue]\n"
-        "MCP-Based Dependency Upgrade Workflow",
-        expand=False,
-    ))
+    console.print(
+        Panel(
+            "[bold blue]Maven Tools Dependency Agent[/bold blue]\n"
+            "Direct MCP updates; Copilot only for major review",
+            expand=False,
+        )
+    )
 
-    exit_code = asyncio.run(run_upgrade(
-        pom_file=pom_file,
-        mode=mode,
-        dry_run=dry_run,
-        mcp_transport="http" if http else "stdio",
-        mcp_url=mcp_url if http else None,
-        ignore_dependencies=ignore_dependencies,
-    ))
+    exit_code = asyncio.run(
+        run_upgrade(
+            pom_file=pom_file,
+            mode=mode,
+            dry_run=dry_run,
+            mcp_transport="http" if http else "stdio",
+            mcp_url=mcp_url if http else None,
+            ignore_dependencies=ignore_dependencies,
+        )
+    )
 
     sys.exit(exit_code)
 

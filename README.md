@@ -2,6 +2,7 @@
 
 [![Java](https://img.shields.io/badge/Java-24-orange.svg)](https://openjdk.java.net/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.14-green.svg)](https://spring.io/projects/spring-boot)
+[![Spring AI](https://img.shields.io/badge/Spring%20AI-1.1.6-green.svg)](https://spring.io/projects/spring-ai)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--06--18-blue.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/arvindand/maven-tools-mcp)](https://github.com/arvindand/maven-tools-mcp/releases)
@@ -40,9 +41,9 @@ This project is most useful when a plain package search is not enough.
 
 One of the more interesting uses of this project is agent-driven dependency maintenance.
 
-The core server does not open PRs by itself, but it gives an agent enough current dependency context to make safer update decisions than a blind version-bump workflow. This repository's own weekly self-update flow is the clearest example: GitHub Actions orchestrates the run, a bounded AI client performs the dependency update task, and the result is a reviewable PR.
+The core server does not open PRs by itself, but it gives an agent enough current dependency context to make safer update decisions than a blind version-bump workflow. This repository's own weekly self-update flow is the clearest example: GitHub Actions orchestrates the run, direct MCP calls apply deterministic minor/patch updates, and the result is a reviewable PR. Major-upgrade review is the only path that asks Copilot for judgement and migration framing.
 
-That is also why the dogfooding setup matters beyond this repository. It demonstrates, in a small and concrete way, the same shape that broader GitHub Agentic Workflows can build on: a workflow orchestrator, an AI worker, structured tool output, and a human-reviewed change at the end.
+That is also why the dogfooding setup matters beyond this repository. It demonstrates, in a small and concrete way, the same shape that broader GitHub Agentic Workflows can build on: a workflow orchestrator, structured tool output for deterministic edits, an AI worker only where judgement is useful, and a human-reviewed change at the end.
 
 ## Quick Start
 
@@ -133,22 +134,23 @@ That keeps the workflow grounded in live repository data instead of guesswork.
 
 For broader questions like "which library should I choose?", the useful pattern is: let the model use Maven Tools MCP for current coordinates, version/stability signals, and upgrade context, then combine that with Context7 docs (available through the default image's exposed tools) and, when needed, client-side web search for ecosystem context that this server does not provide on its own.
 
-For more prompt examples, see [`docs/examples.md`](docs/examples.md). There is also a [`maven-tools` skill in the separate `agent-skills` repository](https://github.com/arvindand/agent-skills/tree/main/skills/maven-tools) that gives agents general guidance for using Maven Tools MCP effectively across varied use cases, while the local prompt examples and dogfooding agent define more specific or deterministic paths.
+For more prompt examples, see [`docs/examples.md`](docs/examples.md). There is also a [`maven-tools` skill in the separate `agent-skills` repository](https://github.com/arvindand/agent-skills/tree/main/skills/maven-tools) that gives agents general guidance for using Maven Tools MCP effectively across varied use cases, while the local prompt examples and dogfooding agent define more specific paths.
 
 ## Dogfooding
 
-This repository runs a weekly self-update workflow that uses a local Python agent against its own `pom.xml` and opens a reviewable PR for safe dependency updates.
+This repository runs a weekly self-update workflow that uses a local Python agent against its own `pom.xml` and opens a reviewable PR for safe dependency updates. Routine minor/patch updates are tool-first and deterministic: the agent calls Maven Tools MCP directly and edits only the version values selected from structured tool output. Manual major-review runs are the only mode that routes through the GitHub Copilot SDK.
 
 That flow is documented in [`docs/dogfooding.md`](docs/dogfooding.md), including:
 
 - the GitHub Actions workflow
 - the agent subproject under `agents/copilot-maven-tools-agent/`
-- required `COPILOT_BOT_PAT` setup
+- direct MCP minor/patch mode vs Copilot-backed major-review mode
+- required `COPILOT_BOT_PAT` setup for PR creation and major-review runs
 - manual trigger instructions
 
 ## FAQ
 
-- **Does this replace Renovate or Dependabot?** For Maven Central-based JVM projects, it can. Maven Tools MCP is the dependency intelligence layer, and the replacement behavior comes from the agent workflow built on top of it. In this repository, the weekly self-update workflow already replaces routine blind update PRs for safe minor and patch upgrades while leaving major upgrades for manual review.
+- **Does this replace Renovate or Dependabot?** For Maven Central-based JVM projects, it can. Maven Tools MCP is the dependency intelligence layer, and the replacement behavior comes from the agent workflow built on top of it. In this repository, the weekly self-update workflow already replaces routine blind update PRs for safe minor and patch upgrades through direct MCP calls, while leaving major upgrades for Copilot-assisted manual review.
 - **Does it work offline?** Not fully. Uncached queries need network access to Maven Central.
 - **Does it work for Gradle or other JVM build tools?** Yes, as long as the project depends on libraries that are resolved through Maven Central coordinates.
 

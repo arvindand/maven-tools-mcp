@@ -15,7 +15,9 @@ from scripts.upgrade import (
     extract_server_same_major_fallback_updates,
     parse_ignored_dependency_keys,
     parse_mcp_response,
+    should_use_copilot_session,
 )
+from src.mcp.direct_client import extract_tool_response_payload, parse_http_mcp_response
 
 
 def _write_pom(tmp_path: Path, content: str) -> Path:
@@ -44,7 +46,9 @@ def test_update_version_preserves_property_reference(tmp_path: Path) -> None:
     )
 
     updater = PomUpdater(pom_path)
-    assert updater.update_version("com.fasterxml.jackson.core", "jackson-databind", "2.18.0") is True
+    assert (
+        updater.update_version("com.fasterxml.jackson.core", "jackson-databind", "2.18.0") is True
+    )
 
     assert "<version>${jackson.version}</version>" in updater.content
     assert "<jackson.version>2.18.0</jackson.version>" in updater.content
@@ -145,6 +149,45 @@ def test_parse_ignored_dependency_keys_merges_cli_and_env() -> None:
         "org.springframework.boot:spring-boot-starter-parent",
         "com.fasterxml.jackson.core:jackson-databind",
     }
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        ("minor_patch", False),
+        ("all", False),
+        ("major", True),
+    ],
+)
+def test_should_use_copilot_session_only_for_major_mode(mode: str, expected: bool) -> None:
+    assert should_use_copilot_session(mode) is expected
+
+
+def test_parse_http_mcp_response_supports_sse_json_rpc() -> None:
+    response = parse_http_mcp_response("""
+        event: message
+        data: {"jsonrpc":"2.0","id":2,"result":{"ok":true}}
+
+        """)
+
+    assert response == {"jsonrpc": "2.0", "id": 2, "result": {"ok": True}}
+
+
+def test_extract_tool_response_payload_reads_text_content_json() -> None:
+    payload = extract_tool_response_payload(
+        {
+            "content": [
+                {
+                    "type": "text",
+                    "text": '{"data":{"dependencies":[{"coordinate":"junit:junit"}]}}',
+                }
+            ],
+            "isError": False,
+        }
+    )
+
+    assert payload == {"data": {"dependencies": [{"coordinate": "junit:junit"}]}}
+
 
 def test_extract_server_same_major_fallback_updates_reads_optional_field() -> None:
     response = {

@@ -130,7 +130,7 @@ Use this split when thinking about maintenance:
 
 - local `.claude/commands/` and `.github/prompts/` are illustrative examples
 - the [`maven-tools` skill in the separate `agent-skills` repository](https://github.com/arvindand/agent-skills/tree/main/skills/maven-tools) gives agents general guidance for using Maven Tools MCP across varied use cases
-- the local Copilot dependency agent described in [`dogfooding.md`](dogfooding.md) defines the repository's more specific and deterministic automation path
+- the local dependency agent described in [`dogfooding.md`](dogfooding.md) defines this repository's automation policy: direct MCP for deterministic minor/patch updates, Copilot SDK only for major-review mode
 
 ### Claude Code slash commands
 
@@ -161,7 +161,7 @@ The repository includes prompt templates in `.github/prompts/`:
 | `security-scan.prompt.md` | CVE scanning and remediation guidance |
 | `upgrade-plan.prompt.md` | Phased upgrade planning |
 
-If you want broader agent guidance that can adapt across projects and prompts, prefer the `maven-tools` skill in the separate `agent-skills` repository. If you need deterministic repo automation, prefer the explicit policy in the local Copilot agent instead of copying these example prompts into CI.
+If you want broader agent guidance that can adapt across projects and prompts, prefer the `maven-tools` skill in the separate `agent-skills` repository. If you need deterministic repo automation, prefer the explicit policy in the local dependency agent instead of copying these example prompts into CI.
 
 ## FAQ
 
@@ -172,8 +172,8 @@ For Maven Central-based JVM projects, it can. Maven Tools MCP provides the depen
 That is already how this repository's weekly self-update workflow works:
 
 - it checks real current vs available versions
-- it auto-applies stable minor and patch updates
-- it avoids auto-applying major upgrades
+- it auto-applies stable minor and patch updates through direct MCP calls
+- it avoids auto-applying major upgrades and reserves Copilot SDK usage for manual major-review runs
 - it opens a single reviewable PR and relies on normal CI
 
 It is still not a universal drop-in replacement across every package ecosystem, but for Maven Central-driven JVM projects it is a realistic replacement for routine dependency bot PRs.

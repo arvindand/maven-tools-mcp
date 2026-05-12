@@ -46,3 +46,8 @@ __pycache__/
 .pytest_cache/
 .venv/
 *.egg-info/
+build/
+
+# Local AI agent scratch (skills, AGENTS.md memory, etc.)
+.agents/
+AGENTS.md

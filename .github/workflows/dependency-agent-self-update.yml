@@ -10,6 +10,13 @@ on:
         description: 'Dry run (analyze only, no PR)'
         type: boolean
         default: false
+      mode:
+        description: 'Update mode'
+        type: choice
+        default: minor_patch
+        options:
+          - minor_patch
+          - major
 
 concurrency:
   group: dependency-agent-self-update
@@ -37,7 +44,7 @@ jobs:
 
       - name: Install agent
         working-directory: agents/copilot-maven-tools-agent
-        run: pip install -e .
+        run: pip install .
 
       - name: Pull Maven Tools MCP HTTP image
         run: docker pull arvindand/maven-tools-mcp:latest-http
@@ -66,18 +73,23 @@ jobs:
           fi
 
       - name: Run dependency agent
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_BOT_PAT }}
         run: |
           DRY_RUN_FLAG=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"
           fi
+          UPDATE_MODE="${{ inputs.mode }}"
+          if [ -z "$UPDATE_MODE" ]; then
+            UPDATE_MODE="minor_patch"
+          fi
+          if [ "$UPDATE_MODE" = "major" ]; then
+            export COPILOT_GITHUB_TOKEN="${{ secrets.COPILOT_BOT_PAT }}"
+          fi
           maven-agent \
             -f pom.xml \
             --http \
             --mcp-url http://localhost:8080/mcp \
-            --mode minor_patch \
+            --mode "$UPDATE_MODE" \
             $DRY_RUN_FLAG
 
       - name: Stop MCP sidecar
@@ -106,7 +118,7 @@ jobs:
           commit-message: |
             chore(deps): automated dependency updates (minor/patch)
 
-            Applied by copilot-maven-tools-agent weekly workflow.
+            Applied by copilot-maven-tools-agent weekly workflow using direct MCP.
           title: 'chore(deps): automated dependency updates (minor/patch)'
           body: |
             ## Automated Dependency Updates
@@ -114,11 +126,11 @@ jobs:
             This PR was created by the [copilot-maven-tools-agent](agents/copilot-maven-tools-agent/) weekly workflow.
 
             ### What changed
-            - Minor and patch dependency updates applied automatically
+            - Minor and patch dependency updates applied automatically through direct MCP tool calls
             - Major updates are excluded (require manual review)
 
             ### How to review
-            Check the `pom.xml` diff for the applied version bumps. This workflow relies on the repo's normal PR CI to validate the build. Major updates (if any were available) are listed in the workflow log but not applied.
+            Check the `pom.xml` diff for the applied version bumps. This workflow relies on the repo's normal PR CI to validate the build. Major updates can be inspected with a manual `major` mode run and are not applied automatically.
 
             ---
             *Triggered by: `${{ github.event_name }}` | Run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*

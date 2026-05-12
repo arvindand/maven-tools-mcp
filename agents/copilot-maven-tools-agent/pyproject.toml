@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "copilot-maven-tools-agent"
 version = "0.1.0"
-description = "Automated dependency management using Copilot SDK + Maven Tools MCP"
+description = "Automated dependency management using direct Maven Tools MCP calls and Copilot major-review mode"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.12"
