@@ -37,11 +37,14 @@ class PropertyInterpolatorTest {
 
   @Test
   void capsRecursionAtTenPasses() {
-    // a cycle: a -> b -> a -> ...
-    var props = Map.of("a", "${b}", "b", "${a}");
-    // After 10 passes we stop. The string may still contain ${a} or ${b}.
+    // Cycle: a -> b -> a -> ...
+    // With MAX_PASSES = 10 starting from "${a}", each pass alternates the value;
+    // termination value is deterministic given the cap. Either ${a} or ${b} is
+    // acceptable — the contract is "we stop, not infinite loop". We use isIn to
+    // tolerate future tweaks to MAX_PASSES without rewriting this test.
+    var props = java.util.Map.of("a", "${b}", "b", "${a}");
     String result = PropertyInterpolator.interpolate("${a}", props);
-    assertThat(result).matches("\\$\\{[ab]}");
+    assertThat(result).isIn("${a}", "${b}");
   }
 
   @Test
