@@ -1,0 +1,36 @@
+package com.arvindand.mcp.maven.pom;
+
+import com.arvindand.mcp.maven.model.MavenCoordinate;
+import java.util.List;
+
+/**
+ * The complete result of resolving a POM.
+ *
+ * @param dependencies one entry per declared dependency in the input POM (transitive
+ *     dependencies are intentionally NOT included — Phase 6a scope)
+ * @param parentChain the resolved parent coordinates walked during resolution, root-first
+ *     (the input POM's immediate parent at index 0). Empty if the POM has no parent.
+ * @param warnings non-fatal issues — unresolved properties, parents that couldn't be fetched,
+ *     ranges left as opaque strings, etc. Resolution still produces a result; warnings let the
+ *     caller decide whether to trust each entry.
+ */
+public record EffectivePomResult(
+    List<EffectiveDependency> dependencies,
+    List<MavenCoordinate> parentChain,
+    List<String> warnings) {
+
+  public EffectivePomResult {
+    if (dependencies == null) {
+      throw new IllegalArgumentException("dependencies must not be null");
+    }
+    if (parentChain == null) {
+      throw new IllegalArgumentException("parentChain must not be null");
+    }
+    if (warnings == null) {
+      throw new IllegalArgumentException("warnings must not be null");
+    }
+    dependencies = List.copyOf(dependencies);
+    parentChain = List.copyOf(parentChain);
+    warnings = List.copyOf(warnings);
+  }
+}
