@@ -1,6 +1,7 @@
 package com.arvindand.mcp.maven.pom;
 
 import com.arvindand.mcp.maven.model.MavenCoordinate;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -22,17 +23,15 @@ public record EffectiveDependency(
     Optional<MavenCoordinate> managedBy) {
 
   public EffectiveDependency {
-    if (coordinate == null) {
-      throw new IllegalArgumentException("coordinate must not be null");
-    }
+    Objects.requireNonNull(coordinate, "coordinate must not be null");
     if (effectiveVersion == null || effectiveVersion.isBlank()) {
       throw new IllegalArgumentException("effectiveVersion must not be blank");
     }
-    if (source == null) {
-      throw new IllegalArgumentException("source must not be null");
-    }
-    if (managedBy == null) {
-      throw new IllegalArgumentException("managedBy must not be null (use Optional.empty())");
+    Objects.requireNonNull(source, "source must not be null");
+    Objects.requireNonNull(managedBy, "managedBy must not be null (use Optional.empty())");
+    if (source == Source.EXPLICIT && managedBy.isPresent()) {
+      throw new IllegalArgumentException(
+          "managedBy must be empty when source is EXPLICIT");
     }
   }
 }

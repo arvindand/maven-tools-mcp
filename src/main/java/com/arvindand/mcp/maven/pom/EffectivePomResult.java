@@ -2,6 +2,7 @@ package com.arvindand.mcp.maven.pom;
 
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * The complete result of resolving a POM.
@@ -20,15 +21,9 @@ public record EffectivePomResult(
     List<String> warnings) {
 
   public EffectivePomResult {
-    if (dependencies == null) {
-      throw new IllegalArgumentException("dependencies must not be null");
-    }
-    if (parentChain == null) {
-      throw new IllegalArgumentException("parentChain must not be null");
-    }
-    if (warnings == null) {
-      throw new IllegalArgumentException("warnings must not be null");
-    }
+    Objects.requireNonNull(dependencies, "dependencies must not be null");
+    Objects.requireNonNull(parentChain, "parentChain must not be null");
+    Objects.requireNonNull(warnings, "warnings must not be null");
     dependencies = List.copyOf(dependencies);
     parentChain = List.copyOf(parentChain);
     warnings = List.copyOf(warnings);
