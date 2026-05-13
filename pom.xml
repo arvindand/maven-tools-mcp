@@ -83,6 +83,15 @@
             <version>${maven-artifact.version}</version>
         </dependency>
 
+        <!-- Maven model XML reader and data classes for POM resolution (Phase 6a).
+             We deliberately do not pull in maven-model-builder or maven-resolver -
+             we hand-roll the resolution loop in com.arvindand.mcp.maven.pom. -->
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-model</artifactId>
+            <version>3.9.12</version>
+        </dependency>
+
         <!-- Jackson for JSON processing -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
