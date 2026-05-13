@@ -287,23 +287,35 @@ public class MavenCentralService {
    *
    * @param coordinate must have a non-null version
    */
-  @Cacheable(value = MAVEN_POM_XML, key = "#coordinate.toCoordinateString()")
+  @Cacheable(
+      value = MAVEN_POM_XML,
+      key =
+          "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + #coordinate.version()")
+  @CircuitBreaker(name = "maven-central", fallbackMethod = "fetchPomXmlFallback")
+  @Retry(name = "maven-central")
+  @RateLimiter(name = "maven-central")
   public Optional<String> fetchPomXml(MavenCoordinate coordinate) {
     if (coordinate == null || coordinate.version() == null || coordinate.version().isBlank()) {
       throw new IllegalArgumentException("coordinate.version() must be set to fetch a POM");
     }
-    String groupPath = coordinate.groupId().replace('.', '/');
-    String path =
-        "/" + groupPath + "/" + coordinate.artifactId() + "/" + coordinate.version() + "/"
-            + coordinate.artifactId() + "-" + coordinate.version() + ".pom";
+    String url = buildPomUrl(coordinate, coordinate.version());
     try {
-      String xml = restClient.get().uri(path).retrieve().body(String.class);
+      String xml = restClient.get().uri(java.net.URI.create(url)).retrieve().body(String.class);
       return Optional.ofNullable(xml);
     } catch (RestClientException ex) {
       logger.debug(
           "POM fetch failed for {}: {}", coordinate.toCoordinateString(), ex.getMessage());
       return Optional.empty();
     }
+  }
+
+  @SuppressWarnings("unused")
+  private Optional<String> fetchPomXmlFallback(MavenCoordinate coordinate, Exception ex) {
+    logger.warn(
+        "Circuit breaker fallback for POM fetch {}: {}",
+        coordinate.groupId() + ":" + coordinate.artifactId() + ":" + coordinate.version(),
+        ex.getMessage());
+    return Optional.empty();
   }
 
   private MavenCentralService self() {
