@@ -54,7 +54,8 @@ public class EffectivePomResolver {
     List<MavenCoordinate> parentChain = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
     Map<String, String> properties = buildPropertyMap(root, parentChain, warnings);
-    Map<String, ManagedEntry> managed = buildManagedVersionMap(root, parentChain, properties);
+    Map<ManagementKey, ManagedEntry> managed =
+        buildManagedVersionMap(root, parentChain, properties);
 
     List<EffectiveDependency> deps = classifyDependencies(root, properties, managed, warnings);
     return new EffectivePomResult(deps, parentChain, warnings);
@@ -135,16 +136,16 @@ public class EffectivePomResolver {
   private List<EffectiveDependency> classifyDependencies(
       Model root,
       Map<String, String> properties,
-      Map<String, ManagedEntry> managed,
+      Map<ManagementKey, ManagedEntry> managed,
       List<String> warnings) {
     List<EffectiveDependency> deps = new ArrayList<>();
     for (Dependency d : root.getDependencies()) {
-      String key = d.getGroupId() + ":" + d.getArtifactId();
+      ManagementKey key = ManagementKey.from(d);
       ManagedEntry mgmt = managed.get(key);
       String declared = d.getVersion();
       if (declared == null || declared.isBlank()) {
         if (mgmt == null) {
-          warnings.add("No version for " + key + " and no managed entry found — skipped");
+          warnings.add("No version for " + key.display() + " and no managed entry found — skipped");
           continue;
         }
         deps.add(
@@ -158,7 +159,8 @@ public class EffectivePomResolver {
         // Heuristic: residual "${" means interpolation left a placeholder unresolved —
         // no real Maven version string contains it.
         if (resolved.isBlank() || resolved.contains("${")) {
-          warnings.add("Could not resolve version for " + key + " (raw: " + declared + ")");
+          warnings.add(
+              "Could not resolve version for " + key.display() + " (raw: " + declared + ")");
           continue;
         }
         Source source = mgmt == null ? Source.EXPLICIT : Source.EXPLICIT_OVERRIDE;
@@ -185,9 +187,9 @@ public class EffectivePomResolver {
    * about any unreachable parent earlier in the same {@link #resolve} call, so emitting a second
    * warning for the same parent here would be noise.
    */
-  private Map<String, ManagedEntry> buildManagedVersionMap(
+  private Map<ManagementKey, ManagedEntry> buildManagedVersionMap(
       Model root, List<MavenCoordinate> parentChain, Map<String, String> properties) {
-    Map<String, ManagedEntry> managed = new HashMap<>();
+    Map<ManagementKey, ManagedEntry> managed = new HashMap<>();
     MavenCoordinate rootCoord = rootCoordinate(root);
     recordManagedFrom(root, rootCoord, properties, managed);
     for (MavenCoordinate parentCoord : parentChain) {
@@ -204,7 +206,7 @@ public class EffectivePomResolver {
       Model model,
       MavenCoordinate source,
       Map<String, String> properties,
-      Map<String, ManagedEntry> sink) {
+      Map<ManagementKey, ManagedEntry> sink) {
     if (model.getDependencyManagement() == null) {
       return;
     }
@@ -213,7 +215,7 @@ public class EffectivePomResolver {
         importBom(d, properties, sink);
         continue;
       }
-      String key = d.getGroupId() + ":" + d.getArtifactId();
+      ManagementKey key = ManagementKey.from(d);
       if (sink.containsKey(key)) {
         // Closer ancestor (or the root POM itself) already won.
         continue;
@@ -238,7 +240,7 @@ public class EffectivePomResolver {
    * #classifyDependencies}.
    */
   private void importBom(
-      Dependency bomDep, Map<String, String> properties, Map<String, ManagedEntry> sink) {
+      Dependency bomDep, Map<String, String> properties, Map<ManagementKey, ManagedEntry> sink) {
     String groupId = PropertyInterpolator.interpolate(bomDep.getGroupId(), properties);
     String artifactId = PropertyInterpolator.interpolate(bomDep.getArtifactId(), properties);
     String version = PropertyInterpolator.interpolate(bomDep.getVersion(), properties);
@@ -311,4 +313,25 @@ public class EffectivePomResolver {
 
   /** A {@code <dependencyManagement>} entry that has been resolved, with its source POM. */
   private record ManagedEntry(String version, MavenCoordinate managedBy) {}
+
+  /**
+   * Composite key for {@code <dependencyManagement>} entries. Per Maven semantics, the same {@code
+   * groupId:artifactId} can be managed at different versions for different {@code <type>}/{@code
+   * <classifier>} combinations (e.g., {@code jar} vs {@code test-jar}). The string {@code
+   * "groupId:artifactId"} alone is too coarse.
+   */
+  private record ManagementKey(String groupId, String artifactId, String type, String classifier) {
+
+    /** Builds the key from a {@link Dependency}, normalising default type and classifier. */
+    static ManagementKey from(Dependency d) {
+      String type = (d.getType() == null || d.getType().isBlank()) ? "jar" : d.getType();
+      String classifier = d.getClassifier() == null ? "" : d.getClassifier();
+      return new ManagementKey(d.getGroupId(), d.getArtifactId(), type, classifier);
+    }
+
+    /** Short {@code "groupId:artifactId"} display form for warnings. */
+    String display() {
+      return groupId + ":" + artifactId;
+    }
+  }
 }
