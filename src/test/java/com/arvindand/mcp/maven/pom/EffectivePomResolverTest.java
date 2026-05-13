@@ -3,9 +3,11 @@ package com.arvindand.mcp.maven.pom;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.arvindand.mcp.maven.model.MavenCoordinate;
+import java.io.StringReader;
 import java.util.Map;
 import java.util.Optional;
 import org.apache.maven.model.Model;
+import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.junit.jupiter.api.Test;
 
 class EffectivePomResolverTest {
@@ -18,8 +20,7 @@ class EffectivePomResolverTest {
   /** Helper that parses a POM XML literal into a {@link Model}. */
   static Model parse(String xml) {
     try {
-      return new org.apache.maven.model.io.xpp3.MavenXpp3Reader()
-          .read(new java.io.StringReader(xml));
+      return new MavenXpp3Reader().read(new StringReader(xml));
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -54,8 +55,7 @@ class EffectivePomResolverTest {
             d -> {
               assertThat(d.coordinate())
                   .isEqualTo(
-                      MavenCoordinate.of(
-                          "com.fasterxml.jackson.core", "jackson-databind", null));
+                      MavenCoordinate.of("com.fasterxml.jackson.core", "jackson-databind", null));
               assertThat(d.effectiveVersion()).isEqualTo("2.19.2");
               assertThat(d.source()).isEqualTo(Source.EXPLICIT);
               assertThat(d.managedBy()).isEmpty();
@@ -128,5 +128,77 @@ class EffectivePomResolverTest {
     EffectivePomResult result = new EffectivePomResolver(stub(Map.of())).resolve(childPom);
 
     assertThat(result.warnings()).anySatisfy(w -> assertThat(w).contains("missing-parent"));
+  }
+
+  @Test
+  void childPropertyOverridesParentProperty() {
+    Model parent =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>parent</artifactId>
+              <version>1.0.0</version>
+              <properties>
+                <jackson.version>2.15.0</jackson.version>
+              </properties>
+            </project>
+            """);
+    PomFetcher fetcher = stub(Map.of("com.example:parent:1.0.0", parent));
+
+    String childPom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>parent</artifactId>
+            <version>1.0.0</version>
+          </parent>
+          <artifactId>child</artifactId>
+          <properties>
+            <jackson.version>2.19.2</jackson.version>
+          </properties>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+              <version>${jackson.version}</version>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(childPom);
+
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(d -> assertThat(d.effectiveVersion()).isEqualTo("2.19.2"));
+  }
+
+  @Test
+  void warnsWhenDependencyVersionIsUnresolvable() {
+    String pom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.example</groupId>
+          <artifactId>app</artifactId>
+          <version>1.0.0</version>
+          <dependencies>
+            <dependency>
+              <groupId>org.unknown</groupId>
+              <artifactId>lib</artifactId>
+              <version>${undefined.version}</version>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(stub(Map.of())).resolve(pom);
+
+    assertThat(result.dependencies()).isEmpty();
+    assertThat(result.warnings()).anySatisfy(w -> assertThat(w).contains("org.unknown:lib"));
   }
 }
