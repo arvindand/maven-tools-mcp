@@ -378,4 +378,77 @@ class EffectivePomResolverTest {
                   .contains(MavenCoordinate.of("com.example", "parent", "1.0.0"));
             });
   }
+
+  @Test
+  void resolvesProjectVersionPlaceholder() {
+    String pom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.example</groupId>
+          <artifactId>app</artifactId>
+          <version>3.2.1</version>
+          <dependencies>
+            <dependency>
+              <groupId>com.example</groupId>
+              <artifactId>shared-lib</artifactId>
+              <version>${project.version}</version>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(stub(Map.of())).resolve(pom);
+
+    assertThat(result.warnings()).isEmpty();
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(
+            d -> {
+              assertThat(d.effectiveVersion()).isEqualTo("3.2.1");
+              assertThat(d.source()).isEqualTo(Source.EXPLICIT);
+            });
+  }
+
+  @Test
+  void resolvesProjectParentVersionPlaceholder() {
+    Model parent =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>parent</artifactId>
+              <version>2.0.0</version>
+            </project>
+            """);
+    PomFetcher fetcher = stub(Map.of("com.example:parent:2.0.0", parent));
+
+    String childPom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>parent</artifactId>
+            <version>2.0.0</version>
+          </parent>
+          <artifactId>child</artifactId>
+          <dependencies>
+            <dependency>
+              <groupId>com.example</groupId>
+              <artifactId>other-module</artifactId>
+              <version>${project.parent.version}</version>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(childPom);
+
+    assertThat(result.warnings()).isEmpty();
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(d -> assertThat(d.effectiveVersion()).isEqualTo("2.0.0"));
+  }
 }

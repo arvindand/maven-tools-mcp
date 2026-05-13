@@ -75,6 +75,7 @@ public class EffectivePomResolver {
   private Map<String, String> buildPropertyMap(
       Model root, List<MavenCoordinate> parentChain, List<String> warnings) {
     Map<String, String> properties = new HashMap<>();
+    seedProjectProperties(root, properties);
     if (root.getProperties() != null) {
       root.getProperties().forEach((k, v) -> properties.put(k.toString(), v.toString()));
     }
@@ -208,6 +209,40 @@ public class EffectivePomResolver {
             ? root.getVersion()
             : (root.getParent() != null ? root.getParent().getVersion() : null);
     return MavenCoordinate.of(groupId, root.getArtifactId(), version);
+  }
+
+  /**
+   * Seeds Maven's well-known {@code project.*} properties into the property map so that
+   * dependency versions like {@code ${project.version}} or {@code ${project.parent.version}}
+   * interpolate against the actual root POM coordinates.
+   *
+   * <p>Six bindings are produced where applicable: {@code project.groupId},
+   * {@code project.artifactId}, {@code project.version}, and the {@code project.parent.*}
+   * trio when the root POM declares a {@code <parent>} block.
+   */
+  private static void seedProjectProperties(Model root, Map<String, String> sink) {
+    MavenCoordinate rootCoord = rootCoordinate(root);
+    if (rootCoord.groupId() != null) {
+      sink.put("project.groupId", rootCoord.groupId());
+    }
+    if (rootCoord.artifactId() != null) {
+      sink.put("project.artifactId", rootCoord.artifactId());
+    }
+    if (rootCoord.version() != null) {
+      sink.put("project.version", rootCoord.version());
+    }
+    var p = root.getParent();
+    if (p != null) {
+      if (p.getGroupId() != null) {
+        sink.put("project.parent.groupId", p.getGroupId());
+      }
+      if (p.getArtifactId() != null) {
+        sink.put("project.parent.artifactId", p.getArtifactId());
+      }
+      if (p.getVersion() != null) {
+        sink.put("project.parent.version", p.getVersion());
+      }
+    }
   }
 
   /** A {@code <dependencyManagement>} entry that has been resolved, with its source POM. */
