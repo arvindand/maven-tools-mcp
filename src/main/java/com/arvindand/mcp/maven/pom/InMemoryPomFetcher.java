@@ -18,6 +18,9 @@ import org.slf4j.LoggerFactory;
  * block for inherited groupId / version. Unparseable POMs are skipped (a debug log is emitted) —
  * partial bundles still serve hits for the POMs that parsed cleanly.
  *
+ * <p>If the bundle contains multiple POMs with the same {@code groupId:artifactId:version}, the
+ * last occurrence wins.
+ *
  * <p>Used as the local-side of a {@link CompositePomFetcher} so callers can sideload unreleased
  * monorepo POMs alongside Maven Central as the fallback.
  */
@@ -34,6 +37,7 @@ public final class InMemoryPomFetcher implements PomFetcher {
     Objects.requireNonNull(pomXmls, "pomXmls must not be null");
     Map<String, Model> byGav = new HashMap<>();
     for (String xml : pomXmls) {
+      Objects.requireNonNull(xml, "pomXmls must not contain null elements");
       try {
         Model model = new MavenXpp3Reader().read(new StringReader(xml));
         String key = gavKey(model);

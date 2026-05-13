@@ -17,6 +17,7 @@ public final class CompositePomFetcher implements PomFetcher {
 
   public CompositePomFetcher(List<PomFetcher> fetchers) {
     Objects.requireNonNull(fetchers, "fetchers must not be null");
+    fetchers.forEach(f -> Objects.requireNonNull(f, "fetchers must not contain null elements"));
     this.fetchers = List.copyOf(fetchers);
   }
 
