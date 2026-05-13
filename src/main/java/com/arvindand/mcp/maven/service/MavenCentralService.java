@@ -278,19 +278,18 @@ public class MavenCentralService {
   }
 
   /**
-   * Fetches the raw POM XML for a Maven coordinate from the configured repository. Used by the
-   * POM resolver (see {@link com.arvindand.mcp.maven.pom.MavenCentralPomFetcher}) to walk
-   * parent chains and BOM imports.
+   * Fetches the raw POM XML for a Maven coordinate from the configured repository. Used by the POM
+   * resolver (see {@link com.arvindand.mcp.maven.pom.MavenCentralPomFetcher}) to walk parent chains
+   * and BOM imports.
    *
-   * <p>Returns an empty {@link Optional} on 404 or any other client/server error — callers
-   * surface this as a resolution warning rather than failing the whole analysis.
+   * <p>Returns an empty {@link Optional} on 404 or any other client/server error — callers surface
+   * this as a resolution warning rather than failing the whole analysis.
    *
    * @param coordinate must have a non-null version
    */
   @Cacheable(
       value = MAVEN_POM_XML,
-      key =
-          "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + #coordinate.version()")
+      key = "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + #coordinate.version()")
   @CircuitBreaker(name = "maven-central", fallbackMethod = "fetchPomXmlFallback")
   @Retry(name = "maven-central")
   @RateLimiter(name = "maven-central")
@@ -303,8 +302,7 @@ public class MavenCentralService {
       String xml = restClient.get().uri(java.net.URI.create(url)).retrieve().body(String.class);
       return Optional.ofNullable(xml);
     } catch (RestClientException ex) {
-      logger.debug(
-          "POM fetch failed for {}: {}", coordinate.toCoordinateString(), ex.getMessage());
+      logger.debug("POM fetch failed for {}: {}", coordinate.toCoordinateString(), ex.getMessage());
       return Optional.empty();
     }
   }

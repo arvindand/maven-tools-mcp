@@ -25,8 +25,8 @@ import org.springframework.stereotype.Service;
  * parents surface as warnings on {@link EffectivePomResult}; resolution still produces a result
  * rather than aborting.
  *
- * <p>BOM imports ({@code <scope>import</scope><type>pom</type>}) are the only remaining gap;
- * they arrive in Task 10.
+ * <p>BOM imports ({@code <scope>import</scope><type>pom</type>}) are the only remaining gap; they
+ * arrive in Task 10.
  *
  * <p>See {@code package-info.java} for design notes and attribution.
  */
@@ -126,12 +126,7 @@ public class EffectivePomResolver {
         // Heuristic: residual "${" means interpolation left a placeholder unresolved —
         // no real Maven version string contains it.
         if (resolved.isBlank() || resolved.contains("${")) {
-          warnings.add(
-              "Could not resolve version for "
-                  + key
-                  + " (raw: "
-                  + declared
-                  + ")");
+          warnings.add("Could not resolve version for " + key + " (raw: " + declared + ")");
           continue;
         }
         Source source = mgmt == null ? Source.EXPLICIT : Source.EXPLICIT_OVERRIDE;
@@ -212,13 +207,13 @@ public class EffectivePomResolver {
   }
 
   /**
-   * Seeds Maven's well-known {@code project.*} properties into the property map so that
-   * dependency versions like {@code ${project.version}} or {@code ${project.parent.version}}
-   * interpolate against the actual root POM coordinates.
+   * Seeds Maven's well-known {@code project.*} properties into the property map so that dependency
+   * versions like {@code ${project.version}} or {@code ${project.parent.version}} interpolate
+   * against the actual root POM coordinates.
    *
-   * <p>Six bindings are produced where applicable: {@code project.groupId},
-   * {@code project.artifactId}, {@code project.version}, and the {@code project.parent.*}
-   * trio when the root POM declares a {@code <parent>} block.
+   * <p>Six bindings are produced where applicable: {@code project.groupId}, {@code
+   * project.artifactId}, {@code project.version}, and the {@code project.parent.*} trio when the
+   * root POM declares a {@code <parent>} block.
    */
   private static void seedProjectProperties(Model root, Map<String, String> sink) {
     MavenCoordinate rootCoord = rootCoordinate(root);

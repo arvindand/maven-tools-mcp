@@ -7,9 +7,9 @@ import java.util.Optional;
 import org.apache.maven.model.Model;
 
 /**
- * Chains multiple {@link PomFetcher}s. Returns the first non-empty result for a given
- * coordinate. Typical use: {@code new CompositePomFetcher(List.of(localBundleFetcher,
- * mavenCentralFetcher))} — local POMs win, Maven Central is the fallback.
+ * Chains multiple {@link PomFetcher}s. Returns the first non-empty result for a given coordinate.
+ * Typical use: {@code new CompositePomFetcher(List.of(localBundleFetcher, mavenCentralFetcher))} —
+ * local POMs win, Maven Central is the fallback.
  */
 public final class CompositePomFetcher implements PomFetcher {
 

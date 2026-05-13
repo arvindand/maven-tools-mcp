@@ -13,8 +13,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * {@link PomFetcher} that delegates raw XML retrieval to {@link MavenCentralService} and parses
- * the result with {@link MavenXpp3Reader}. Any fetch or parse failure becomes an empty {@link
+ * {@link PomFetcher} that delegates raw XML retrieval to {@link MavenCentralService} and parses the
+ * result with {@link MavenXpp3Reader}. Any fetch or parse failure becomes an empty {@link
  * Optional}; the resolver records it as a warning.
  */
 @Component
@@ -37,8 +37,7 @@ public class MavenCentralPomFetcher implements PomFetcher {
       Model model = new MavenXpp3Reader().read(new StringReader(xml.get()));
       return Optional.of(model);
     } catch (XmlPullParserException | IOException ex) {
-      logger.debug(
-          "POM parse failed for {}: {}", coordinate.toCoordinateString(), ex.getMessage());
+      logger.debug("POM parse failed for {}: {}", coordinate.toCoordinateString(), ex.getMessage());
       return Optional.empty();
     }
   }

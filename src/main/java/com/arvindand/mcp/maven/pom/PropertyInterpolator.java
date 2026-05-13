@@ -9,12 +9,12 @@ import java.util.regex.Pattern;
  * Substitutes Maven-style {@code ${name}} placeholders against a property map.
  *
  * <p>Supports chained placeholders ({@code ${a}} → {@code ${b}} → {@code final}) up to a fixed
- * depth (10 passes) to guarantee termination on cyclic property definitions. Unknown
- * placeholders are left unchanged — the resolver surfaces them as warnings, not errors.
+ * depth (10 passes) to guarantee termination on cyclic property definitions. Unknown placeholders
+ * are left unchanged — the resolver surfaces them as warnings, not errors.
  *
- * <p>Edge cases deliberately not supported in Phase 6a: {@code ${project.version}},
- * {@code ${project.parent.version}}, {@code ${revision}}, environment variables. These are
- * future work; for now they appear as literal unresolved placeholders in the output.
+ * <p>Edge cases deliberately not supported in Phase 6a: {@code ${project.version}}, {@code
+ * ${project.parent.version}}, {@code ${revision}}, environment variables. These are future work;
+ * for now they appear as literal unresolved placeholders in the output.
  */
 final class PropertyInterpolator {
 

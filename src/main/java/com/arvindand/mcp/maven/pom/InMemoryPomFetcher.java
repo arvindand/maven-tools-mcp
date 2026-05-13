@@ -13,13 +13,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * {@link PomFetcher} backed by a bundle of POM XML strings supplied at construction. Indexes
- * each POM by its self-declared {@code groupId:artifactId:version}, falling back to the
- * {@code <parent>} block for inherited groupId / version. Unparseable POMs are skipped (a
- * debug log is emitted) — partial bundles still serve hits for the POMs that parsed cleanly.
+ * {@link PomFetcher} backed by a bundle of POM XML strings supplied at construction. Indexes each
+ * POM by its self-declared {@code groupId:artifactId:version}, falling back to the {@code <parent>}
+ * block for inherited groupId / version. Unparseable POMs are skipped (a debug log is emitted) —
+ * partial bundles still serve hits for the POMs that parsed cleanly.
  *
- * <p>Used as the local-side of a {@link CompositePomFetcher} so callers can sideload
- * unreleased monorepo POMs alongside Maven Central as the fallback.
+ * <p>Used as the local-side of a {@link CompositePomFetcher} so callers can sideload unreleased
+ * monorepo POMs alongside Maven Central as the fallback.
  */
 public final class InMemoryPomFetcher implements PomFetcher {
 

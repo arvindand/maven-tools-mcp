@@ -14,7 +14,9 @@ class PropertyInterpolatorTest {
 
   @Test
   void substitutesSinglePlaceholder() {
-    assertThat(PropertyInterpolator.interpolate("${jackson.version}", Map.of("jackson.version", "2.19.2")))
+    assertThat(
+            PropertyInterpolator.interpolate(
+                "${jackson.version}", Map.of("jackson.version", "2.19.2")))
         .isEqualTo("2.19.2");
   }
 

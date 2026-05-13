@@ -9,12 +9,11 @@ import java.util.Optional;
  *
  * @param coordinate the dependency's {@code groupId:artifactId}
  * @param effectiveVersion the version that would be used at build time after parent + BOM
- *     resolution. Never null or blank; resolution failures are surfaced via warnings on
- *     {@link EffectivePomResult}, not silent nulls.
+ *     resolution. Never null or blank; resolution failures are surfaced via warnings on {@link
+ *     EffectivePomResult}, not silent nulls.
  * @param source where {@code effectiveVersion} came from — see {@link Source}
- * @param managedBy the BOM or parent coordinate that supplied {@code effectiveVersion} when
- *     {@code source == MANAGED} or {@code source == EXPLICIT_OVERRIDE}. Empty for
- *     {@code EXPLICIT}.
+ * @param managedBy the BOM or parent coordinate that supplied {@code effectiveVersion} when {@code
+ *     source == MANAGED} or {@code source == EXPLICIT_OVERRIDE}. Empty for {@code EXPLICIT}.
  */
 public record EffectiveDependency(
     MavenCoordinate coordinate,
@@ -30,8 +29,7 @@ public record EffectiveDependency(
     Objects.requireNonNull(source, "source must not be null");
     Objects.requireNonNull(managedBy, "managedBy must not be null (use Optional.empty())");
     if (source == Source.EXPLICIT && managedBy.isPresent()) {
-      throw new IllegalArgumentException(
-          "managedBy must be empty when source is EXPLICIT");
+      throw new IllegalArgumentException("managedBy must be empty when source is EXPLICIT");
     }
   }
 }
