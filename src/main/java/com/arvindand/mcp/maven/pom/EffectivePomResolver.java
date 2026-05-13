@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
@@ -56,6 +57,36 @@ public class EffectivePomResolver {
 
     List<EffectiveDependency> deps = classifyDependencies(root, properties, managed, warnings);
     return new EffectivePomResult(deps, parentChain, warnings);
+  }
+
+  /**
+   * Resolves {@code pomXml} with a bundle of sideloaded POMs available to the parent /
+   * dependencyManagement / BOM-import walks. The sideloaded POMs are tried first; the injected
+   * {@link PomFetcher} (typically {@code MavenCentralPomFetcher}) serves as the fallback.
+   */
+  public EffectivePomResult resolve(String pomXml, List<String> sideloadedPoms) {
+    if (sideloadedPoms == null || sideloadedPoms.isEmpty()) {
+      return resolve(pomXml);
+    }
+    PomFetcher composite =
+        new CompositePomFetcher(List.of(InMemoryPomFetcher.fromXml(sideloadedPoms), this.fetcher));
+    return new EffectivePomResolver(composite).resolve(pomXml);
+  }
+
+  /**
+   * Resolves every POM in the bundle as a primary POM, with all other POMs in the bundle available
+   * as sideloaded context. Each result is independent — order matches the input list. Use this for
+   * aggregator-level analysis of a multi-module project.
+   */
+  public List<EffectivePomResult> resolveAll(List<String> poms) {
+    Objects.requireNonNull(poms, "poms must not be null");
+    if (poms.isEmpty()) {
+      return List.of();
+    }
+    PomFetcher composite =
+        new CompositePomFetcher(List.of(InMemoryPomFetcher.fromXml(poms), this.fetcher));
+    EffectivePomResolver bundleResolver = new EffectivePomResolver(composite);
+    return poms.stream().map(bundleResolver::resolve).toList();
   }
 
   private Model parsePom(String pomXml) {
