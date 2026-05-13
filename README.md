@@ -156,6 +156,13 @@ That flow is documented in [`docs/dogfooding.md`](docs/dogfooding.md), including
 
 For a few more usage notes, see the FAQ section in [`docs/examples.md`](docs/examples.md#faq).
 
+## Acknowledgements
+
+The effective POM resolver under `com.arvindand.mcp.maven.pom` adapts the resolution
+algorithm shape from [maxxq-org/maxxq-maven](https://github.com/maxxq-org/maxxq-maven)
+(MIT, Guy Chauliac) — no code was copied; the implementation was written from scratch
+and scoped to declared-dep resolution. See [`NOTICE`](NOTICE) for full attribution.
+
 ## More Docs
 
 - [`docs/setup.md`](docs/setup.md) - installation, client configuration, image variants, build-from-source options

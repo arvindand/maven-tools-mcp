@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added (Unreleased)
 
+- **POM resolver service** (`com.arvindand.mcp.maven.pom`): internal service that takes
+  pasted POM content and returns per-dependency effective versions classified as
+  `EXPLICIT`, `MANAGED`, or `EXPLICIT_OVERRIDE`, walking parent POMs and BOM imports
+  via Maven Central. Supports multi-module bundles via `resolve(pomXml, sideloadedPoms)`
+  and `resolveAll(poms)` plus `${project.version}` / `${project.parent.version}`
+  interpolation. No MCP tool exposed yet — that arrives in Phase 6b.
+
 ### Changed (Unreleased)
 
 - **Java**: Upgraded toolchain from Java 24 to Java 25 (LTS). `<java.version>` bumped in `pom.xml`; `actions/setup-java` pinned to `25` in CI and Docker workflows; README badge updated. Buildpack JDK image is selected automatically from `<java.version>`.
