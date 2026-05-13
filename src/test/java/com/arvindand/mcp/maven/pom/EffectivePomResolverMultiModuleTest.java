@@ -214,9 +214,9 @@ class EffectivePomResolverMultiModuleTest {
         </project>
         """;
 
-    // Primary module: uses local parent's managed jackson version, sibling via project.version,
-    // and a third-party dep that the test's external fetcher won't know about (warning expected
-    // for that one to prove the fallback chain reached the end).
+    // Primary module: declares jackson without a version (expects MANAGED via the parent's
+    // dependencyManagement after ${jackson.version} interpolates) and a sibling acme-core
+    // referenced by ${project.version} (expects EXPLICIT against the inherited parent version).
     String primaryPom =
         """
         <project xmlns="http://maven.apache.org/POM/4.0.0">
