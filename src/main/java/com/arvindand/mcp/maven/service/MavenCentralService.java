@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -301,9 +302,20 @@ public class MavenCentralService {
     try {
       String xml = restClient.get().uri(java.net.URI.create(url)).retrieve().body(String.class);
       return Optional.ofNullable(xml);
-    } catch (RestClientException ex) {
-      logger.debug("POM fetch failed for {}: {}", coordinate.toCoordinateString(), ex.getMessage());
+    } catch (HttpClientErrorException.NotFound ex) {
+      // 404 is a legitimate "POM doesn't exist for this coord" — not transient,
+      // don't retry, don't trip the circuit breaker.
+      logger.debug("POM not found for {}", coordinate.toCoordinateString());
       return Optional.empty();
+    } catch (RestClientException ex) {
+      // Transient (5xx, network, timeout). Let @Retry + @CircuitBreaker handle it.
+      // The fetchPomXmlFallback method returns Optional.empty() when the breaker is
+      // open or all retries exhausted.
+      logger.debug(
+          "POM fetch failed for {} (rethrowing for resilience4j): {}",
+          coordinate.toCoordinateString(),
+          ex.getMessage());
+      throw ex;
     }
   }
 
