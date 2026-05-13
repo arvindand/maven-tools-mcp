@@ -229,9 +229,13 @@ public class EffectivePomResolver {
   /**
    * Resolves a {@code <scope>import</scope><type>pom</type>} entry by fetching the BOM, merging its
    * properties (the importing POM's properties take precedence), and recursing into {@link
-   * #recordManagedFrom} so the BOM's managed entries are accumulated. Failed BOM fetches are
-   * silent-drop — same reasoning as {@link #buildManagedVersionMap}: warnings about unreachable
-   * POMs are emitted once by {@code buildPropertyMap}.
+   * #recordManagedFrom} so the BOM's managed entries are accumulated.
+   *
+   * <p>Failed BOM fetches are silent-drop by design — BOMs are not part of the parent chain walked
+   * by {@link #buildPropertyMap}, so there is no prior warning to deduplicate. Callers receive a
+   * best-effort result; an unresolvable BOM simply means its managed entries are absent from the
+   * merged map, which surfaces as unresolved dependency-version warnings downstream in {@link
+   * #classifyDependencies}.
    */
   private void importBom(
       Dependency bomDep, Map<String, String> properties, Map<String, ManagedEntry> sink) {
@@ -253,6 +257,9 @@ public class EffectivePomResolver {
           .getProperties()
           .forEach((k, v) -> mergedProps.putIfAbsent(k.toString(), v.toString()));
     }
+    // TODO: cyclic BOM imports (A imports B imports A) are not detected; recursion is
+    // bounded in practice by Maven Central's rejection of such cycles, but a visited-set
+    // threaded through importBom would harden against pathological / malicious input.
     recordManagedFrom(bomModel, bomCoord, mergedProps, sink);
   }
 

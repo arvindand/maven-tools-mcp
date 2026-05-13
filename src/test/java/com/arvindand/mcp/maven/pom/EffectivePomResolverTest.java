@@ -504,6 +504,7 @@ class EffectivePomResolverTest {
 
     EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(pom);
 
+    assertThat(result.warnings()).isEmpty();
     assertThat(result.dependencies())
         .singleElement()
         .satisfies(
