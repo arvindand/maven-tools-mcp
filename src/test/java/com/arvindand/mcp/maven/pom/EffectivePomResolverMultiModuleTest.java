@@ -173,4 +173,102 @@ class EffectivePomResolverMultiModuleTest {
                   .isEqualTo(MavenCoordinate.of("com.external", "external-parent", "9.9.9"));
             });
   }
+
+  @Test
+  void resolvesRealisticMonorepoMixingLocalParentSiblingAndCentralFallback() {
+    // Parent POM exists only in the bundle (e.g., not yet released to Central)
+    String parentPom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.acme</groupId>
+          <artifactId>acme-parent</artifactId>
+          <version>0.1.0-SNAPSHOT</version>
+          <packaging>pom</packaging>
+          <properties>
+            <jackson.version>2.19.2</jackson.version>
+          </properties>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+        </project>
+        """;
+
+    // Sibling module also in the bundle
+    String siblingPom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <parent>
+            <groupId>com.acme</groupId>
+            <artifactId>acme-parent</artifactId>
+            <version>0.1.0-SNAPSHOT</version>
+          </parent>
+          <artifactId>acme-core</artifactId>
+        </project>
+        """;
+
+    // Primary module: uses local parent's managed jackson version, sibling via project.version,
+    // and a third-party dep that the test's external fetcher won't know about (warning expected
+    // for that one to prove the fallback chain reached the end).
+    String primaryPom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <parent>
+            <groupId>com.acme</groupId>
+            <artifactId>acme-parent</artifactId>
+            <version>0.1.0-SNAPSHOT</version>
+          </parent>
+          <artifactId>acme-app</artifactId>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+            </dependency>
+            <dependency>
+              <groupId>com.acme</groupId>
+              <artifactId>acme-core</artifactId>
+              <version>${project.version}</version>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result =
+        new EffectivePomResolver(EMPTY).resolve(primaryPom, List.of(parentPom, siblingPom));
+
+    assertThat(result.warnings()).isEmpty();
+    assertThat(result.parentChain())
+        .singleElement()
+        .isEqualTo(MavenCoordinate.of("com.acme", "acme-parent", "0.1.0-SNAPSHOT"));
+    assertThat(result.dependencies())
+        .hasSize(2)
+        .satisfies(
+            deps -> {
+              EffectiveDependency jackson =
+                  deps.stream()
+                      .filter(d -> "jackson-databind".equals(d.coordinate().artifactId()))
+                      .findFirst()
+                      .orElseThrow();
+              assertThat(jackson.effectiveVersion()).isEqualTo("2.19.2");
+              assertThat(jackson.source()).isEqualTo(Source.MANAGED);
+              assertThat(jackson.managedBy())
+                  .contains(MavenCoordinate.of("com.acme", "acme-parent", "0.1.0-SNAPSHOT"));
+
+              EffectiveDependency core =
+                  deps.stream()
+                      .filter(d -> "acme-core".equals(d.coordinate().artifactId()))
+                      .findFirst()
+                      .orElseThrow();
+              assertThat(core.effectiveVersion()).isEqualTo("0.1.0-SNAPSHOT");
+              assertThat(core.source()).isEqualTo(Source.EXPLICIT);
+            });
+  }
 }
