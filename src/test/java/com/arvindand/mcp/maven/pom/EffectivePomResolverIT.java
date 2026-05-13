@@ -41,7 +41,7 @@ class EffectivePomResolverIT {
 
     // maven-model 3.9.12 is an explicit dep with a literal version — must come back as EXPLICIT.
     assertThat(result.dependencies())
-        .filteredOn(d -> d.coordinate().artifactId().equals("maven-model"))
+        .filteredOn(d -> d.artifactId().equals("maven-model"))
         .singleElement()
         .satisfies(
             d -> {

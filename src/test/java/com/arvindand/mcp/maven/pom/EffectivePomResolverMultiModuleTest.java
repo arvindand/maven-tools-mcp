@@ -123,8 +123,8 @@ class EffectivePomResolverMultiModuleTest {
         .singleElement()
         .satisfies(
             d -> {
-              assertThat(d.coordinate())
-                  .isEqualTo(MavenCoordinate.of("com.example", "module-b", null));
+              assertThat(d.groupId()).isEqualTo("com.example");
+              assertThat(d.artifactId()).isEqualTo("module-b");
               assertThat(d.effectiveVersion()).isEqualTo("1.0.0");
               assertThat(d.source()).isEqualTo(Source.EXPLICIT);
             });
@@ -254,7 +254,7 @@ class EffectivePomResolverMultiModuleTest {
             deps -> {
               EffectiveDependency jackson =
                   deps.stream()
-                      .filter(d -> "jackson-databind".equals(d.coordinate().artifactId()))
+                      .filter(d -> "jackson-databind".equals(d.artifactId()))
                       .findFirst()
                       .orElseThrow();
               assertThat(jackson.effectiveVersion()).isEqualTo("2.19.2");
@@ -264,7 +264,7 @@ class EffectivePomResolverMultiModuleTest {
 
               EffectiveDependency core =
                   deps.stream()
-                      .filter(d -> "acme-core".equals(d.coordinate().artifactId()))
+                      .filter(d -> "acme-core".equals(d.artifactId()))
                       .findFirst()
                       .orElseThrow();
               assertThat(core.effectiveVersion()).isEqualTo("0.1.0-SNAPSHOT");

@@ -53,9 +53,8 @@ class EffectivePomResolverTest {
         .singleElement()
         .satisfies(
             d -> {
-              assertThat(d.coordinate())
-                  .isEqualTo(
-                      MavenCoordinate.of("com.fasterxml.jackson.core", "jackson-databind", null));
+              assertThat(d.groupId()).isEqualTo("com.fasterxml.jackson.core");
+              assertThat(d.artifactId()).isEqualTo("jackson-databind");
               assertThat(d.effectiveVersion()).isEqualTo("2.19.2");
               assertThat(d.source()).isEqualTo(Source.EXPLICIT);
               assertThat(d.managedBy()).isEmpty();

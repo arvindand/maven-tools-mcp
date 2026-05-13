@@ -7,7 +7,8 @@ import java.util.Optional;
 /**
  * The resolved view of a single declared dependency in a POM.
  *
- * @param coordinate the dependency's {@code groupId:artifactId}
+ * @param groupId the dependency's group ID
+ * @param artifactId the dependency's artifact ID
  * @param effectiveVersion the version that would be used at build time after parent + BOM
  *     resolution. Never null or blank; resolution failures are surfaced via warnings on {@link
  *     EffectivePomResult}, not silent nulls.
@@ -16,13 +17,15 @@ import java.util.Optional;
  *     source == MANAGED} or {@code source == EXPLICIT_OVERRIDE}. Empty for {@code EXPLICIT}.
  */
 public record EffectiveDependency(
-    MavenCoordinate coordinate,
+    String groupId,
+    String artifactId,
     String effectiveVersion,
     Source source,
     Optional<MavenCoordinate> managedBy) {
 
   public EffectiveDependency {
-    Objects.requireNonNull(coordinate, "coordinate must not be null");
+    Objects.requireNonNull(groupId, "groupId must not be null");
+    Objects.requireNonNull(artifactId, "artifactId must not be null");
     if (effectiveVersion == null || effectiveVersion.isBlank()) {
       throw new IllegalArgumentException("effectiveVersion must not be blank");
     }

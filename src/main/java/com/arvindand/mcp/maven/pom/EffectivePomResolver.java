@@ -165,7 +165,8 @@ public class EffectivePomResolver {
         }
         deps.add(
             new EffectiveDependency(
-                MavenCoordinate.of(d.getGroupId(), d.getArtifactId(), null),
+                d.getGroupId(),
+                d.getArtifactId(),
                 mgmt.version(),
                 Source.MANAGED,
                 Optional.of(mgmt.managedBy())));
@@ -183,10 +184,7 @@ public class EffectivePomResolver {
             mgmt == null ? Optional.empty() : Optional.of(mgmt.managedBy());
         deps.add(
             new EffectiveDependency(
-                MavenCoordinate.of(d.getGroupId(), d.getArtifactId(), null),
-                resolved,
-                source,
-                managedBy));
+                d.getGroupId(), d.getArtifactId(), resolved, source, managedBy));
       }
     }
     return deps;
