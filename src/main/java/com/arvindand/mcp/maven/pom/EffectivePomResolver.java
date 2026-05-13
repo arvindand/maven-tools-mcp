@@ -35,6 +35,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class EffectivePomResolver {
 
+  private static final int MAX_PARENT_DEPTH = 10;
+
   private final PomFetcher fetcher;
 
   public EffectivePomResolver(PomFetcher fetcher) {
@@ -55,7 +57,7 @@ public class EffectivePomResolver {
     List<String> warnings = new ArrayList<>();
     Map<String, String> properties = buildPropertyMap(root, parentChain, warnings);
     Map<ManagementKey, ManagedEntry> managed =
-        buildManagedVersionMap(root, parentChain, properties);
+        buildManagedVersionMap(root, parentChain, properties, warnings);
 
     List<EffectiveDependency> deps = classifyDependencies(root, properties, managed, warnings);
     return new EffectivePomResult(deps, parentChain, warnings);
@@ -113,7 +115,7 @@ public class EffectivePomResolver {
       root.getProperties().forEach((k, v) -> properties.put(k.toString(), v.toString()));
     }
     Model cursor = root;
-    for (int depth = 0; depth < 10 && cursor.getParent() != null; depth++) {
+    for (int depth = 0; depth < MAX_PARENT_DEPTH && cursor.getParent() != null; depth++) {
       var p = cursor.getParent();
       var parentCoord = MavenCoordinate.of(p.getGroupId(), p.getArtifactId(), p.getVersion());
       Optional<Model> fetched = fetcher.fetch(parentCoord);
@@ -129,6 +131,19 @@ public class EffectivePomResolver {
             .forEach((k, v) -> properties.putIfAbsent(k.toString(), v.toString()));
       }
       cursor = parent;
+    }
+    if (cursor.getParent() != null) {
+      var p = cursor.getParent();
+      warnings.add(
+          "Parent chain exceeded "
+              + MAX_PARENT_DEPTH
+              + " levels at "
+              + p.getGroupId()
+              + ":"
+              + p.getArtifactId()
+              + ":"
+              + p.getVersion()
+              + " — deeper ancestors were not walked");
     }
     return properties;
   }
@@ -183,21 +198,25 @@ public class EffectivePomResolver {
    * collision. BOM imports ({@code <scope>import</scope><type>pom</type>}) are resolved recursively
    * via {@link #importBom}.
    *
-   * <p>Managed-entry resolution is silent-drop by design: {@link #buildPropertyMap} already warned
-   * about any unreachable parent earlier in the same {@link #resolve} call, so emitting a second
-   * warning for the same parent here would be noise.
+   * <p>A failed fetch for a parent in the chain is silent here: {@link #buildPropertyMap} already
+   * warned about the unreachable parent earlier in the same {@link #resolve} call, so emitting a
+   * second warning for the same parent would be noise.
    */
   private Map<ManagementKey, ManagedEntry> buildManagedVersionMap(
-      Model root, List<MavenCoordinate> parentChain, Map<String, String> properties) {
+      Model root,
+      List<MavenCoordinate> parentChain,
+      Map<String, String> properties,
+      List<String> warnings) {
     Map<ManagementKey, ManagedEntry> managed = new HashMap<>();
     MavenCoordinate rootCoord = rootCoordinate(root);
-    recordManagedFrom(root, rootCoord, properties, managed);
+    recordManagedFrom(root, rootCoord, properties, managed, warnings);
     for (MavenCoordinate parentCoord : parentChain) {
       // A failed fetch here would mean buildPropertyMap already warned about this parent —
       // no second warning is emitted; we simply skip its managed entries.
       fetcher
           .fetch(parentCoord)
-          .ifPresent(parent -> recordManagedFrom(parent, parentCoord, properties, managed));
+          .ifPresent(
+              parent -> recordManagedFrom(parent, parentCoord, properties, managed, warnings));
     }
     return managed;
   }
@@ -206,13 +225,14 @@ public class EffectivePomResolver {
       Model model,
       MavenCoordinate source,
       Map<String, String> properties,
-      Map<ManagementKey, ManagedEntry> sink) {
+      Map<ManagementKey, ManagedEntry> sink,
+      List<String> warnings) {
     if (model.getDependencyManagement() == null) {
       return;
     }
     for (Dependency d : model.getDependencyManagement().getDependencies()) {
       if ("import".equals(d.getScope()) && "pom".equals(d.getType())) {
-        importBom(d, properties, sink);
+        importBom(d, properties, sink, warnings);
         continue;
       }
       ManagementKey key = ManagementKey.from(d);
@@ -222,6 +242,14 @@ public class EffectivePomResolver {
       }
       String version = PropertyInterpolator.interpolate(d.getVersion(), properties);
       if (version == null || version.isBlank() || version.contains("${")) {
+        warnings.add(
+            "Managed version for "
+                + key.display()
+                + " from "
+                + source.toCoordinateString()
+                + " could not be resolved (raw: "
+                + d.getVersion()
+                + ")");
         continue;
       }
       sink.put(key, new ManagedEntry(version, source));
@@ -242,7 +270,7 @@ public class EffectivePomResolver {
     Map<String, String> mergedProperties = new HashMap<>(importerProperties);
     bomProperties.forEach(mergedProperties::putIfAbsent);
 
-    return buildManagedVersionMap(bomModel, bomParentChain, mergedProperties);
+    return buildManagedVersionMap(bomModel, bomParentChain, mergedProperties, warnings);
   }
 
   /**
@@ -250,14 +278,17 @@ public class EffectivePomResolver {
    * own parent chain (so inherited properties and managed entries are included), and merging all
    * effective managed entries into {@code sink} with closest-wins semantics.
    *
-   * <p>Failed BOM fetches are silent-drop by design — BOMs are not part of the parent chain walked
-   * by {@link #buildPropertyMap}, so there is no prior warning to deduplicate. Callers receive a
-   * best-effort result; an unresolvable BOM simply means its managed entries are absent from the
-   * merged map, which surfaces as unresolved dependency-version warnings downstream in {@link
+   * <p>Failed BOM fetches emit a warning — BOMs are not part of the parent chain walked by {@link
+   * #buildPropertyMap}, so there is no prior warning to deduplicate. Callers receive a best-effort
+   * result; an unresolvable BOM simply means its managed entries are absent from the merged map,
+   * which may surface as unresolved dependency-version warnings downstream in {@link
    * #classifyDependencies}.
    */
   private void importBom(
-      Dependency bomDep, Map<String, String> properties, Map<ManagementKey, ManagedEntry> sink) {
+      Dependency bomDep,
+      Map<String, String> properties,
+      Map<ManagementKey, ManagedEntry> sink,
+      List<String> warnings) {
     String groupId = PropertyInterpolator.interpolate(bomDep.getGroupId(), properties);
     String artifactId = PropertyInterpolator.interpolate(bomDep.getArtifactId(), properties);
     String version = PropertyInterpolator.interpolate(bomDep.getVersion(), properties);
@@ -267,13 +298,14 @@ public class EffectivePomResolver {
     MavenCoordinate bomCoord = MavenCoordinate.of(groupId, artifactId, version);
     Optional<Model> bom = fetcher.fetch(bomCoord);
     if (bom.isEmpty()) {
+      warnings.add("Imported BOM " + bomCoord.toCoordinateString() + " could not be fetched");
       return;
     }
     // TODO: cyclic BOM imports (A imports B imports A) are not detected; recursion is
     // bounded in practice by Maven Central's rejection of such cycles, but a visited-set
     // threaded through importBom would harden against pathological / malicious input.
     Map<ManagementKey, ManagedEntry> effective =
-        effectiveManagementForImportedBom(bom.get(), properties, /* warnings */ new ArrayList<>());
+        effectiveManagementForImportedBom(bom.get(), properties, warnings);
     effective.forEach(sink::putIfAbsent);
   }
 
