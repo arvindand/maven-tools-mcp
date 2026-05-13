@@ -52,15 +52,12 @@ public class EffectivePomResolver {
    */
   public EffectivePomResult resolve(String pomXml) {
     Model root = parsePom(pomXml);
-
-    List<MavenCoordinate> parentChain = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
-    Map<String, String> properties = buildPropertyMap(root, parentChain, warnings);
-    Map<ManagementKey, ManagedEntry> managed =
-        buildManagedVersionMap(root, parentChain, properties, warnings);
-
-    List<EffectiveDependency> deps = classifyDependencies(root, properties, managed, warnings);
-    return new EffectivePomResult(deps, parentChain, warnings);
+    ParentContext parents = walkParents(root, warnings);
+    Map<ManagementKey, ManagedEntry> managed = buildManagedVersionMap(root, parents, warnings);
+    List<EffectiveDependency> deps =
+        classifyDependencies(root, parents.properties(), managed, warnings);
+    return new EffectivePomResult(deps, parents.chain(), warnings);
   }
 
   /**
@@ -102,18 +99,22 @@ public class EffectivePomResolver {
   }
 
   /**
-   * Walks the parent chain (up to 10 levels) starting from {@code root}, accumulating properties
-   * closest-ancestor-wins. Appends each successfully fetched parent coordinate to {@code
-   * parentChain} (closest-first). Records a warning and stops walking on the first unreachable
-   * parent.
+   * Walks the parent chain (up to {@value MAX_PARENT_DEPTH} levels) starting from {@code root},
+   * accumulating coordinates, fetched {@link Model}s, and a merged property map (closest-ancestor
+   * wins). Records a warning and stops walking on the first unreachable parent.
+   *
+   * @return a {@link ParentContext} whose {@code chain} and {@code models} are index-aligned
+   *     (closest ancestor at index 0), and whose {@code properties} are fully merged
    */
-  private Map<String, String> buildPropertyMap(
-      Model root, List<MavenCoordinate> parentChain, List<String> warnings) {
+  private ParentContext walkParents(Model root, List<String> warnings) {
+    List<MavenCoordinate> chain = new ArrayList<>();
+    List<Model> models = new ArrayList<>();
     Map<String, String> properties = new HashMap<>();
     seedProjectProperties(root, properties);
     if (root.getProperties() != null) {
       root.getProperties().forEach((k, v) -> properties.put(k.toString(), v.toString()));
     }
+
     Model cursor = root;
     for (int depth = 0; depth < MAX_PARENT_DEPTH && cursor.getParent() != null; depth++) {
       var p = cursor.getParent();
@@ -123,8 +124,9 @@ public class EffectivePomResolver {
         warnings.add("Parent " + parentCoord.toCoordinateString() + " could not be fetched");
         break;
       }
-      parentChain.add(parentCoord);
+      chain.add(parentCoord);
       Model parent = fetched.get();
+      models.add(parent);
       if (parent.getProperties() != null) {
         parent
             .getProperties()
@@ -132,20 +134,21 @@ public class EffectivePomResolver {
       }
       cursor = parent;
     }
+
     if (cursor.getParent() != null) {
-      var p = cursor.getParent();
       warnings.add(
           "Parent chain exceeded "
               + MAX_PARENT_DEPTH
               + " levels at "
-              + p.getGroupId()
+              + cursor.getParent().getGroupId()
               + ":"
-              + p.getArtifactId()
+              + cursor.getParent().getArtifactId()
               + ":"
-              + p.getVersion()
+              + cursor.getParent().getVersion()
               + " — deeper ancestors were not walked");
     }
-    return properties;
+
+    return new ParentContext(chain, models, properties);
   }
 
   private List<EffectiveDependency> classifyDependencies(
@@ -196,25 +199,17 @@ public class EffectivePomResolver {
    * collision. BOM imports ({@code <scope>import</scope><type>pom</type>}) are resolved recursively
    * via {@link #importBom}.
    *
-   * <p>A failed fetch for a parent in the chain is silent here: {@link #buildPropertyMap} already
-   * warned about the unreachable parent earlier in the same {@link #resolve} call, so emitting a
-   * second warning for the same parent would be noise.
+   * <p>Parents are consumed directly from {@code parents.models()} — no second fetch round is
+   * needed; {@link #walkParents} already loaded each ancestor exactly once.
    */
   private Map<ManagementKey, ManagedEntry> buildManagedVersionMap(
-      Model root,
-      List<MavenCoordinate> parentChain,
-      Map<String, String> properties,
-      List<String> warnings) {
+      Model root, ParentContext parents, List<String> warnings) {
     Map<ManagementKey, ManagedEntry> managed = new HashMap<>();
     MavenCoordinate rootCoord = rootCoordinate(root);
-    recordManagedFrom(root, rootCoord, properties, managed, warnings);
-    for (MavenCoordinate parentCoord : parentChain) {
-      // A failed fetch here would mean buildPropertyMap already warned about this parent —
-      // no second warning is emitted; we simply skip its managed entries.
-      fetcher
-          .fetch(parentCoord)
-          .ifPresent(
-              parent -> recordManagedFrom(parent, parentCoord, properties, managed, warnings));
+    recordManagedFrom(root, rootCoord, parents.properties(), managed, warnings);
+    for (int i = 0; i < parents.models().size(); i++) {
+      recordManagedFrom(
+          parents.models().get(i), parents.chain().get(i), parents.properties(), managed, warnings);
     }
     return managed;
   }
@@ -261,14 +256,16 @@ public class EffectivePomResolver {
    */
   private Map<ManagementKey, ManagedEntry> effectiveManagementForImportedBom(
       Model bomModel, Map<String, String> importerProperties, List<String> warnings) {
-    List<MavenCoordinate> bomParentChain = new ArrayList<>();
-    Map<String, String> bomProperties = buildPropertyMap(bomModel, bomParentChain, warnings);
+    ParentContext bomParents = walkParents(bomModel, warnings);
 
     // Importer's bindings win; BOM's own properties (including inherited) fill gaps.
     Map<String, String> mergedProperties = new HashMap<>(importerProperties);
-    bomProperties.forEach(mergedProperties::putIfAbsent);
+    bomParents.properties().forEach(mergedProperties::putIfAbsent);
 
-    return buildManagedVersionMap(bomModel, bomParentChain, mergedProperties, warnings);
+    // Reuse the BOM's parent walk (chain + models) but with merged properties for interpolation.
+    ParentContext mergedContext =
+        new ParentContext(bomParents.chain(), bomParents.models(), mergedProperties);
+    return buildManagedVersionMap(bomModel, mergedContext, warnings);
   }
 
   /**
@@ -277,7 +274,7 @@ public class EffectivePomResolver {
    * effective managed entries into {@code sink} with closest-wins semantics.
    *
    * <p>Failed BOM fetches emit a warning — BOMs are not part of the parent chain walked by {@link
-   * #buildPropertyMap}, so there is no prior warning to deduplicate. Callers receive a best-effort
+   * #walkParents}, so there is no prior warning to deduplicate. Callers receive a best-effort
    * result; an unresolvable BOM simply means its managed entries are absent from the merged map,
    * which may surface as unresolved dependency-version warnings downstream in {@link
    * #classifyDependencies}.
@@ -352,6 +349,18 @@ public class EffectivePomResolver {
       }
     }
   }
+
+  /**
+   * Captured state from a single walk of the root POM's parent chain: the resolved parent
+   * coordinates (closest-first), the corresponding {@link Model}s (matched index-for-index with
+   * {@code chain}), and the accumulated property map (root's own properties seeded first, then each
+   * ancestor's properties merged with {@code putIfAbsent}).
+   *
+   * <p>Used to avoid re-fetching the parent chain when {@code buildManagedVersionMap} later needs
+   * to walk it for {@code <dependencyManagement>} entries.
+   */
+  private record ParentContext(
+      List<MavenCoordinate> chain, List<Model> models, Map<String, String> properties) {}
 
   /** A {@code <dependencyManagement>} entry that has been resolved, with its source POM. */
   private record ManagedEntry(String version, MavenCoordinate managedBy) {}
