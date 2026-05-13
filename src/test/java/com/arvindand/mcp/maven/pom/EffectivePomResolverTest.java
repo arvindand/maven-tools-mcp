@@ -515,4 +515,94 @@ class EffectivePomResolverTest {
                   .contains(MavenCoordinate.of("com.example.bom", "my-bom", "1.0.0"));
             });
   }
+
+  @Test
+  void importedBomInheritsPropertiesAndManagedEntriesFromItsOwnParent() {
+    // Grandparent BOM: defines the jackson property AND the managed entry
+    Model grandparentBom =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example.platform</groupId>
+              <artifactId>platform-parent</artifactId>
+              <version>1.0.0</version>
+              <properties>
+                <jackson.version>2.19.2</jackson.version>
+              </properties>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                    <version>${jackson.version}</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+
+    // BOM itself: has the platform-parent as <parent>, no own depMgmt
+    Model bom =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <parent>
+                <groupId>com.example.platform</groupId>
+                <artifactId>platform-parent</artifactId>
+                <version>1.0.0</version>
+              </parent>
+              <artifactId>my-bom</artifactId>
+            </project>
+            """);
+
+    PomFetcher fetcher =
+        stub(
+            Map.of(
+                "com.example.platform:platform-parent:1.0.0", grandparentBom,
+                "com.example.platform:my-bom:1.0.0", bom));
+
+    String pom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.example</groupId>
+          <artifactId>app</artifactId>
+          <version>1.0.0</version>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>com.example.platform</groupId>
+                <artifactId>my-bom</artifactId>
+                <version>1.0.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(pom);
+
+    assertThat(result.warnings()).isEmpty();
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(
+            d -> {
+              assertThat(d.effectiveVersion()).isEqualTo("2.19.2");
+              assertThat(d.source()).isEqualTo(Source.MANAGED);
+              // managedBy points at the BOM that recorded it — in this case the grandparent
+              // BOM since that's where the entry actually lives.
+              assertThat(d.managedBy())
+                  .contains(MavenCoordinate.of("com.example.platform", "platform-parent", "1.0.0"));
+            });
+  }
 }

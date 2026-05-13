@@ -229,9 +229,26 @@ public class EffectivePomResolver {
   }
 
   /**
-   * Resolves a {@code <scope>import</scope><type>pom</type>} entry by fetching the BOM, merging its
-   * properties (the importing POM's properties take precedence), and recursing into {@link
-   * #recordManagedFrom} so the BOM's managed entries are accumulated.
+   * Returns the effective {@code <dependencyManagement>} map for an imported BOM, including entries
+   * inherited from the BOM's own parent chain and its own properties merged on top of the importing
+   * POM's properties (importer wins).
+   */
+  private Map<ManagementKey, ManagedEntry> effectiveManagementForImportedBom(
+      Model bomModel, Map<String, String> importerProperties, List<String> warnings) {
+    List<MavenCoordinate> bomParentChain = new ArrayList<>();
+    Map<String, String> bomProperties = buildPropertyMap(bomModel, bomParentChain, warnings);
+
+    // Importer's bindings win; BOM's own properties (including inherited) fill gaps.
+    Map<String, String> mergedProperties = new HashMap<>(importerProperties);
+    bomProperties.forEach(mergedProperties::putIfAbsent);
+
+    return buildManagedVersionMap(bomModel, bomParentChain, mergedProperties);
+  }
+
+  /**
+   * Resolves a {@code <scope>import</scope><type>pom</type>} entry by fetching the BOM, walking its
+   * own parent chain (so inherited properties and managed entries are included), and merging all
+   * effective managed entries into {@code sink} with closest-wins semantics.
    *
    * <p>Failed BOM fetches are silent-drop by design — BOMs are not part of the parent chain walked
    * by {@link #buildPropertyMap}, so there is no prior warning to deduplicate. Callers receive a
@@ -252,17 +269,12 @@ public class EffectivePomResolver {
     if (bom.isEmpty()) {
       return;
     }
-    Model bomModel = bom.get();
-    Map<String, String> mergedProps = new HashMap<>(properties);
-    if (bomModel.getProperties() != null) {
-      bomModel
-          .getProperties()
-          .forEach((k, v) -> mergedProps.putIfAbsent(k.toString(), v.toString()));
-    }
     // TODO: cyclic BOM imports (A imports B imports A) are not detected; recursion is
     // bounded in practice by Maven Central's rejection of such cycles, but a visited-set
     // threaded through importBom would harden against pathological / malicious input.
-    recordManagedFrom(bomModel, bomCoord, mergedProps, sink);
+    Map<ManagementKey, ManagedEntry> effective =
+        effectiveManagementForImportedBom(bom.get(), properties, /* warnings */ new ArrayList<>());
+    effective.forEach(sink::putIfAbsent);
   }
 
   private static MavenCoordinate rootCoordinate(Model root) {
