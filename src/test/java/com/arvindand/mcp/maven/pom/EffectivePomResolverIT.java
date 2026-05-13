@@ -19,7 +19,7 @@ import org.springframework.test.context.ActiveProfiles;
  * network calls.
  *
  * @author Arvind Menon
- * @since 2.2.0
+ * @since 2.1.1
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -41,16 +41,16 @@ class EffectivePomResolverIT {
 
     // maven-model 3.9.12 is an explicit dep with a literal version — must come back as EXPLICIT.
     assertThat(result.dependencies())
-        .anySatisfy(
+        .filteredOn(d -> d.coordinate().artifactId().equals("maven-model"))
+        .singleElement()
+        .satisfies(
             d -> {
-              if (d.coordinate().artifactId().equals("maven-model")) {
-                assertThat(d.effectiveVersion())
-                    .as("maven-model should have explicit version 3.9.12")
-                    .isEqualTo("3.9.12");
-                assertThat(d.source())
-                    .as("maven-model should be classified as EXPLICIT")
-                    .isEqualTo(Source.EXPLICIT);
-              }
+              assertThat(d.effectiveVersion())
+                  .as("maven-model should have explicit version 3.9.12")
+                  .isEqualTo("3.9.12");
+              assertThat(d.source())
+                  .as("maven-model should be classified as EXPLICIT")
+                  .isEqualTo(Source.EXPLICIT);
             });
   }
 }
