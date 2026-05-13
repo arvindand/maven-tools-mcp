@@ -50,8 +50,9 @@ public class EffectivePomResolver {
     List<MavenCoordinate> parentChain = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
     Map<String, String> properties = buildPropertyMap(root, parentChain, warnings);
+    Map<String, ManagedEntry> managed = buildManagedVersionMap(root, parentChain, properties, warnings);
 
-    List<EffectiveDependency> deps = classifyDependencies(root, properties, warnings);
+    List<EffectiveDependency> deps = classifyDependencies(root, properties, managed, warnings);
     return new EffectivePomResult(deps, parentChain, warnings);
   }
 
@@ -97,33 +98,113 @@ public class EffectivePomResolver {
   }
 
   private List<EffectiveDependency> classifyDependencies(
-      Model root, Map<String, String> properties, List<String> warnings) {
+      Model root,
+      Map<String, String> properties,
+      Map<String, ManagedEntry> managed,
+      List<String> warnings) {
     List<EffectiveDependency> deps = new ArrayList<>();
     for (Dependency d : root.getDependencies()) {
-      if (d.getVersion() == null || d.getVersion().isBlank()) {
-        continue;
+      String key = d.getGroupId() + ":" + d.getArtifactId();
+      ManagedEntry mgmt = managed.get(key);
+      String declared = d.getVersion();
+      if (declared == null || declared.isBlank()) {
+        if (mgmt == null) {
+          warnings.add("No version for " + key + " and no managed entry found — skipped");
+          continue;
+        }
+        deps.add(
+            new EffectiveDependency(
+                MavenCoordinate.of(d.getGroupId(), d.getArtifactId(), null),
+                mgmt.version(),
+                Source.MANAGED,
+                Optional.of(mgmt.managedBy())));
+      } else {
+        String resolved = PropertyInterpolator.interpolate(declared, properties);
+        // Heuristic: residual "${" means interpolation left a placeholder unresolved —
+        // no real Maven version string contains it.
+        if (resolved.isBlank() || resolved.contains("${")) {
+          warnings.add(
+              "Could not resolve version for "
+                  + key
+                  + " (raw: "
+                  + declared
+                  + ")");
+          continue;
+        }
+        Source source = mgmt == null ? Source.EXPLICIT : Source.EXPLICIT_OVERRIDE;
+        Optional<MavenCoordinate> managedBy =
+            mgmt == null ? Optional.empty() : Optional.of(mgmt.managedBy());
+        deps.add(
+            new EffectiveDependency(
+                MavenCoordinate.of(d.getGroupId(), d.getArtifactId(), null),
+                resolved,
+                source,
+                managedBy));
       }
-      String resolved = PropertyInterpolator.interpolate(d.getVersion(), properties);
-      // Heuristic: residual "${" means interpolation left a placeholder unresolved —
-      // no real Maven version string contains it.
-      if (resolved.isBlank() || resolved.contains("${")) {
-        warnings.add(
-            "Could not resolve version for "
-                + d.getGroupId()
-                + ":"
-                + d.getArtifactId()
-                + " (raw: "
-                + d.getVersion()
-                + ")");
-        continue;
-      }
-      deps.add(
-          new EffectiveDependency(
-              MavenCoordinate.of(d.getGroupId(), d.getArtifactId(), null),
-              resolved,
-              Source.EXPLICIT,
-              Optional.empty()));
     }
     return deps;
   }
+
+  /**
+   * Walks the root POM's {@code <dependencyManagement>} and each parent's, accumulating version
+   * constraints keyed by "groupId:artifactId". Closest-ancestor (and the root POM itself) wins on
+   * collision. BOM imports ({@code <scope>import</scope><type>pom</type>}) are skipped here; they
+   * arrive in Task 10.
+   */
+  private Map<String, ManagedEntry> buildManagedVersionMap(
+      Model root,
+      List<MavenCoordinate> parentChain,
+      Map<String, String> properties,
+      List<String> warnings) {
+    Map<String, ManagedEntry> managed = new HashMap<>();
+    MavenCoordinate rootCoord = rootCoordinate(root);
+    recordManagedFrom(root, rootCoord, properties, managed);
+    for (MavenCoordinate parentCoord : parentChain) {
+      fetcher
+          .fetch(parentCoord)
+          .ifPresent(parent -> recordManagedFrom(parent, parentCoord, properties, managed));
+    }
+    return managed;
+  }
+
+  private void recordManagedFrom(
+      Model model,
+      MavenCoordinate source,
+      Map<String, String> properties,
+      Map<String, ManagedEntry> sink) {
+    if (model.getDependencyManagement() == null) {
+      return;
+    }
+    for (Dependency d : model.getDependencyManagement().getDependencies()) {
+      // BOM imports handled in Task 10
+      if ("import".equals(d.getScope()) && "pom".equals(d.getType())) {
+        continue;
+      }
+      String key = d.getGroupId() + ":" + d.getArtifactId();
+      if (sink.containsKey(key)) {
+        // Closer ancestor (or the root POM itself) already won.
+        continue;
+      }
+      String version = PropertyInterpolator.interpolate(d.getVersion(), properties);
+      if (version == null || version.isBlank() || version.contains("${")) {
+        continue;
+      }
+      sink.put(key, new ManagedEntry(version, source));
+    }
+  }
+
+  private static MavenCoordinate rootCoordinate(Model root) {
+    String groupId =
+        root.getGroupId() != null
+            ? root.getGroupId()
+            : (root.getParent() != null ? root.getParent().getGroupId() : null);
+    String version =
+        root.getVersion() != null
+            ? root.getVersion()
+            : (root.getParent() != null ? root.getParent().getVersion() : null);
+    return MavenCoordinate.of(groupId, root.getArtifactId(), version);
+  }
+
+  /** A {@code <dependencyManagement>} entry that has been resolved, with its source POM. */
+  private record ManagedEntry(String version, MavenCoordinate managedBy) {}
 }

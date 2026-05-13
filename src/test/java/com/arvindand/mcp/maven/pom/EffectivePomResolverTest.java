@@ -201,4 +201,115 @@ class EffectivePomResolverTest {
     assertThat(result.dependencies()).isEmpty();
     assertThat(result.warnings()).anySatisfy(w -> assertThat(w).contains("org.unknown:lib"));
   }
+
+  @Test
+  void resolvesManagedVersionFromParentDependencyManagement() {
+    Model parent =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>parent</artifactId>
+              <version>1.0.0</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                    <version>2.19.2</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    PomFetcher fetcher = stub(Map.of("com.example:parent:1.0.0", parent));
+
+    String childPom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>parent</artifactId>
+            <version>1.0.0</version>
+          </parent>
+          <artifactId>child</artifactId>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(childPom);
+
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(
+            d -> {
+              assertThat(d.effectiveVersion()).isEqualTo("2.19.2");
+              assertThat(d.source()).isEqualTo(Source.MANAGED);
+              assertThat(d.managedBy())
+                  .contains(MavenCoordinate.of("com.example", "parent", "1.0.0"));
+            });
+  }
+
+  @Test
+  void flagsExplicitOverrideWhenChildSpecifiesVersionForManagedDep() {
+    Model parent =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>parent</artifactId>
+              <version>1.0.0</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                    <version>2.19.2</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    PomFetcher fetcher = stub(Map.of("com.example:parent:1.0.0", parent));
+
+    String childPom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>parent</artifactId>
+            <version>1.0.0</version>
+          </parent>
+          <artifactId>child</artifactId>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+              <version>2.20.0</version>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(childPom);
+
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(
+            d -> {
+              assertThat(d.effectiveVersion()).isEqualTo("2.20.0");
+              assertThat(d.source()).isEqualTo(Source.EXPLICIT_OVERRIDE);
+              assertThat(d.managedBy())
+                  .contains(MavenCoordinate.of("com.example", "parent", "1.0.0"));
+            });
+  }
 }
