@@ -18,13 +18,15 @@ import org.springframework.stereotype.Service;
  * Resolves the effective version of each declared dependency in a POM.
  *
  * <p>Walks the parent chain (up to 10 levels) via {@link PomFetcher}, merges {@code <properties>}
- * blocks closest-ancestor-wins, and interpolates {@code ${name}} placeholders in dependency
- * versions via {@link PropertyInterpolator}. Unresolved placeholders and unreachable parents
- * surface as warnings on {@link EffectivePomResult}; resolution still produces a result rather than
- * aborting.
+ * blocks closest-ancestor-wins, interpolates {@code ${name}} placeholders in dependency versions
+ * via {@link PropertyInterpolator}, and merges {@code <dependencyManagement>} entries (again
+ * closest-ancestor-wins) to classify each declared dependency as {@link Source#EXPLICIT}, {@link
+ * Source#MANAGED}, or {@link Source#EXPLICIT_OVERRIDE}. Unresolved placeholders and unreachable
+ * parents surface as warnings on {@link EffectivePomResult}; resolution still produces a result
+ * rather than aborting.
  *
- * <p>{@code <dependencyManagement>} merge and {@code <scope>import</scope>} BOM resolution arrive
- * in Tasks 9 and 10.
+ * <p>BOM imports ({@code <scope>import</scope><type>pom</type>}) are the only remaining gap;
+ * they arrive in Task 10.
  *
  * <p>See {@code package-info.java} for design notes and attribution.
  */
@@ -50,7 +52,7 @@ public class EffectivePomResolver {
     List<MavenCoordinate> parentChain = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
     Map<String, String> properties = buildPropertyMap(root, parentChain, warnings);
-    Map<String, ManagedEntry> managed = buildManagedVersionMap(root, parentChain, properties, warnings);
+    Map<String, ManagedEntry> managed = buildManagedVersionMap(root, parentChain, properties);
 
     List<EffectiveDependency> deps = classifyDependencies(root, properties, managed, warnings);
     return new EffectivePomResult(deps, parentChain, warnings);
@@ -150,16 +152,19 @@ public class EffectivePomResolver {
    * constraints keyed by "groupId:artifactId". Closest-ancestor (and the root POM itself) wins on
    * collision. BOM imports ({@code <scope>import</scope><type>pom</type>}) are skipped here; they
    * arrive in Task 10.
+   *
+   * <p>Managed-entry resolution is silent-drop by design: {@link #buildPropertyMap} already warned
+   * about any unreachable parent earlier in the same {@link #resolve} call, so emitting a second
+   * warning for the same parent here would be noise.
    */
   private Map<String, ManagedEntry> buildManagedVersionMap(
-      Model root,
-      List<MavenCoordinate> parentChain,
-      Map<String, String> properties,
-      List<String> warnings) {
+      Model root, List<MavenCoordinate> parentChain, Map<String, String> properties) {
     Map<String, ManagedEntry> managed = new HashMap<>();
     MavenCoordinate rootCoord = rootCoordinate(root);
     recordManagedFrom(root, rootCoord, properties, managed);
     for (MavenCoordinate parentCoord : parentChain) {
+      // A failed fetch here would mean buildPropertyMap already warned about this parent —
+      // no second warning is emitted; we simply skip its managed entries.
       fetcher
           .fetch(parentCoord)
           .ifPresent(parent -> recordManagedFrom(parent, parentCoord, properties, managed));

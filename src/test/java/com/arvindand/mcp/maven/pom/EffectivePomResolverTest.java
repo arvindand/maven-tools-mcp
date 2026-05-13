@@ -258,6 +258,72 @@ class EffectivePomResolverTest {
   }
 
   @Test
+  void rootDependencyManagementWinsOverParentDependencyManagement() {
+    Model parent =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>parent</artifactId>
+              <version>1.0.0</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                    <version>2.15.0</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    PomFetcher fetcher = stub(Map.of("com.example:parent:1.0.0", parent));
+
+    // Child overrides the managed version in its own <dependencyManagement> — root wins.
+    String childPom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>parent</artifactId>
+            <version>1.0.0</version>
+          </parent>
+          <artifactId>child</artifactId>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>2.19.2</version>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(childPom);
+
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(
+            d -> {
+              assertThat(d.effectiveVersion()).isEqualTo("2.19.2");
+              assertThat(d.source()).isEqualTo(Source.MANAGED);
+              // managedBy points at the child (the root POM) — not the inherited parent.
+              assertThat(d.managedBy())
+                  .contains(MavenCoordinate.of("com.example", "child", "1.0.0"));
+            });
+  }
+
+  @Test
   void flagsExplicitOverrideWhenChildSpecifiesVersionForManagedDep() {
     Model parent =
         parse(
