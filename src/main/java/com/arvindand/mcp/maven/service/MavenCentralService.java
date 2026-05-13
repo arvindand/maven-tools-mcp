@@ -2,6 +2,7 @@ package com.arvindand.mcp.maven.service;
 
 import static com.arvindand.mcp.maven.config.CacheConstants.MAVEN_ACCURATE_HISTORICAL_DATA;
 import static com.arvindand.mcp.maven.config.CacheConstants.MAVEN_ALL_VERSIONS;
+import static com.arvindand.mcp.maven.config.CacheConstants.MAVEN_POM_XML;
 import static com.arvindand.mcp.maven.config.CacheConstants.MAVEN_VERSION_CHECKS;
 
 import com.arvindand.mcp.maven.MavenToolsConstants;
@@ -272,6 +273,35 @@ public class MavenCentralService {
           coordinate.artifactId(),
           e.getMessage(),
           e);
+      return Optional.empty();
+    }
+  }
+
+  /**
+   * Fetches the raw POM XML for a Maven coordinate from the configured repository. Used by the
+   * POM resolver (see {@link com.arvindand.mcp.maven.pom.MavenCentralPomFetcher}) to walk
+   * parent chains and BOM imports.
+   *
+   * <p>Returns an empty {@link Optional} on 404 or any other client/server error — callers
+   * surface this as a resolution warning rather than failing the whole analysis.
+   *
+   * @param coordinate must have a non-null version
+   */
+  @Cacheable(value = MAVEN_POM_XML, key = "#coordinate.toCoordinateString()")
+  public Optional<String> fetchPomXml(MavenCoordinate coordinate) {
+    if (coordinate == null || coordinate.version() == null || coordinate.version().isBlank()) {
+      throw new IllegalArgumentException("coordinate.version() must be set to fetch a POM");
+    }
+    String groupPath = coordinate.groupId().replace('.', '/');
+    String path =
+        "/" + groupPath + "/" + coordinate.artifactId() + "/" + coordinate.version() + "/"
+            + coordinate.artifactId() + "-" + coordinate.version() + ".pom";
+    try {
+      String xml = restClient.get().uri(path).retrieve().body(String.class);
+      return Optional.ofNullable(xml);
+    } catch (RestClientException ex) {
+      logger.debug(
+          "POM fetch failed for {}: {}", coordinate.toCoordinateString(), ex.getMessage());
       return Optional.empty();
     }
   }

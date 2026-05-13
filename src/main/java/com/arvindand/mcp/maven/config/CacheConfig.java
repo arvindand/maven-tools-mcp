@@ -31,6 +31,7 @@ public class CacheConfig {
     cacheManager.registerCustomCache(MAVEN_VERSION_CHECKS, mavenCentralCache());
     cacheManager.registerCustomCache(MAVEN_ALL_VERSIONS, mavenCentralCache());
     cacheManager.registerCustomCache(MAVEN_ACCURATE_HISTORICAL_DATA, mavenCentralCache());
+    cacheManager.registerCustomCache(MAVEN_POM_XML, mavenCentralCache());
 
     return cacheManager;
   }

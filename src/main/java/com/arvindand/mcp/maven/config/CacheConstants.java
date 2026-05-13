@@ -12,6 +12,7 @@ public final class CacheConstants {
   public static final String MAVEN_VERSION_CHECKS = "maven-version-checks";
   public static final String MAVEN_ALL_VERSIONS = "maven-all-versions";
   public static final String MAVEN_ACCURATE_HISTORICAL_DATA = "maven-accurate-historical-data";
+  public static final String MAVEN_POM_XML = "mavenPomXml";
 
   private CacheConstants() {
     // Utility class
