@@ -451,4 +451,67 @@ class EffectivePomResolverTest {
         .singleElement()
         .satisfies(d -> assertThat(d.effectiveVersion()).isEqualTo("2.0.0"));
   }
+
+  @Test
+  void resolvesManagedVersionFromImportedBom() {
+    Model bom =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example.bom</groupId>
+              <artifactId>my-bom</artifactId>
+              <version>1.0.0</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                    <version>2.19.2</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    PomFetcher fetcher = stub(Map.of("com.example.bom:my-bom:1.0.0", bom));
+
+    String pom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.example</groupId>
+          <artifactId>app</artifactId>
+          <version>1.0.0</version>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>com.example.bom</groupId>
+                <artifactId>my-bom</artifactId>
+                <version>1.0.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(pom);
+
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(
+            d -> {
+              assertThat(d.effectiveVersion()).isEqualTo("2.19.2");
+              assertThat(d.source()).isEqualTo(Source.MANAGED);
+              assertThat(d.managedBy())
+                  .contains(MavenCoordinate.of("com.example.bom", "my-bom", "1.0.0"));
+            });
+  }
 }

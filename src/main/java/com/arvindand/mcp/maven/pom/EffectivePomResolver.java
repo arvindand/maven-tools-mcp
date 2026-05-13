@@ -26,8 +26,9 @@ import org.springframework.stereotype.Service;
  * parents surface as warnings on {@link EffectivePomResult}; resolution still produces a result
  * rather than aborting.
  *
- * <p>BOM imports ({@code <scope>import</scope><type>pom</type>}) are the only remaining gap; they
- * arrive in Task 10.
+ * <p>BOM imports ({@code <scope>import</scope><type>pom</type>}) in {@code <dependencyManagement>}
+ * are resolved recursively: the BOM is fetched, its properties are merged (caller wins on
+ * collision), and its managed entries are accumulated with the same closest-ancestor-wins logic.
  *
  * <p>See {@code package-info.java} for design notes and attribution.
  */
@@ -177,8 +178,8 @@ public class EffectivePomResolver {
   /**
    * Walks the root POM's {@code <dependencyManagement>} and each parent's, accumulating version
    * constraints keyed by "groupId:artifactId". Closest-ancestor (and the root POM itself) wins on
-   * collision. BOM imports ({@code <scope>import</scope><type>pom</type>}) are skipped here; they
-   * arrive in Task 10.
+   * collision. BOM imports ({@code <scope>import</scope><type>pom</type>}) are resolved recursively
+   * via {@link #importBom}.
    *
    * <p>Managed-entry resolution is silent-drop by design: {@link #buildPropertyMap} already warned
    * about any unreachable parent earlier in the same {@link #resolve} call, so emitting a second
@@ -208,8 +209,8 @@ public class EffectivePomResolver {
       return;
     }
     for (Dependency d : model.getDependencyManagement().getDependencies()) {
-      // BOM imports handled in Task 10
       if ("import".equals(d.getScope()) && "pom".equals(d.getType())) {
+        importBom(d, properties, sink);
         continue;
       }
       String key = d.getGroupId() + ":" + d.getArtifactId();
@@ -223,6 +224,36 @@ public class EffectivePomResolver {
       }
       sink.put(key, new ManagedEntry(version, source));
     }
+  }
+
+  /**
+   * Resolves a {@code <scope>import</scope><type>pom</type>} entry by fetching the BOM, merging its
+   * properties (the importing POM's properties take precedence), and recursing into {@link
+   * #recordManagedFrom} so the BOM's managed entries are accumulated. Failed BOM fetches are
+   * silent-drop — same reasoning as {@link #buildManagedVersionMap}: warnings about unreachable
+   * POMs are emitted once by {@code buildPropertyMap}.
+   */
+  private void importBom(
+      Dependency bomDep, Map<String, String> properties, Map<String, ManagedEntry> sink) {
+    String groupId = PropertyInterpolator.interpolate(bomDep.getGroupId(), properties);
+    String artifactId = PropertyInterpolator.interpolate(bomDep.getArtifactId(), properties);
+    String version = PropertyInterpolator.interpolate(bomDep.getVersion(), properties);
+    if (groupId == null || artifactId == null || version == null) {
+      return;
+    }
+    MavenCoordinate bomCoord = MavenCoordinate.of(groupId, artifactId, version);
+    Optional<Model> bom = fetcher.fetch(bomCoord);
+    if (bom.isEmpty()) {
+      return;
+    }
+    Model bomModel = bom.get();
+    Map<String, String> mergedProps = new HashMap<>(properties);
+    if (bomModel.getProperties() != null) {
+      bomModel
+          .getProperties()
+          .forEach((k, v) -> mergedProps.putIfAbsent(k.toString(), v.toString()));
+    }
+    recordManagedFrom(bomModel, bomCoord, mergedProps, sink);
   }
 
   private static MavenCoordinate rootCoordinate(Model root) {
