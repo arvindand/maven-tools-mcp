@@ -601,6 +601,90 @@ class EffectivePomResolverTest {
   }
 
   @Test
+  void rootImportedBomVersionInterpolatesFromParentInheritedProperty() {
+    // Composed case: the root POM imports a BOM whose version is expressed as ${platform.version},
+    // but the property itself lives in the parent POM (not the root). The interpolator must walk
+    // the parent properties so the BOM coordinate ends up with a literal version in
+    // rootImportedBoms.
+    Model parent =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>parent</artifactId>
+              <version>1.0.0</version>
+              <properties>
+                <platform.version>2.5.0</platform.version>
+              </properties>
+            </project>
+            """);
+    Model platformBom =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>platform-bom</artifactId>
+              <version>2.5.0</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>org.example.lib</groupId>
+                    <artifactId>lib</artifactId>
+                    <version>9.9.9</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    PomFetcher fetcher =
+        stub(
+            Map.of(
+                "com.example:parent:1.0.0", parent,
+                "com.example:platform-bom:2.5.0", platformBom));
+
+    String childPom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>parent</artifactId>
+            <version>1.0.0</version>
+          </parent>
+          <artifactId>app</artifactId>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>com.example</groupId>
+                <artifactId>platform-bom</artifactId>
+                <version>${platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+          <dependencies>
+            <dependency>
+              <groupId>org.example.lib</groupId>
+              <artifactId>lib</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(childPom);
+
+    assertThat(result.warnings()).isEmpty();
+    assertThat(result.rootImportedBoms())
+        .containsExactly(MavenCoordinate.of("com.example", "platform-bom", "2.5.0"));
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(d -> assertThat(d.effectiveVersion()).isEqualTo("9.9.9"));
+  }
+
+  @Test
   void importedBomInheritsPropertiesAndManagedEntriesFromItsOwnParent() {
     // Grandparent BOM: defines the jackson property AND the managed entry
     Model grandparentBom =

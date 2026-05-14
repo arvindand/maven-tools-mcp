@@ -1696,6 +1696,13 @@ public class MavenDependencyTools {
       UpgradeMode mode,
       List<UpgradeAction> actions,
       List<NeedsAttention> attention) {
+    // Fast-exit MANAGED deps without conflicts before the Maven Central lookup — their upgrade
+    // path runs through the user-controllable BOM classified upstream, so this would be a wasted
+    // network call (even though cached, still serializes through the rate limiter).
+    if (dep.source() == Source.MANAGED && dep.conflicts().isEmpty()) {
+      return;
+    }
+
     String latestOnCentral =
         safeGetLatestStable(MavenCoordinate.of(dep.groupId(), dep.artifactId(), null));
 
@@ -1720,11 +1727,6 @@ public class MavenDependencyTools {
               dep.effectiveVersion(),
               toCandidates(dep, /* includeWinner= */ false),
               latestOnCentral));
-      return;
-    }
-
-    if (dep.source() == Source.MANAGED) {
-      // Covered by the BOM bump pass; no per-dep action.
       return;
     }
 
