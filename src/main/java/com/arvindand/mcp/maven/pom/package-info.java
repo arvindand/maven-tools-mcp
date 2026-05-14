@@ -23,6 +23,6 @@
  * source was copied; the implementation is written from scratch.
  *
  * @author Arvind Menon
- * @since 2.2.0
+ * @since 3.0.0
  */
 package com.arvindand.mcp.maven.pom;

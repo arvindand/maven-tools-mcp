@@ -11,7 +11,7 @@ import org.apache.maven.model.Model;
  * this as a warning rather than an error.
  *
  * @author Arvind Menon
- * @since 2.2.0
+ * @since 3.0.0
  */
 public interface PomFetcher {
 

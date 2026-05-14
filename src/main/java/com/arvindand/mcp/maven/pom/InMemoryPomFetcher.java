@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
  * monorepo POMs alongside Maven Central as the fallback.
  *
  * @author Arvind Menon
- * @since 2.2.0
+ * @since 3.0.0
  */
 public final class InMemoryPomFetcher implements PomFetcher {
 

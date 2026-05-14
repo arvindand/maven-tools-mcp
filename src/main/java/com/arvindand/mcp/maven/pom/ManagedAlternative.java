@@ -18,7 +18,7 @@ import java.util.Objects;
  * @param version the version this candidate would have supplied (already interpolated)
  * @param managedBy the BOM or parent coordinate the candidate came from
  * @author Arvind Menon
- * @since 2.2.0
+ * @since 3.0.0
  */
 public record ManagedAlternative(String version, MavenCoordinate managedBy) {
 

@@ -36,7 +36,7 @@ import org.springframework.stereotype.Service;
  * <p>See {@code package-info.java} for design notes and attribution.
  *
  * @author Arvind Menon
- * @since 2.2.0
+ * @since 3.0.0
  */
 @Service
 public class EffectivePomResolver {

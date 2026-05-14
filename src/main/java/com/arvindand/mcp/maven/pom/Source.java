@@ -14,7 +14,7 @@ package com.arvindand.mcp.maven.pom;
  * </ul>
  *
  * @author Arvind Menon
- * @since 2.2.0
+ * @since 3.0.0
  */
 public enum Source {
   EXPLICIT,

@@ -17,7 +17,7 @@ import java.util.Objects;
  *     ranges left as opaque strings, etc. Resolution still produces a result; warnings let the
  *     caller decide whether to trust each entry.
  * @author Arvind Menon
- * @since 2.2.0
+ * @since 3.0.0
  */
 public record EffectivePomResult(
     List<EffectiveDependency> dependencies,

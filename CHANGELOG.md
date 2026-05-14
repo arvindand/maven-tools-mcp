@@ -9,30 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added (Unreleased)
 
-- **`analyze_pom_dependencies` MCP tool**: takes raw POM XML and returns each declared
-  dependency with its effective version classified as `EXPLICIT`, `MANAGED`, or
-  `EXPLICIT_OVERRIDE`, the parent chain that was walked, the managing BOM/parent
-  coordinate when applicable, and warnings for any unresolved bits. Optional
-  `sideloadedPoms` argument accepts a bundle of additional POMs (sibling modules,
-  unreleased parents) so monorepos and not-yet-published parents resolve without
-  network access for those POMs.
-- **POM resolver service** (`com.arvindand.mcp.maven.pom`): the engine behind the new
-  tool. Walks parent POMs and BOM imports against Maven Central, interpolates
-  `${name}` and `${project.version}` / `${project.parent.version}` placeholders,
-  merges `<dependencyManagement>` with closest-ancestor-wins semantics (typed
-  `(groupId, artifactId, type, classifier)` keys so `test-jar` and `jar` entries
-  don't collide), and surfaces warnings at every silent-drop site (unresolvable
-  managed version, unreachable parent, BOM fetch failure, parent depth cap).
-  Multi-module use cases are served via `resolve(pomXml, sideloadedPoms)` and
-  `resolveAll(poms)`.
-
 ### Changed (Unreleased)
-
-- **Java**: Upgraded toolchain from Java 24 to Java 25 (LTS). `<java.version>` bumped in `pom.xml`; `actions/setup-java` pinned to `25` in CI and Docker workflows; README badge updated. Buildpack JDK image is selected automatically from `<java.version>`.
 
 ### Fixed (Unreleased)
 
 ### Removed (Unreleased)
+
+## [3.0.0] - 2026-05-14
+
+**POM-Aware Dependency Analysis Release** — introduces a new MCP tool that resolves the effective version of every declared dependency in a Maven POM by walking the parent chain, applying `<dependencyManagement>`, and resolving `<scope>import</scope>` BOM imports. Where previous tools answered "what's the latest version of X on Maven Central?", the new tool answers "what version does this POM actually resolve to for X, and where does that version come from?" Required reading for multi-module projects, Spring Boot apps with BOM-managed transitives, and any project where bumping a dependency means bumping a BOM instead.
+
+### Added (3.0.0)
+
+- **`analyze_pom_dependencies` MCP tool**: takes raw POM XML and returns each declared dependency with its effective version classified as `EXPLICIT`, `MANAGED`, or `EXPLICIT_OVERRIDE`, the parent chain that was walked, the managing BOM / parent coordinate when applicable, and warnings for any unresolved bits. Optional `sideloadedPoms` argument accepts a bundle of additional POMs (sibling modules, unreleased parents) so monorepos and not-yet-published parents resolve without each side needing to be on Maven Central. The tool brings the total MCP tool count from 10 to 11.
+- **POM resolver service** (`com.arvindand.mcp.maven.pom`): the engine behind the new tool. Walks parent POMs and `<scope>import</scope>` BOMs against Maven Central, interpolates `${name}` and `${project.version}` / `${project.parent.version}` placeholders, merges `<dependencyManagement>` with closest-ancestor-wins semantics (typed `(groupId, artifactId, type, classifier)` keys so `test-jar` and `jar` entries don't collide), walks each imported BOM's own parent chain, and surfaces warnings at every silent-drop site (unresolvable managed version, unreachable parent, BOM fetch failure, parent depth cap).
+- **Multi-BOM conflict tracking**: when two BOMs imported at the same level disagree on a dependency, the first-declared wins per Maven semantics and the losing candidates surface on `EffectiveDependency.conflicts[]` so the caller can detect the ambiguity. For `EXPLICIT_OVERRIDE` deps, `conflicts[]` lists every candidate the override is choosing against. The resolver does not recommend an action — surfacing the raw candidates is intentional so callers (typically an LLM with surrounding code context) can decide whether to pin the version explicitly.
+- **`MavenCentralService.fetchPomXml`**: direct repo fetch alongside the existing `maven-metadata.xml` fetcher. Annotated with `@Cacheable` (`mavenPomXml`, 24h TTL) + `@CircuitBreaker` / `@Retry` / `@RateLimiter`; 404s return `Optional.empty()`, other `RestClientException`s rethrow so the resilience4j stack actually engages.
+
+### Changed (3.0.0)
+
+- **Java toolchain**: upgraded from Java 24 to Java 25 (LTS). `<java.version>` bumped in `pom.xml`; `actions/setup-java` pinned to `25` in CI and Docker workflows; README badge updated. Buildpack JDK image is selected automatically from `<java.version>`.
+- **`maven-model 3.9.12`** added as a runtime dependency (data classes + Xpp3 reader, ~200KB). Used by the POM resolver. Deliberately not pulling in `maven-model-builder` or `maven-resolver` — the resolution loop is hand-rolled in `com.arvindand.mcp.maven.pom`.
+- **Native image hints**: `EffectivePomResult`, `EffectiveDependency`, `ManagedAlternative` records and the `Source` enum registered for reflection in `NativeImageConfiguration` so JSON serialization works in the native binary.
+- **Major version bump (2.x → 3.0)**: signals the qualitative shift from "Maven Central lookups" to "POM-aware analysis." Existing 10 tools are unchanged; the new tool is additive.
+
+### Notes (3.0.0)
+
+- **Out of scope**: transitive dependency walking, version range syntax (`[1.0,2.0)` treated as opaque), profile activation, CI-friendly `${revision}` / flatten-maven-plugin output, cyclic BOM imports (recursion is bounded by Maven Central's rejection of such cycles; a visited-set guard would harden against pathological input).
+- **Attribution**: the resolution algorithm shape is adapted from the MIT-licensed [maxxq-org/maxxq-maven](https://github.com/maxxq-org/maxxq-maven) by Guy Chauliac. No source was copied; the implementation is written from scratch. See [`NOTICE`](NOTICE).
 
 ## [2.1.1] - 2026-05-12
 

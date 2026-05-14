@@ -92,7 +92,7 @@ For fuller setup guidance, including JAR/native usage, Docker Compose, and envir
 
 ## Core Tools
 
-The server exposes 10 MCP tools.
+The server exposes 11 MCP tools.
 
 ### Maven intelligence tools
 
@@ -106,6 +106,7 @@ The server exposes 10 MCP tools.
 | `analyze_release_patterns` | Look at release cadence and maintenance signals |
 | `get_version_timeline` | Inspect recent release history and gaps |
 | `analyze_project_health` | Run a broader dependency health audit |
+| `analyze_pom_dependencies` | POM-aware: resolve effective versions from raw pom.xml, classify as `EXPLICIT` / `MANAGED` / `EXPLICIT_OVERRIDE`, surface multi-BOM conflicts |
 
 ### Context7 documentation tools
 
@@ -115,6 +116,10 @@ The server exposes 10 MCP tools.
 | `query-docs` | Fetch docs by Context7 library ID |
 
 For parameters, examples, and tool-by-tool notes, see [`docs/tools.md`](docs/tools.md).
+
+### POM-aware dependency analysis
+
+`analyze_pom_dependencies` is the one tool that takes a whole POM, not a coordinate. It walks the parent chain, applies `<dependencyManagement>`, resolves `<scope>import</scope>` BOMs against Maven Central, and returns each declared dependency with its effective version plus where that version came from. The intended use is upgrade reasoning: an agent that knows a dep is `MANAGED` by `spring-boot-dependencies` will bump the BOM rather than override the dep version directly. Multi-module monorepos and unreleased parents resolve via an optional `sideloadedPoms` bundle — the caller passes the sibling POMs, the resolver uses them ahead of Maven Central.
 
 ## Example
 

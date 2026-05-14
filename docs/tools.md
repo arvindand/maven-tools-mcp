@@ -1,6 +1,6 @@
 # Tools
 
-Maven Tools MCP exposes 10 MCP tools: 8 core Maven/dependency tools and 2 raw Context7 documentation tools.
+Maven Tools MCP exposes 11 MCP tools: 9 core Maven/dependency tools and 2 raw Context7 documentation tools.
 
 ## Core Maven Intelligence Tools
 
@@ -14,6 +14,28 @@ Maven Tools MCP exposes 10 MCP tools: 8 core Maven/dependency tools and 2 raw Co
 | `analyze_release_patterns` | Look at release cadence and maintenance behavior | "Does this library still look actively maintained?" |
 | `get_version_timeline` | Return recent versions with timing signals | "Show me the recent release history" |
 | `analyze_project_health` | Run a broader audit across a dependency set | "Give me a health overview for this project" |
+| `analyze_pom_dependencies` | Resolve a whole POM into per-dep effective versions + classification | "What versions does my pom.xml actually resolve to, and which ones are BOM-managed?" |
+
+## POM-Aware Analysis
+
+`analyze_pom_dependencies` is the only tool that takes a whole POM (raw XML) rather than a coordinate. It walks the parent chain, applies `<properties>` interpolation (including `${project.version}` / `${project.parent.version}`), merges `<dependencyManagement>` with closest-ancestor-wins semantics, and resolves `<scope>import</scope>` BOMs against Maven Central. For each declared dependency it returns:
+
+- `effectiveVersion` — what would be used at build time
+- `source` — `EXPLICIT` (declared inline with a version), `MANAGED` (no version here, inherited), or `EXPLICIT_OVERRIDE` (declared AND inherited)
+- `managedBy` — which BOM or parent supplied the version, when applicable
+- `conflicts[]` — losing candidates when multiple BOMs at the same level disagree (e.g., Spring Boot + Spring Cloud + Jackson BOM all managing `jackson-databind`). Surfaced as raw data so the caller can decide whether to pin the version explicitly; the resolver does not recommend an action.
+
+The tool also returns the resolved `parentChain` and a `warnings[]` array listing every silent-drop site (unreachable parents, unresolvable property placeholders, depth-cap exhaustion, failed BOM fetches).
+
+For multi-module / monorepo projects, pass an optional `sideloadedPoms: string[]` of additional POM XML strings (sibling modules, unreleased parents). The resolver indexes each by its self-declared GAV and tries the bundle before falling back to Maven Central — so a child whose parent is not yet published still resolves cleanly.
+
+### Why this matters for upgrades
+
+The classification is the upgrade policy:
+
+- **`EXPLICIT`** + a newer same-major minor/patch on Maven Central → bump the version inline.
+- **`MANAGED`** + a newer same-major minor/patch of the *managing BOM* that ships a newer version of this dep → bump the **BOM**, not the dep. One BOM bump can pick up dozens of patch updates for free.
+- **`EXPLICIT_OVERRIDE`** → judgement call. The override exists for a reason (security pin, framework workaround, etc.). The tool surfaces every candidate version the override is choosing against, including from competing BOMs — useful context for a human or LLM reviewing the override.
 
 ## Raw Context7 Documentation Tools
 

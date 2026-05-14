@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
  * Optional}; the resolver records it as a warning.
  *
  * @author Arvind Menon
- * @since 2.2.0
+ * @since 3.0.0
  */
 @Component
 public class MavenCentralPomFetcher implements PomFetcher {

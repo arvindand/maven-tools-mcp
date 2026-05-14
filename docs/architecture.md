@@ -37,6 +37,22 @@ AI client -> MCP protocol -> Maven Tools MCP Server
 5. Server returns structured JSON for the client to use in chat or automation
 ```
 
+The `analyze_pom_dependencies` tool takes a different shape because it operates on a whole POM rather than a single coordinate:
+
+```text
+AI client -> analyze_pom_dependencies(pomXml, sideloadedPoms?) -> Maven Tools MCP Server
+
+1. Client passes raw <project>...</project> XML (optionally a bundle of additional POMs)
+2. Server parses the POM via maven-model (data classes only, no maven-model-builder)
+3. Server walks the parent chain via MavenCentralPomFetcher, fetching each parent POM
+4. Server merges <properties>, <dependencyManagement>, and <scope>import</scope> BOMs
+5. Server classifies each declared dependency (EXPLICIT / MANAGED / EXPLICIT_OVERRIDE)
+6. Server surfaces multi-BOM conflicts and per-step warnings as raw data
+7. Server returns structured JSON; reasoning about what to upgrade is the caller's job
+```
+
+The POM resolver lives in `com.arvindand.mcp.maven.pom`. Its design notes are in the package-info; the algorithm shape (parent walk → properties → BOM import → depMgmt merge) is adapted from the MIT-licensed [maxxq-org/maxxq-maven](https://github.com/maxxq-org/maxxq-maven). The implementation is a clean-room reimplementation scoped to declared-dep resolution only — no transitive walking, no scope-downgrade rules.
+
 ## Deployment Options
 
 ### Docker STDIO
@@ -117,8 +133,9 @@ Key points:
 ## Technical Snapshot
 
 - Framework: Spring Boot 3.5.14
-- Java: 24
+- Java: 25 (LTS)
 - Protocol: MCP 2025-06-18
+- POM parser: `org.apache.maven:maven-model:3.9.12` (data classes + Xpp3 reader only; no maven-model-builder, no maven-resolver)
 - Default transport for desktop images: stdio
 - HTTP transport available as `:latest-http`
 - Data source: Maven Central metadata

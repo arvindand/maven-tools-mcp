@@ -21,7 +21,7 @@ import java.util.Optional;
  *     there were no competing candidates. Surfaced as raw data — the caller decides whether the
  *     winning version is the right one, or whether the dependency should be pinned explicitly.
  * @author Arvind Menon
- * @since 2.2.0
+ * @since 3.0.0
  */
 public record EffectiveDependency(
     String groupId,

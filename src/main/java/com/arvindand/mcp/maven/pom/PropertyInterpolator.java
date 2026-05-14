@@ -19,7 +19,7 @@ import java.util.regex.Pattern;
  * placeholders in the output.
  *
  * @author Arvind Menon
- * @since 2.2.0
+ * @since 3.0.0
  */
 final class PropertyInterpolator {
 

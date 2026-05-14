@@ -12,7 +12,7 @@ import org.apache.maven.model.Model;
  * local POMs win, Maven Central is the fallback.
  *
  * @author Arvind Menon
- * @since 2.2.0
+ * @since 3.0.0
  */
 public final class CompositePomFetcher implements PomFetcher {
 
