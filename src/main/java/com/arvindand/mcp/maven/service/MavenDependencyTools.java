@@ -15,10 +15,6 @@ import com.arvindand.mcp.maven.model.ToolResponse;
 import com.arvindand.mcp.maven.model.VersionComparison;
 import com.arvindand.mcp.maven.model.VersionInfo;
 import com.arvindand.mcp.maven.model.VersionInfo.VersionType;
-import com.arvindand.mcp.maven.model.VersionTimelineAnalysis;
-import com.arvindand.mcp.maven.model.VersionTimelineAnalysis.RecentActivity.ActivityLevel;
-import com.arvindand.mcp.maven.model.VersionTimelineAnalysis.TimelineEntry.ReleaseGap;
-import com.arvindand.mcp.maven.model.VersionTimelineAnalysis.VelocityTrend.TrendDirection;
 import com.arvindand.mcp.maven.model.VersionsByType;
 import com.arvindand.mcp.maven.model.license.LicenseFindings;
 import com.arvindand.mcp.maven.model.license.LicenseInfo;
@@ -94,7 +90,6 @@ public class MavenDependencyTools {
 
   // Analysis constants
   private static final int DEFAULT_ANALYSIS_MONTHS = 24;
-  private static final int DEFAULT_VERSION_COUNT = 20;
   private static final int ACCURATE_TIMESTAMP_VERSION_LIMIT = 30;
   private static final int RECENT_VERSIONS_LIMIT = 10;
   private static final int MILLISECONDS_TO_DAYS = 1000 * 60 * 60 * 24;
@@ -113,10 +108,6 @@ public class MavenDependencyTools {
   private static final int EXCELLENT_HEALTH_THRESHOLD = 80;
   private static final int GOOD_HEALTH_THRESHOLD = 65;
   private static final int FAIR_HEALTH_THRESHOLD = 50;
-
-  // Stability analysis constants
-  private static final int VERY_HIGH_STABILITY_THRESHOLD = 80;
-  private static final int LOW_STABILITY_THRESHOLD = 50;
   private final MavenCentralService mavenCentralService;
   private final VersionComparator versionComparator;
   private final Context7Properties context7Properties;
@@ -480,48 +471,6 @@ public class MavenDependencyTools {
 
           return analyzeReleasePattern(
               coordinate.toCoordinateString(), allVersions, analysisMonths);
-        });
-  }
-
-  /**
-   * Get enhanced version timeline with temporal analysis and release patterns.
-   *
-   * @param dependency the dependency coordinate (groupId:artifactId)
-   * @param versionCount number of recent versions to include (default: 20)
-   * @return JSON response with version timeline and temporal insights
-   */
-  @SuppressWarnings("java:S100") // MCP tool method naming
-  @Tool(
-      description =
-          "Single dependency. Returns a timeline of recent versions with dates, gaps, and stability"
-              + " patterns. Use for quick release history snapshots.")
-  public ToolResponse get_version_timeline(
-      @ToolParam(
-              description =
-                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version)."
-                      + " Example: 'org.junit.jupiter:junit-jupiter'")
-          String dependency,
-      @ToolParam(
-              description =
-                  "Number of recent versions to include in timeline analysis. Default is 20"
-                      + " versions if not specified. Typical range: 10-50",
-              required = false)
-          @Nullable
-          Integer versionCount) {
-    return executeToolOperation(
-        () -> {
-          MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-          int maxVersions = versionCount != null ? versionCount : DEFAULT_VERSION_COUNT;
-
-          List<MavenArtifact> versions =
-              mavenCentralService.getRecentVersionsWithAccurateTimestamps(coordinate, maxVersions);
-
-          if (versions.isEmpty()) {
-            throw new MavenCentralException(
-                "No versions found for " + coordinate.toCoordinateString());
-          }
-
-          return analyzeVersionTimeline(coordinate.toCoordinateString(), versions);
         });
   }
 
@@ -1343,148 +1292,6 @@ public class MavenDependencyTools {
         nextReleasePrediction,
         recentReleases,
         recommendation);
-  }
-
-  private VersionTimelineAnalysis analyzeVersionTimeline(
-      String dependency, List<MavenArtifact> versions) {
-
-    Instant now = Instant.now();
-
-    // Pre-calculate all intervals and average - single pass optimization
-    long[] intervalDays = new long[versions.size()];
-    List<Long> positiveIntervals = new ArrayList<>();
-
-    for (int i = 1; i < versions.size(); i++) {
-      long currentTimestamp = versions.get(i - 1).timestamp();
-      long prevTimestamp = versions.get(i).timestamp();
-      long interval = (currentTimestamp - prevTimestamp) / MILLISECONDS_TO_DAYS;
-      intervalDays[i] = interval;
-      if (interval > 0) positiveIntervals.add(interval);
-    }
-
-    double averageInterval =
-        positiveIntervals.isEmpty()
-            ? 0
-            : positiveIntervals.stream().mapToLong(Long::longValue).average().orElse(0);
-
-    // Build timeline entries using pre-calculated intervals
-    List<VersionTimelineAnalysis.TimelineEntry> timeline = new ArrayList<>();
-    for (int i = 0; i < versions.size(); i++) {
-      MavenArtifact version = versions.get(i);
-      Instant releaseDate = Instant.ofEpochMilli(version.timestamp());
-
-      String relativeTime = VersionTimelineAnalysis.formatRelativeTime(releaseDate, now);
-      VersionType versionType = versionComparator.getVersionType(version.version());
-
-      Long daysSincePrevious = i > 0 ? intervalDays[i] : null;
-      ReleaseGap gap =
-          i > 0 ? ReleaseGap.classify(intervalDays[i], averageInterval) : ReleaseGap.NORMAL;
-
-      boolean isBreakingChange =
-          MAJOR_UPDATE_TYPE.equals(
-              versionComparator.determineUpdateType("0.0.0", version.version()));
-
-      timeline.add(
-          new VersionTimelineAnalysis.TimelineEntry(
-              version.version(),
-              versionType,
-              releaseDate,
-              relativeTime,
-              daysSincePrevious,
-              isBreakingChange,
-              gap));
-    }
-
-    // Calculate metrics
-    Instant oldestDate = Instant.ofEpochMilli(versions.get(versions.size() - 1).timestamp());
-    int timeSpanMonths = (int) Duration.between(oldestDate, now).toDays() / DAYS_IN_MONTH;
-
-    // Count recent activity with optimized stream operations
-    Instant oneMonthAgo = now.minus(DAYS_IN_MONTH, ChronoUnit.DAYS);
-    Instant threeMonthsAgo = now.minus(3L * DAYS_IN_MONTH, ChronoUnit.DAYS);
-
-    long releasesLastMonth =
-        versions.stream()
-            .filter(v -> Instant.ofEpochMilli(v.timestamp()).isAfter(oneMonthAgo))
-            .count();
-
-    long releasesLastQuarter =
-        versions.stream()
-            .filter(v -> Instant.ofEpochMilli(v.timestamp()).isAfter(threeMonthsAgo))
-            .count();
-
-    // Create analysis objects
-    VersionTimelineAnalysis.VelocityTrend velocityTrend =
-        new VersionTimelineAnalysis.VelocityTrend(
-            TrendDirection.STABLE,
-            "Release velocity appears stable",
-            releasesLastQuarter / 3.0,
-            versions.size() / Math.max(timeSpanMonths, 1.0),
-            0.0);
-
-    long stableCount =
-        timeline.stream().mapToLong(t -> t.versionType() == VersionType.STABLE ? 1 : 0).sum();
-    double stablePercentage = (double) stableCount / timeline.size() * 100;
-
-    VersionTimelineAnalysis.StabilityPattern stabilityPattern =
-        new VersionTimelineAnalysis.StabilityPattern(
-            stablePercentage,
-            "Mix of stable and pre-release versions",
-            "Regular stable releases",
-            stablePercentage > 70
-                ? "Good stability pattern - safe for production use"
-                : "Consider waiting for stable releases");
-
-    long lastReleaseAge = Duration.between(timeline.get(0).releaseDate(), now).toDays();
-
-    VersionTimelineAnalysis.RecentActivity recentActivity =
-        new VersionTimelineAnalysis.RecentActivity(
-            (int) releasesLastMonth,
-            (int) releasesLastQuarter,
-            ActivityLevel.classify((int) releasesLastMonth, (int) releasesLastQuarter),
-            lastReleaseAge,
-            "Recent activity: " + releasesLastQuarter + " releases in last quarter");
-
-    List<String> insights = generateTimelineInsights(timeline, recentActivity, stabilityPattern);
-
-    return new VersionTimelineAnalysis(
-        dependency,
-        versions.size(),
-        timeline.size(),
-        timeSpanMonths,
-        timeline,
-        velocityTrend,
-        stabilityPattern,
-        recentActivity,
-        insights);
-  }
-
-  private List<String> generateTimelineInsights(
-      List<VersionTimelineAnalysis.TimelineEntry> timeline,
-      VersionTimelineAnalysis.RecentActivity recentActivity,
-      VersionTimelineAnalysis.StabilityPattern stabilityPattern) {
-
-    List<String> insights = new ArrayList<>();
-
-    if (recentActivity.activityLevel() == ActivityLevel.VERY_ACTIVE) {
-      insights.add("High release frequency indicates active development");
-    } else if (recentActivity.activityLevel() == ActivityLevel.DORMANT) {
-      insights.add("No recent releases - consider checking project status");
-    }
-
-    if (stabilityPattern.stablePercentage() > VERY_HIGH_STABILITY_THRESHOLD) {
-      insights.add("Strong preference for stable releases - good for production");
-    } else if (stabilityPattern.stablePercentage() < LOW_STABILITY_THRESHOLD) {
-      insights.add("Many pre-release versions - early-stage or experimental project");
-    }
-
-    long majorGaps =
-        timeline.stream().mapToLong(t -> t.releaseGap() == ReleaseGap.MAJOR_GAP ? 1 : 0).sum();
-    if (majorGaps > 0) {
-      insights.add("Found " + majorGaps + " significant gaps in release schedule");
-    }
-
-    return insights;
   }
 
   private int calculateSimpleHealthScore(

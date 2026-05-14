@@ -1,6 +1,6 @@
 # Tools
 
-Maven Tools MCP exposes 11 MCP tools: 9 core Maven/dependency tools and 2 raw Context7 documentation tools.
+Maven Tools MCP exposes 10 MCP tools: 8 core Maven/dependency tools and 2 raw Context7 documentation tools.
 
 ## Core Maven Intelligence Tools
 
@@ -12,7 +12,6 @@ Maven Tools MCP exposes 11 MCP tools: 9 core Maven/dependency tools and 2 raw Co
 | `compare_dependency_versions` | Compare current versions against available upgrades | "Which dependencies in this pom can be upgraded?" |
 | `analyze_dependency_age` | Classify freshness and maintenance age | "Is this dependency getting stale?" |
 | `analyze_release_patterns` | Look at release cadence and maintenance behavior | "Does this library still look actively maintained?" |
-| `get_version_timeline` | Return recent versions with timing signals | "Show me the recent release history" |
 | `analyze_project_health` | Run a broader audit across a dependency set | "Give me a health overview for this project" |
 | `analyze_pom_dependencies` | Resolve a whole POM into per-dep effective versions + classification | "What versions does my pom.xml actually resolve to, and which ones are BOM-managed?" |
 

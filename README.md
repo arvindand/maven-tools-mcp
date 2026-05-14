@@ -92,7 +92,7 @@ For fuller setup guidance, including JAR/native usage, Docker Compose, and envir
 
 ## Core Tools
 
-The server exposes 11 MCP tools.
+The server exposes 10 MCP tools.
 
 ### Maven intelligence tools
 
@@ -104,7 +104,6 @@ The server exposes 11 MCP tools.
 | `compare_dependency_versions` | Compare current versions against available upgrades |
 | `analyze_dependency_age` | Classify how old a dependency is |
 | `analyze_release_patterns` | Look at release cadence and maintenance signals |
-| `get_version_timeline` | Inspect recent release history and gaps |
 | `analyze_project_health` | Run a broader dependency health audit |
 | `analyze_pom_dependencies` | POM-aware: resolve effective versions from raw pom.xml, classify as `EXPLICIT` / `MANAGED` / `EXPLICIT_OVERRIDE`, surface multi-BOM conflicts |
 

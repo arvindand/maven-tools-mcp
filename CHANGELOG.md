@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Native image hints**: `EffectivePomResult`, `EffectiveDependency`, `ManagedAlternative` records and the `Source` enum registered for reflection in `NativeImageConfiguration` so JSON serialization works in the native binary.
 - **Major version bump (2.x → 3.0)**: signals the qualitative shift from "Maven Central lookups" to "POM-aware analysis." Existing 10 tools are unchanged; the new tool is additive.
 
+### Removed (3.0.0)
+
+- **`get_version_timeline` tool**: the raw release-history view (timeline entries, velocity trend, stability pattern, recent-activity classification) overlapped substantially with `analyze_release_patterns`, which already exposes the same underlying data as a cadence + maintenance signal. Consolidated down to a single tool; the cadence-and-maintenance view in `analyze_release_patterns` is the canonical one going forward. Consumers still wired to `get_version_timeline` can pin a 2.x Docker tag (`arvindand/maven-tools-mcp:2.1.1` etc.) until they migrate.
+
 ### Notes (3.0.0)
 
 - **Out of scope**: transitive dependency walking, version range syntax (`[1.0,2.0)` treated as opaque), profile activation, CI-friendly `${revision}` / flatten-maven-plugin output, cyclic BOM imports (recursion is bounded by Maven Central's rejection of such cycles; a visited-set guard would harden against pathological input).

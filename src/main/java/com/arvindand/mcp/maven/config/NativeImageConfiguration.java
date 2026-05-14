@@ -13,7 +13,6 @@ import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
 import com.arvindand.mcp.maven.model.ToolResponse;
 import com.arvindand.mcp.maven.model.VersionComparison;
 import com.arvindand.mcp.maven.model.VersionInfo;
-import com.arvindand.mcp.maven.model.VersionTimelineAnalysis;
 import com.arvindand.mcp.maven.model.VersionsByType;
 import com.arvindand.mcp.maven.model.license.LicenseFindings;
 import com.arvindand.mcp.maven.model.license.LicenseInfo;
@@ -84,11 +83,6 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, DependencyAgeAnalysis.class);
       registerRecordClass(hints, ReleasePatternAnalysis.class);
       registerRecordClass(hints, ReleasePatternAnalysis.ReleaseInfo.class);
-      registerRecordClass(hints, VersionTimelineAnalysis.class);
-      registerRecordClass(hints, VersionTimelineAnalysis.TimelineEntry.class);
-      registerRecordClass(hints, VersionTimelineAnalysis.VelocityTrend.class);
-      registerRecordClass(hints, VersionTimelineAnalysis.StabilityPattern.class);
-      registerRecordClass(hints, VersionTimelineAnalysis.RecentActivity.class);
 
       // Register Context7 integration record classes (v1.2.0)
       registerRecordClass(hints, Context7Guidance.class);
@@ -150,9 +144,6 @@ public class NativeImageConfiguration {
       registerEnumClass(hints, DependencyAgeAnalysis.AgeClassification.class);
       registerEnumClass(hints, ReleasePatternAnalysis.MaintenanceLevel.class);
       registerEnumClass(hints, ReleasePatternAnalysis.ReleaseConsistency.class);
-      registerEnumClass(hints, VersionTimelineAnalysis.TimelineEntry.ReleaseGap.class);
-      registerEnumClass(hints, VersionTimelineAnalysis.VelocityTrend.TrendDirection.class);
-      registerEnumClass(hints, VersionTimelineAnalysis.RecentActivity.ActivityLevel.class);
     }
 
     /**
