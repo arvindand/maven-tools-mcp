@@ -19,7 +19,7 @@ import org.springframework.test.context.ActiveProfiles;
  * network calls.
  *
  * @author Arvind Menon
- * @since 2.1.1
+ * @since 3.0.0
  */
 @SpringBootTest
 @ActiveProfiles("test")
