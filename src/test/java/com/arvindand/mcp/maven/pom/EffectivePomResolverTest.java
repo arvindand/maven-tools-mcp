@@ -756,4 +756,99 @@ class EffectivePomResolverTest {
         .singleElement()
         .satisfies(d -> assertThat(d.conflicts()).isEmpty());
   }
+
+  @Test
+  void terminatesCleanlyOnCyclicBomImports() {
+    // BOM A imports BOM B; BOM B imports BOM A. Pathological but valid POM XML.
+    // Without cycle protection this would recurse until stack overflow.
+    Model bomA =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>bom-a</artifactId>
+              <version>1.0.0</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.example</groupId>
+                    <artifactId>bom-b</artifactId>
+                    <version>2.0.0</version>
+                    <type>pom</type>
+                    <scope>import</scope>
+                  </dependency>
+                  <dependency>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                    <version>2.18.0</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    Model bomB =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>bom-b</artifactId>
+              <version>2.0.0</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.example</groupId>
+                    <artifactId>bom-a</artifactId>
+                    <version>1.0.0</version>
+                    <type>pom</type>
+                    <scope>import</scope>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    PomFetcher fetcher =
+        stub(Map.of("com.example:bom-a:1.0.0", bomA, "com.example:bom-b:2.0.0", bomB));
+
+    String pom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.example</groupId>
+          <artifactId>app</artifactId>
+          <version>1.0.0</version>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>com.example</groupId>
+                <artifactId>bom-a</artifactId>
+                <version>1.0.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    // Should complete without StackOverflowError; bom-a's jackson-databind entry resolves.
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(pom);
+
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(
+            d -> {
+              assertThat(d.effectiveVersion()).isEqualTo("2.18.0");
+              assertThat(d.source()).isEqualTo(Source.MANAGED);
+              assertThat(d.managedBy())
+                  .contains(MavenCoordinate.of("com.example", "bom-a", "1.0.0"));
+            });
+  }
 }

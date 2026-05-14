@@ -5,10 +5,12 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
@@ -60,7 +62,9 @@ public class EffectivePomResolver {
     Model root = parsePom(pomXml);
     List<String> warnings = new ArrayList<>();
     ParentContext parents = walkParents(root, warnings);
-    Map<ManagementKey, ManagedEntry> managed = buildManagedVersionMap(root, parents, warnings);
+    Set<String> visitedBoms = new HashSet<>();
+    Map<ManagementKey, ManagedEntry> managed =
+        buildManagedVersionMap(root, parents, warnings, visitedBoms);
     List<EffectiveDependency> deps =
         classifyDependencies(root, parents.properties(), managed, warnings);
     return new EffectivePomResult(deps, parents.chain(), warnings);
@@ -215,13 +219,18 @@ public class EffectivePomResolver {
    * needed; {@link #walkParents} already loaded each ancestor exactly once.
    */
   private Map<ManagementKey, ManagedEntry> buildManagedVersionMap(
-      Model root, ParentContext parents, List<String> warnings) {
+      Model root, ParentContext parents, List<String> warnings, Set<String> visitedBoms) {
     Map<ManagementKey, ManagedEntry> managed = new HashMap<>();
     MavenCoordinate rootCoord = rootCoordinate(root);
-    recordManagedFrom(root, rootCoord, parents.properties(), managed, warnings);
+    recordManagedFrom(root, rootCoord, parents.properties(), managed, warnings, visitedBoms);
     for (int i = 0; i < parents.models().size(); i++) {
       recordManagedFrom(
-          parents.models().get(i), parents.chain().get(i), parents.properties(), managed, warnings);
+          parents.models().get(i),
+          parents.chain().get(i),
+          parents.properties(),
+          managed,
+          warnings,
+          visitedBoms);
     }
     return managed;
   }
@@ -231,13 +240,14 @@ public class EffectivePomResolver {
       MavenCoordinate source,
       Map<String, String> properties,
       Map<ManagementKey, ManagedEntry> sink,
-      List<String> warnings) {
+      List<String> warnings,
+      Set<String> visitedBoms) {
     if (model.getDependencyManagement() == null) {
       return;
     }
     for (Dependency d : model.getDependencyManagement().getDependencies()) {
       if ("import".equals(d.getScope()) && "pom".equals(d.getType())) {
-        importBom(d, properties, sink, warnings);
+        importBom(d, properties, sink, warnings, visitedBoms);
         continue;
       }
       ManagementKey key = ManagementKey.from(d);
@@ -303,7 +313,10 @@ public class EffectivePomResolver {
    * POM's properties (importer wins).
    */
   private Map<ManagementKey, ManagedEntry> effectiveManagementForImportedBom(
-      Model bomModel, Map<String, String> importerProperties, List<String> warnings) {
+      Model bomModel,
+      Map<String, String> importerProperties,
+      List<String> warnings,
+      Set<String> visitedBoms) {
     ParentContext bomParents = walkParents(bomModel, warnings);
 
     // Importer's bindings win; BOM's own properties (including inherited) fill gaps.
@@ -313,7 +326,7 @@ public class EffectivePomResolver {
     // Reuse the BOM's parent walk (chain + models) but with merged properties for interpolation.
     ParentContext mergedContext =
         new ParentContext(bomParents.chain(), bomParents.models(), mergedProperties);
-    return buildManagedVersionMap(bomModel, mergedContext, warnings);
+    return buildManagedVersionMap(bomModel, mergedContext, warnings, visitedBoms);
   }
 
   /**
@@ -326,12 +339,19 @@ public class EffectivePomResolver {
    * result; an unresolvable BOM simply means its managed entries are absent from the merged map,
    * which may surface as unresolved dependency-version warnings downstream in {@link
    * #classifyDependencies}.
+   *
+   * <p>Cycle-safe: a {@code visitedBoms} set tracks BOM coordinates seen during this resolution. If
+   * a BOM is encountered again — either because the same BOM is imported via two paths, or because
+   * BOMs reference each other cyclically — its contents are skipped on re-entry. The first
+   * encounter wins per Maven semantics, and the recursion can no longer overflow on pathological
+   * input.
    */
   private void importBom(
       Dependency bomDep,
       Map<String, String> properties,
       Map<ManagementKey, ManagedEntry> sink,
-      List<String> warnings) {
+      List<String> warnings,
+      Set<String> visitedBoms) {
     String groupId = PropertyInterpolator.interpolate(bomDep.getGroupId(), properties);
     String artifactId = PropertyInterpolator.interpolate(bomDep.getArtifactId(), properties);
     String version = PropertyInterpolator.interpolate(bomDep.getVersion(), properties);
@@ -339,16 +359,18 @@ public class EffectivePomResolver {
       return;
     }
     MavenCoordinate bomCoord = MavenCoordinate.of(groupId, artifactId, version);
+    if (!visitedBoms.add(bomCoord.toCoordinateString())) {
+      // Already processed this BOM earlier in the resolution (either via another path or
+      // because of a cyclic import). First encounter wins; safely short-circuit.
+      return;
+    }
     Optional<Model> bom = fetcher.fetch(bomCoord);
     if (bom.isEmpty()) {
       warnings.add("Imported BOM " + bomCoord.toCoordinateString() + " could not be fetched");
       return;
     }
-    // TODO: cyclic BOM imports (A imports B imports A) are not detected; recursion is
-    // bounded in practice by Maven Central's rejection of such cycles, but a visited-set
-    // threaded through importBom would harden against pathological / malicious input.
     Map<ManagementKey, ManagedEntry> effective =
-        effectiveManagementForImportedBom(bom.get(), properties, warnings);
+        effectiveManagementForImportedBom(bom.get(), properties, warnings, visitedBoms);
     effective.forEach((k, v) -> mergeManagedEntry(sink, k, v));
   }
 
