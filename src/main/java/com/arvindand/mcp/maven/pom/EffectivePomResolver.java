@@ -57,11 +57,15 @@ public class EffectivePomResolver {
   /**
    * Resolves the effective POM for the given POM XML string.
    *
-   * <p>Results are cached by raw {@code pomXml} content for 1 hour — a follow-up call from the same
+   * <p>Results are cached by raw {@code pomXml} content for 1 hour. A follow-up call from the same
    * client (e.g., {@code analyze_pom_dependencies} then {@code recommend_pom_upgrades} on the same
-   * POM) skips the entire parent / DM walk including XML reparse. The TTL is shorter than the
-   * underlying Maven Central caches (24h) so a freshly-published parent is picked up within an hour
-   * even when the input pomXml hasn't changed.
+   * POM) skips the entire parent / DM walk including XML reparse.
+   *
+   * <p>The 1h TTL here is independent of the underlying {@code maven-pom-xml} cache (24h). When
+   * this entry expires the recomputation re-uses upstream-cached parent / BOM XML rather than
+   * refetching — so a freshly-published parent only surfaces once both caches expire (or the input
+   * pomXml itself changes). The shorter TTL here biases toward freshness for resolver-code edits
+   * while the upstream stays patient about network calls.
    *
    * @param pomXml the raw POM XML content
    * @return the resolved effective POM result
