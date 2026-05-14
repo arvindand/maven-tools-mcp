@@ -10,12 +10,12 @@ On each scheduled or manual run it:
 
 1. Starts the Maven Tools MCP HTTP sidecar with `arvindand/maven-tools-mcp:latest-http`
 2. Runs the local Python agent in [`agents/copilot-maven-tools-agent/`](../agents/copilot-maven-tools-agent/)
-3. Calls Maven Tools MCP directly for stable minor and patch updates to the root `pom.xml`
+3. Hands the raw `pom.xml` to the `recommend_pom_upgrades` MCP tool and applies the returned `deterministicActions[]` directly
 4. Ignores dependencies that are intentionally pinned for temporary operational reasons
 5. Creates or updates a persistent PR branch: `bot/dependency-agent-self-update`
 6. Relies on normal repository CI to validate the resulting PR
 
-Major updates are not auto-applied. Manual `major` mode runs route the analysis through the Copilot SDK so the model can frame migration risk and review context without touching the deterministic weekly update path.
+Major updates, multi-BOM conflicts, and explicit overrides land in `needsAttention[]` and are not auto-applied. Manual `major` mode runs route the analysis through the Copilot SDK so the model can frame migration risk and review context without touching the deterministic weekly update path.
 
 ## Agent Layout
 
@@ -23,17 +23,17 @@ The dependency agent lives in [`agents/copilot-maven-tools-agent/`](../agents/co
 
 It is a local Python subproject that:
 
-- parses the repository `pom.xml`
-- calls Maven Tools MCP directly for dependency intelligence in minor/patch mode
-- applies safe updates deterministically
+- reads the repository `pom.xml` and hands it to the `recommend_pom_upgrades` MCP tool
+- applies the returned `deterministicActions[]` (mechanical `<version>` edits) directly
+- displays `needsAttention[]` (majors, conflicts, explicit overrides) for visibility
 - uses the Copilot SDK only in major-review mode
 - leaves PR creation to GitHub Actions
 
-That split keeps the agent focused on dependency selection and file changes while GitHub Actions handles branch and PR mechanics.
+That split keeps the agent focused on applying server-decided edits while GitHub Actions handles branch and PR mechanics. There is no Python POM parsing — the server is the single source of truth for what "the effective POM" means.
 
 ## Deterministic And Major Modes
 
-Routine `minor_patch` runs use a direct MCP JSON-RPC client. The workflow sends a specific `compare_dependency_versions` call, parses the structured tool response, and applies only stable minor/patch or same-major fallback updates. There is no model session in that path.
+Routine `minor_patch` runs use a direct MCP JSON-RPC client. The workflow sends one `recommend_pom_upgrades` call with the raw POM XML, applies every entry in `deterministicActions[]`, and surfaces `needsAttention[]` for the PR description. There is no model session in that path and no per-coordinate fan-out.
 
 `major` mode is report-only and uses the GitHub Copilot SDK with Maven Tools MCP attached. That keeps model judgement available for breaking-change context, migration planning, and ambiguous ecosystem decisions while making sure the weekly self-update PR remains deterministic.
 

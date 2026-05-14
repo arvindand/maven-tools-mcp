@@ -125,6 +125,25 @@ class DirectMcpClient:
         )
         return extract_tool_response_payload(result)
 
+    async def recommend_upgrades(
+        self,
+        pom_xml: str,
+        mode: str = "MINOR_PATCH",
+    ) -> dict[str, Any]:
+        """Call recommend_pom_upgrades and return the parsed tool payload."""
+        result = await self._request(
+            "tools/call",
+            {
+                "name": "recommend_pom_upgrades",
+                "arguments": {
+                    "pomXml": pom_xml,
+                    "mode": mode,
+                },
+            },
+            timeout=600.0,
+        )
+        return extract_tool_response_payload(result)
+
     async def _request(
         self,
         method: str,
