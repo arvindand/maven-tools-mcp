@@ -37,7 +37,7 @@ AI client -> MCP protocol -> Maven Tools MCP Server
 5. Server returns structured JSON for the client to use in chat or automation
 ```
 
-The `analyze_pom_dependencies` tool takes a different shape because it operates on a whole POM rather than a single coordinate:
+The POM-aware tools (`analyze_pom_dependencies`, `recommend_pom_upgrades`) take a different shape because they operate on a whole POM rather than a single coordinate:
 
 ```text
 AI client -> analyze_pom_dependencies(pomXml, sideloadedPoms?) -> Maven Tools MCP Server
@@ -46,12 +46,30 @@ AI client -> analyze_pom_dependencies(pomXml, sideloadedPoms?) -> Maven Tools MC
 2. Server parses the POM via maven-model (data classes only, no maven-model-builder)
 3. Server walks the parent chain via MavenCentralPomFetcher, fetching each parent POM
 4. Server merges <properties>, <dependencyManagement>, and <scope>import</scope> BOMs
+   (project.* placeholders scoped per-POM so an imported BOM's ${project.version}
+   resolves to that BOM's version, not the importer's)
 5. Server classifies each declared dependency (EXPLICIT / MANAGED / EXPLICIT_OVERRIDE)
 6. Server surfaces multi-BOM conflicts and per-step warnings as raw data
 7. Server returns structured JSON; reasoning about what to upgrade is the caller's job
 ```
 
-The POM resolver lives in `com.arvindand.mcp.maven.pom`. Its design notes are in the package-info; the algorithm shape (parent walk → properties → BOM import → depMgmt merge) is adapted from the MIT-licensed [maxxq-org/maxxq-maven](https://github.com/maxxq-org/maxxq-maven). The implementation is a clean-room reimplementation scoped to declared-dep resolution only — no transitive walking, no scope-downgrade rules.
+`recommend_pom_upgrades` adds an opinion layer on top of the resolver output:
+
+```text
+AI client -> recommend_pom_upgrades(pomXml, mode?, sideloadedPoms?) -> Maven Tools MCP Server
+
+1-6. Same resolver pass as above (result is cached by raw pomXml for 1h)
+7. For each user-controllable BOM (direct <parent> + root <dependencyManagement>
+   imports), look up the latest stable on Maven Central; emit bom_bump or route a
+   major to needs_attention. Transitively-imported BOMs are silently skipped —
+   nothing for the caller to edit in their own POM.
+8. For each declared dep, classify: explicit_bump for available minor/patch
+   upgrades, conflict / explicit_override / major_available to needs_attention
+9. Return two lists — deterministic_actions[] for mechanical agent application,
+   needs_attention[] (each entry carries latestOnCentral) for human / LLM review
+```
+
+The POM resolver lives in `com.arvindand.mcp.maven.pom`. Its design notes are in the package-info; the algorithm shape (parent walk → properties → BOM import → depMgmt merge) follows the MIT-licensed [maxxq-org/maxxq-maven](https://github.com/maxxq-org/maxxq-maven), scoped here to declared-dep resolution only (no transitive walking, no scope-downgrade rules). Resolved results are cached by raw `pomXml` content in `maven-effective-pom` (1h TTL) so a follow-up call from the same client skips the parent / DM walk including XML reparse.
 
 ## Deployment Options
 

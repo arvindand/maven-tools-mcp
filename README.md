@@ -119,12 +119,12 @@ For parameters, examples, and tool-by-tool notes, see [`docs/tools.md`](docs/too
 
 ### POM-aware dependency analysis
 
-Two tools take a whole POM (raw XML) rather than a single coordinate. Both walk the parent chain, apply `<dependencyManagement>`, resolve `<scope>import</scope>` BOMs against Maven Central, and accept an optional `sideloadedPoms` bundle for monorepo siblings / unreleased parents:
+Two tools take a whole POM (raw XML) rather than a single coordinate. Both walk the parent chain, apply `<dependencyManagement>`, resolve `<scope>import</scope>` BOMs against Maven Central, scope `${project.version}` per-POM so an imported BOM's placeholders resolve to that BOM's version (not the importer's), and accept an optional `sideloadedPoms` bundle for monorepo siblings / unreleased parents.
 
 - **`analyze_pom_dependencies`** — returns each declared dep with effective version + classification (`EXPLICIT` / `MANAGED` / `EXPLICIT_OVERRIDE`) + managing BOM coordinate + any multi-BOM `conflicts`. Use when you want raw analysis ("what does my POM actually resolve to?").
-- **`recommend_pom_upgrades`** — builds on the analyzer and returns two lists: `deterministic_actions` (mechanical `<version>` edits — `explicit_bump` for declared deps, `bom_bump` for BOM-managed deps where a newer minor/patch BOM is available — applied directly by a non-LLM agent) and `needs_attention` (majors, multi-BOM conflicts, and explicit overrides, each carrying the Maven Central latest so an LLM has full context in one round-trip). Use for "what can I safely bump?" workflows.
+- **`recommend_pom_upgrades`** — builds on the analyzer and returns two lists: `deterministic_actions` (mechanical `<version>` edits — `explicit_bump` for declared deps, `bom_bump` for user-controllable BOMs where a newer minor/patch exists) and `needs_attention` (majors, multi-BOM conflicts, and explicit overrides, each carrying the Maven Central latest so an LLM has full context in one round-trip). Use for "what can I safely bump?" workflows.
 
-The split matters: the agent never needs to call `compare_dependency_versions` per-dep or parse Maven XML in Python — one `recommend_pom_upgrades` call returns everything mechanical, and the LLM review path picks up everything that needs judgment.
+Upgrade recommendations are scoped to BOMs the caller can actually edit in their own POM — the direct `<parent>` and root-level `<dependencyManagement>` imports. Transitively-imported BOMs (e.g., `jackson-bom` inherited through `spring-boot-dependencies`) are silently skipped because there's no `<version>` for an agent to bump; their upgrades surface via whichever user-controllable knob brings them in. The split matters: a non-LLM agent never needs to call `compare_dependency_versions` per-dep or parse Maven XML — one `recommend_pom_upgrades` call returns everything mechanical, and the LLM review path picks up everything that needs judgment.
 
 ## Example
 
@@ -148,7 +148,7 @@ For more prompt examples, see [`docs/examples.md`](docs/examples.md). There is a
 
 ## Dogfooding
 
-This repository runs a weekly self-update workflow that uses a local Python agent against its own `pom.xml` and opens a reviewable PR for safe dependency updates. Routine minor/patch updates are tool-first and deterministic: the agent calls Maven Tools MCP directly and edits only the version values selected from structured tool output. Manual major-review runs are the only mode that routes through the GitHub Copilot SDK.
+This repository runs a weekly self-update workflow that uses a local Python agent against its own `pom.xml` and opens a reviewable PR for safe dependency updates. The agent hands the raw POM to `recommend_pom_upgrades` and applies the returned `deterministic_actions[]` directly — no per-coordinate fan-out, no XML parsing in Python. Manual major-review runs are the only mode that routes through the GitHub Copilot SDK.
 
 That flow is documented in [`docs/dogfooding.md`](docs/dogfooding.md), including:
 
