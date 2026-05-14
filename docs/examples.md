@@ -22,6 +22,12 @@ In practice, library-choice prompts work well when the model uses this server to
 - "Compare my current Spring Boot stack with the latest stable releases."
 - "Show me which of these dependencies are patch-only upgrades vs major upgrades."
 
+### POM-aware analysis
+
+- "Here's my `pom.xml` — what version does it actually resolve to for each dependency? Walk the parent chain and BOMs."
+- "What can I safely bump in this `pom.xml`? Give me only the deterministic edits."
+- "Here's a child module's `pom.xml` plus its parent (snapshot, not on Central). Resolve it as if it were built."
+
 ### Dependency selection
 
 - "I need caching for a Spring Boot service at moderate throughput. Compare Redis and Caffeine."
@@ -119,6 +125,98 @@ A response from `analyze_project_health` may look like:
   }
 }
 ```
+
+### POM-aware: effective versions from raw XML
+
+`analyze_pom_dependencies` takes a whole `<project>...</project>` and returns the resolved view. For a Spring Boot 3.5 app that doesn't pin Jackson but uses it transitively, you'll see:
+
+```json
+{
+  "dependencies": [
+    {
+      "groupId": "com.fasterxml.jackson.core",
+      "artifactId": "jackson-databind",
+      "effectiveVersion": "2.19.2",
+      "source": "MANAGED",
+      "managedBy": {
+        "groupId": "com.fasterxml.jackson",
+        "artifactId": "jackson-bom",
+        "version": "2.19.2"
+      },
+      "conflicts": []
+    }
+  ],
+  "parentChain": [
+    {"artifactId": "spring-boot-starter-parent", "version": "3.5.14"},
+    {"artifactId": "spring-boot-dependencies", "version": "3.5.14"}
+  ],
+  "rootImportedBoms": [],
+  "warnings": []
+}
+```
+
+Read this as: "I didn't declare a Jackson version — Spring Boot's BOM transitively imports jackson-bom, which pinned me to 2.19.2." `EXPLICIT` would mean I declared the version inline; `EXPLICIT_OVERRIDE` would mean I declared a version *and* a BOM also manages it — useful for spotting deliberate pins.
+
+When two BOMs at the same level disagree on a coordinate, `conflicts[]` lists every losing candidate version so the caller can see all the alternatives and decide whether to pin.
+
+### POM-aware: deterministic upgrade plan
+
+`recommend_pom_upgrades` builds on the analyzer and splits the result so a non-LLM agent can act on `deterministic_actions[]` while a human or LLM judges `needs_attention[]`:
+
+```json
+{
+  "deterministicActions": [
+    {
+      "kind": "explicit_bump",
+      "groupId": "org.apache.maven",
+      "artifactId": "maven-artifact",
+      "current": "3.9.14",
+      "target": "3.9.15",
+      "updateType": "patch"
+    },
+    {
+      "kind": "bom_bump",
+      "groupId": "org.springframework.boot",
+      "artifactId": "spring-boot-starter-parent",
+      "current": "3.5.13",
+      "target": "3.5.14",
+      "updateType": "patch"
+    }
+  ],
+  "needsAttention": [
+    {
+      "kind": "major_available",
+      "groupId": "org.springframework.boot",
+      "artifactId": "spring-boot-starter-parent",
+      "current": "3.5.14",
+      "currentMajorLatest": "3.5.14",
+      "latestStable": "4.0.6",
+      "source": "MANAGED"
+    }
+  ],
+  "warnings": []
+}
+```
+
+`explicit_bump` edits a declared `<version>`; `bom_bump` edits the `<version>` of a user-controllable BOM (direct `<parent>` or root `<dependencyManagement>` import). Transitively-imported BOMs are intentionally absent — there's nothing for an agent to edit in your own POM.
+
+`needs_attention[]` carries `latestOnCentral` on every entry so the reviewing model has full context in one round-trip and doesn't need to fan out per-coordinate `compare_dependency_versions` calls.
+
+### POM-aware: multi-module with `sideloadedPoms`
+
+If the parent isn't published yet (snapshot or local-only), pass it in the bundle:
+
+```jsonc
+analyze_pom_dependencies({
+  pomXml: "<child module pom.xml>",
+  sideloadedPoms: [
+    "<root parent pom.xml>",
+    "<sibling module that also needs to resolve>"
+  ]
+})
+```
+
+The resolver indexes each sideloaded POM by its self-declared `groupId:artifactId:version`, tries the bundle first, and only falls back to Maven Central if a coordinate isn't in the bundle. This makes the tool work in a fresh monorepo checkout before any `mvn install` has run.
 
 ## Example Commands And Prompts
 
