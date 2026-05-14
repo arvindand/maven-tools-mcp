@@ -61,10 +61,10 @@ case $choice in
         chmod +x ../mvnw
         
         echo "📦 Running Maven package (skipping tests for faster build)..."
-        ../mvnw clean package -DskipTests
-        
-        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.0.0")
-        
+        (cd .. && ./mvnw clean package -DskipTests)
+
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.0.0")
+
         echo ""
         echo "🐳 Building native image WITH Context7..."
         (cd .. && SPRING_PROFILES_ACTIVE=docker ./mvnw -Pnative spring-boot:build-image \
@@ -100,22 +100,23 @@ case $choice in
         chmod +x ../mvnw
         
         echo "📦 Running Maven package (skipping tests for faster build)..."
-        ../mvnw clean package -DskipTests
-        
+        (cd .. && ./mvnw clean package -DskipTests)
+
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.0.0")
+
         echo "🐳 Building JVM Docker image with buildpacks..."
-        (cd .. && SPRING_PROFILES_ACTIVE=docker ./mvnw spring-boot:build-image)
-        
-        PROJECT_VERSION=$(../mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.0.0")
+        (cd .. && SPRING_PROFILES_ACTIVE=docker ./mvnw spring-boot:build-image \
+          -Dspring-boot.build-image.imageName=maven-tools-mcp:${PROJECT_VERSION}-jvm)
         echo ""
-        echo "✅ Built JVM image: maven-tools-mcp:${PROJECT_VERSION}"
+        echo "✅ Built JVM image: maven-tools-mcp:${PROJECT_VERSION}-jvm"
         echo ""
         echo "🚀 Run with Context7 (default):"
-        echo "   docker run -i maven-tools-mcp:${PROJECT_VERSION}"
+        echo "   docker run -i maven-tools-mcp:${PROJECT_VERSION}-jvm"
         echo ""
         echo "🚀 Run without Context7 (use env vars):"
         echo "   docker run -i -e SPRING_AI_MCP_CLIENT_ENABLED=false \\"
         echo "     -e CONTEXT7_ENABLED=false \\"
-        echo "     maven-tools-mcp:${PROJECT_VERSION}"
+        echo "     maven-tools-mcp:${PROJECT_VERSION}-jvm"
         ;;
     *)
         echo "❌ Invalid option. Please choose 1, 2, or 3."

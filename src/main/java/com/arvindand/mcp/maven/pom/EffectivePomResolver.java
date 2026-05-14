@@ -390,9 +390,22 @@ public class EffectivePomResolver {
       Set<String> visitedBoms) {
     ParentContext bomParents = walkParents(bomModel, warnings);
 
-    // Importer's bindings win; BOM's own properties (including inherited) fill gaps.
+    // Importer's user-defined bindings win on collision (so an importer can legitimately override
+    // a BOM property like ${spring-ai.version}). EXCEPT for the built-in project.* coordinates —
+    // those are context-bound to the local POM in Maven semantics: an entry like
+    // <version>${project.version}</version> inside an imported BOM means THAT BOM's version, not
+    // the importer's. Always let the BOM's project.* override.
     Map<String, String> mergedProperties = new HashMap<>(importerProperties);
-    bomParents.properties().forEach(mergedProperties::putIfAbsent);
+    bomParents
+        .properties()
+        .forEach(
+            (k, v) -> {
+              if (k.startsWith("project.")) {
+                mergedProperties.put(k, v);
+              } else {
+                mergedProperties.putIfAbsent(k, v);
+              }
+            });
 
     // Reuse the BOM's parent walk (chain + models) but with merged properties for interpolation.
     ParentContext mergedContext =

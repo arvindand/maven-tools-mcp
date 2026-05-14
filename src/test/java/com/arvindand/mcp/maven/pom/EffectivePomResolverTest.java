@@ -685,6 +685,143 @@ class EffectivePomResolverTest {
   }
 
   @Test
+  void importedBomProjectVersionInterpolatesAgainstBomNotImporter() {
+    // Regression: when an imported BOM's <dependencyManagement> entry uses ${project.version},
+    // it must resolve to the BOM's own version — NOT the importer's project.version. Real-world
+    // case: spring-ai-bom 1.1.6 manages spring-ai-* via <version>${project.version}</version>;
+    // before the fix, our merge let the importer's project.version (e.g., 3.0.0) leak into the
+    // BOM's interpolation context, so every managed entry came back at the wrong version.
+    Model bom =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example.platform</groupId>
+              <artifactId>platform-bom</artifactId>
+              <version>1.1.6</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.example.platform</groupId>
+                    <artifactId>platform-core</artifactId>
+                    <version>${project.version}</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    PomFetcher fetcher = stub(Map.of("com.example.platform:platform-bom:1.1.6", bom));
+
+    String importerPom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.example</groupId>
+          <artifactId>app</artifactId>
+          <version>3.0.0</version>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>com.example.platform</groupId>
+                <artifactId>platform-bom</artifactId>
+                <version>1.1.6</version>
+                <type>pom</type>
+                <scope>import</scope>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+          <dependencies>
+            <dependency>
+              <groupId>com.example.platform</groupId>
+              <artifactId>platform-core</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(importerPom);
+
+    assertThat(result.warnings()).isEmpty();
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(
+            d -> {
+              assertThat(d.effectiveVersion())
+                  .as("must be the BOM's version (1.1.6), not the importer's (3.0.0)")
+                  .isEqualTo("1.1.6");
+              assertThat(d.source()).isEqualTo(Source.MANAGED);
+            });
+  }
+
+  @Test
+  void importerCanStillOverrideBomUserDefinedProperty() {
+    // Sanity check that the project.*-only carve-out didn't break the normal "importer wins"
+    // semantics for user-defined properties: when the importer defines
+    // <jackson.version>2.20.0</...>
+    // and the BOM defines <jackson.version>2.19.0</...>, the importer's value wins. Reverse of the
+    // project.version test.
+    Model bom =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example.platform</groupId>
+              <artifactId>platform-bom</artifactId>
+              <version>1.0.0</version>
+              <properties>
+                <jackson.version>2.19.0</jackson.version>
+              </properties>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                    <version>${jackson.version}</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    PomFetcher fetcher = stub(Map.of("com.example.platform:platform-bom:1.0.0", bom));
+
+    String importerPom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.example</groupId>
+          <artifactId>app</artifactId>
+          <version>1.0.0</version>
+          <properties>
+            <jackson.version>2.20.0</jackson.version>
+          </properties>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>com.example.platform</groupId>
+                <artifactId>platform-bom</artifactId>
+                <version>1.0.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(importerPom);
+
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(d -> assertThat(d.effectiveVersion()).isEqualTo("2.20.0"));
+  }
+
+  @Test
   void importedBomInheritsPropertiesAndManagedEntriesFromItsOwnParent() {
     // Grandparent BOM: defines the jackson property AND the managed entry
     Model grandparentBom =
