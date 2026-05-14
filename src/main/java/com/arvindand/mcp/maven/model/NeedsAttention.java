@@ -27,6 +27,12 @@ public sealed interface NeedsAttention
    */
   String kind();
 
+  /** Coordinate groupId — shared across all variants. */
+  String groupId();
+
+  /** Coordinate artifactId — shared across all variants. */
+  String artifactId();
+
   /**
    * A same-major upgrade isn't sufficient because a major version is available. The model can also
    * reason about staying on the current major — {@code currentMajorLatest} is the safe same-major

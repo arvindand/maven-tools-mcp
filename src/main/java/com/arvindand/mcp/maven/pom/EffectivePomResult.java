@@ -13,6 +13,10 @@ import java.util.Objects;
  * @param parentChain the resolved parent coordinates walked during resolution, closest-first (the
  *     input POM's immediate parent at index 0; deeper ancestors at higher indices). Empty if the
  *     POM has no parent.
+ * @param rootImportedBoms the BOMs imported directly by the root POM's {@code
+ *     <dependencyManagement>} via {@code <scope>import</scope><type>pom</type>}. These (along with
+ *     the direct parent at {@code parentChain[0]}) are the user-controllable knobs — anything else
+ *     in the management chain is transitively imported and not directly editable in the input POM.
  * @param warnings non-fatal issues — unresolved properties, parents that couldn't be fetched,
  *     ranges left as opaque strings, etc. Resolution still produces a result; warnings let the
  *     caller decide whether to trust each entry.
@@ -22,14 +26,17 @@ import java.util.Objects;
 public record EffectivePomResult(
     List<EffectiveDependency> dependencies,
     List<MavenCoordinate> parentChain,
+    List<MavenCoordinate> rootImportedBoms,
     List<String> warnings) {
 
   public EffectivePomResult {
     Objects.requireNonNull(dependencies, "dependencies must not be null");
     Objects.requireNonNull(parentChain, "parentChain must not be null");
+    Objects.requireNonNull(rootImportedBoms, "rootImportedBoms must not be null");
     Objects.requireNonNull(warnings, "warnings must not be null");
     dependencies = List.copyOf(dependencies);
     parentChain = List.copyOf(parentChain);
+    rootImportedBoms = List.copyOf(rootImportedBoms);
     warnings = List.copyOf(warnings);
   }
 }

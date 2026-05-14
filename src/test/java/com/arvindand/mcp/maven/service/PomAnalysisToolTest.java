@@ -44,6 +44,7 @@ class PomAnalysisToolTest {
                     Optional.empty(),
                     List.of())),
             List.of(),
+            List.of(),
             List.of());
     when(resolver.resolve("<project/>")).thenReturn(expected);
 
@@ -62,7 +63,10 @@ class PomAnalysisToolTest {
     EffectivePomResolver resolver = mock(EffectivePomResolver.class);
     EffectivePomResult expected =
         new EffectivePomResult(
-            List.of(), List.of(MavenCoordinate.of("com.example", "parent", "1.0.0")), List.of());
+            List.of(),
+            List.of(MavenCoordinate.of("com.example", "parent", "1.0.0")),
+            List.of(),
+            List.of());
     when(resolver.resolve(eq("<child/>"), anyList())).thenReturn(expected);
 
     MavenDependencyTools tools = buildTools(resolver);
@@ -79,7 +83,7 @@ class PomAnalysisToolTest {
   void emptySideloadedListTakesSinglePomPath() {
     EffectivePomResolver resolver = mock(EffectivePomResolver.class);
     when(resolver.resolve("<project/>"))
-        .thenReturn(new EffectivePomResult(List.of(), List.of(), List.of()));
+        .thenReturn(new EffectivePomResult(List.of(), List.of(), List.of(), List.of()));
 
     MavenDependencyTools tools = buildTools(resolver);
 

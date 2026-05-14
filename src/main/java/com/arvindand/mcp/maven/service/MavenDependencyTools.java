@@ -1611,19 +1611,31 @@ public class MavenDependencyTools {
     List<UpgradeAction> actions = new ArrayList<>();
     List<NeedsAttention> attention = new ArrayList<>();
 
-    // First pass: BOM bumps for unique managing BOMs (covers every MANAGED dep in one edit).
-    Map<String, MavenCoordinate> bomsByKey = new LinkedHashMap<>();
-    for (EffectiveDependency dep : resolved.dependencies()) {
-      if (dep.source() == Source.MANAGED) {
-        dep.managedBy()
-            .ifPresent(bom -> bomsByKey.putIfAbsent(bom.groupId() + ":" + bom.artifactId(), bom));
-      }
+    // Only BOMs the user can edit in their own POM are actionable: the direct <parent> and the
+    // root POM's direct <dependencyManagement> imports. Transitively-imported BOMs (e.g.,
+    // jackson-bom inherited through spring-boot-dependencies) are skipped — the user has no
+    // <version> to edit. Their upgrades surface through whichever user-controllable knob brings
+    // them in.
+    Map<String, MavenCoordinate> userControllableBoms = new LinkedHashMap<>();
+    if (!resolved.parentChain().isEmpty()) {
+      MavenCoordinate directParent = resolved.parentChain().get(0);
+      userControllableBoms.put(
+          directParent.groupId() + ":" + directParent.artifactId(), directParent);
     }
-    for (MavenCoordinate bom : bomsByKey.values()) {
+    for (MavenCoordinate bom : resolved.rootImportedBoms()) {
+      userControllableBoms.putIfAbsent(bom.groupId() + ":" + bom.artifactId(), bom);
+    }
+
+    // First pass: classify each user-controllable BOM (parent + root imports). This covers BOMs
+    // even when they don't directly manage any classified dep — bumping the parent is itself a
+    // useful upgrade signal.
+    for (MavenCoordinate bom : userControllableBoms.values()) {
       classifyBomCandidate(bom, mode, actions, attention);
     }
 
-    // Second pass: per-dep classification.
+    // Second pass: per-dep classification. MANAGED deps whose managedBy is user-controllable are
+    // covered by the BOM pass above; transitively-managed deps are silently skipped (their
+    // upgrade lives behind a user-controllable knob already classified).
     for (EffectiveDependency dep : resolved.dependencies()) {
       classifyDependencyCandidate(dep, mode, actions, attention);
     }

@@ -513,6 +513,91 @@ class EffectivePomResolverTest {
               assertThat(d.managedBy())
                   .contains(MavenCoordinate.of("com.example.bom", "my-bom", "1.0.0"));
             });
+    // rootImportedBoms must surface the BOM as a user-controllable knob — the user wrote this
+    // import in their own POM and can therefore edit its version.
+    assertThat(result.rootImportedBoms())
+        .containsExactly(MavenCoordinate.of("com.example.bom", "my-bom", "1.0.0"));
+  }
+
+  @Test
+  void rootImportedBomsExcludesTransitivelyImportedBoms() {
+    // The user's POM has no direct DM imports — only a parent. That parent's DM imports another
+    // BOM. The transitive BOM must NOT show up in rootImportedBoms (the user has no edit point
+    // for it in their own POM file).
+    Model jacksonBom =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.fasterxml.jackson</groupId>
+              <artifactId>jackson-bom</artifactId>
+              <version>2.19.0</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                    <version>2.19.0</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    Model parent =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>parent</artifactId>
+              <version>1.0.0</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.fasterxml.jackson</groupId>
+                    <artifactId>jackson-bom</artifactId>
+                    <version>2.19.0</version>
+                    <type>pom</type>
+                    <scope>import</scope>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    PomFetcher fetcher =
+        stub(
+            Map.of(
+                "com.example:parent:1.0.0",
+                parent,
+                "com.fasterxml.jackson:jackson-bom:2.19.0",
+                jacksonBom));
+
+    String childPom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>parent</artifactId>
+            <version>1.0.0</version>
+          </parent>
+          <artifactId>app</artifactId>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(childPom);
+
+    assertThat(result.rootImportedBoms()).isEmpty();
+    // jackson-databind is still resolved through the transitive BOM.
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(d -> assertThat(d.effectiveVersion()).isEqualTo("2.19.0"));
   }
 
   @Test

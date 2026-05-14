@@ -67,7 +67,35 @@ public class EffectivePomResolver {
         buildManagedVersionMap(root, parents, warnings, visitedBoms);
     List<EffectiveDependency> deps =
         classifyDependencies(root, parents.properties(), managed, warnings);
-    return new EffectivePomResult(deps, parents.chain(), warnings);
+    List<MavenCoordinate> rootBomImports = extractRootBomImports(root, parents.properties());
+    return new EffectivePomResult(deps, parents.chain(), rootBomImports, warnings);
+  }
+
+  /**
+   * Collects BOM coordinates imported directly by {@code root}'s {@code <dependencyManagement>} via
+   * {@code <scope>import</scope><type>pom</type>}. Transitively-imported BOMs are intentionally
+   * excluded — only what's in the user's POM file is user-controllable.
+   */
+  private static List<MavenCoordinate> extractRootBomImports(
+      Model root, Map<String, String> properties) {
+    if (root.getDependencyManagement() == null) {
+      return List.of();
+    }
+    return root.getDependencyManagement().getDependencies().stream()
+        .filter(d -> "import".equals(d.getScope()) && "pom".equals(d.getType()))
+        .map(d -> interpolateBomCoord(d, properties))
+        .filter(Objects::nonNull)
+        .toList();
+  }
+
+  private static MavenCoordinate interpolateBomCoord(Dependency d, Map<String, String> properties) {
+    String g = PropertyInterpolator.interpolate(d.getGroupId(), properties);
+    String a = PropertyInterpolator.interpolate(d.getArtifactId(), properties);
+    String v = PropertyInterpolator.interpolate(d.getVersion(), properties);
+    if (g == null || a == null || v == null) {
+      return null;
+    }
+    return MavenCoordinate.of(g, a, v);
   }
 
   /**
@@ -166,47 +194,66 @@ public class EffectivePomResolver {
       Map<String, String> properties,
       Map<ManagementKey, ManagedEntry> managed,
       List<String> warnings) {
-    List<EffectiveDependency> deps = new ArrayList<>();
-    for (Dependency d : root.getDependencies()) {
-      ManagementKey key = ManagementKey.from(d);
-      ManagedEntry mgmt = managed.get(key);
-      String declared = d.getVersion();
-      if (declared == null || declared.isBlank()) {
-        if (mgmt == null) {
-          warnings.add("No version for " + key.display() + " and no managed entry found — skipped");
-          continue;
-        }
-        deps.add(
-            new EffectiveDependency(
-                d.getGroupId(),
-                d.getArtifactId(),
-                mgmt.version(),
-                Source.MANAGED,
-                Optional.of(mgmt.managedBy()),
-                mgmt.losingCandidates()));
-      } else {
-        String resolved = PropertyInterpolator.interpolate(declared, properties);
-        // Heuristic: residual "${" means interpolation left a placeholder unresolved —
-        // no real Maven version string contains it.
-        if (resolved.isBlank() || resolved.contains("${")) {
-          warnings.add(
-              "Could not resolve version for " + key.display() + " (raw: " + declared + ")");
-          continue;
-        }
-        Source source = mgmt == null ? Source.EXPLICIT : Source.EXPLICIT_OVERRIDE;
-        Optional<MavenCoordinate> managedBy =
-            mgmt == null ? Optional.empty() : Optional.of(mgmt.managedBy());
-        // For EXPLICIT_OVERRIDE, surface BOTH the winning managed entry AND its losers so the
-        // caller can see every candidate version their override is choosing against. For EXPLICIT
-        // (no managed entry at all) conflicts is empty.
-        List<ManagedAlternative> conflicts =
-            mgmt == null ? List.of() : prependWinnerToConflicts(mgmt);
-        deps.add(
-            new EffectiveDependency(
-                d.getGroupId(), d.getArtifactId(), resolved, source, managedBy, conflicts));
-      }
+    return root.getDependencies().stream()
+        .map(d -> classifySingleDependency(d, properties, managed, warnings))
+        .flatMap(Optional::stream)
+        .toList();
+  }
+
+  private Optional<EffectiveDependency> classifySingleDependency(
+      Dependency d,
+      Map<String, String> properties,
+      Map<ManagementKey, ManagedEntry> managed,
+      List<String> warnings) {
+    ManagementKey key = ManagementKey.from(d);
+    ManagedEntry mgmt = managed.get(key);
+    String declared = d.getVersion();
+    if (declared == null || declared.isBlank()) {
+      return classifyManagedDependency(d, key, mgmt, warnings);
     }
-    return deps;
+    return classifyDeclaredDependency(d, key, mgmt, declared, properties, warnings);
+  }
+
+  private static Optional<EffectiveDependency> classifyManagedDependency(
+      Dependency d, ManagementKey key, ManagedEntry mgmt, List<String> warnings) {
+    if (mgmt == null) {
+      warnings.add("No version for " + key.display() + " and no managed entry found — skipped");
+      return Optional.empty();
+    }
+    return Optional.of(
+        new EffectiveDependency(
+            d.getGroupId(),
+            d.getArtifactId(),
+            mgmt.version(),
+            Source.MANAGED,
+            Optional.of(mgmt.managedBy()),
+            mgmt.losingCandidates()));
+  }
+
+  private static Optional<EffectiveDependency> classifyDeclaredDependency(
+      Dependency d,
+      ManagementKey key,
+      ManagedEntry mgmt,
+      String declared,
+      Map<String, String> properties,
+      List<String> warnings) {
+    String resolved = PropertyInterpolator.interpolate(declared, properties);
+    // Heuristic: residual "${" means interpolation left a placeholder unresolved — no real Maven
+    // version string contains it.
+    if (resolved.isBlank() || resolved.contains("${")) {
+      warnings.add("Could not resolve version for " + key.display() + " (raw: " + declared + ")");
+      return Optional.empty();
+    }
+    Source source = mgmt == null ? Source.EXPLICIT : Source.EXPLICIT_OVERRIDE;
+    Optional<MavenCoordinate> managedBy =
+        mgmt == null ? Optional.empty() : Optional.of(mgmt.managedBy());
+    // For EXPLICIT_OVERRIDE, surface BOTH the winning managed entry AND its losers so the caller
+    // can see every candidate version their override is choosing against. For EXPLICIT (no managed
+    // entry at all) conflicts is empty.
+    List<ManagedAlternative> conflicts = mgmt == null ? List.of() : prependWinnerToConflicts(mgmt);
+    return Optional.of(
+        new EffectiveDependency(
+            d.getGroupId(), d.getArtifactId(), resolved, source, managedBy, conflicts));
   }
 
   /**
@@ -246,25 +293,35 @@ public class EffectivePomResolver {
       return;
     }
     for (Dependency d : model.getDependencyManagement().getDependencies()) {
-      if ("import".equals(d.getScope()) && "pom".equals(d.getType())) {
-        importBom(d, properties, sink, warnings, visitedBoms);
-        continue;
-      }
-      ManagementKey key = ManagementKey.from(d);
-      String version = PropertyInterpolator.interpolate(d.getVersion(), properties);
-      if (version == null || version.isBlank() || version.contains("${")) {
-        warnings.add(
-            "Managed version for "
-                + key.display()
-                + " from "
-                + source.toCoordinateString()
-                + " could not be resolved (raw: "
-                + d.getVersion()
-                + ")");
-        continue;
-      }
-      mergeManagedEntry(sink, key, new ManagedEntry(version, source, List.of()));
+      processManagementEntry(d, source, properties, sink, warnings, visitedBoms);
     }
+  }
+
+  private void processManagementEntry(
+      Dependency d,
+      MavenCoordinate source,
+      Map<String, String> properties,
+      Map<ManagementKey, ManagedEntry> sink,
+      List<String> warnings,
+      Set<String> visitedBoms) {
+    if ("import".equals(d.getScope()) && "pom".equals(d.getType())) {
+      importBom(d, properties, sink, warnings, visitedBoms);
+      return;
+    }
+    ManagementKey key = ManagementKey.from(d);
+    String version = PropertyInterpolator.interpolate(d.getVersion(), properties);
+    if (version == null || version.isBlank() || version.contains("${")) {
+      warnings.add(
+          "Managed version for "
+              + key.display()
+              + " from "
+              + source.toCoordinateString()
+              + " could not be resolved (raw: "
+              + d.getVersion()
+              + ")");
+      return;
+    }
+    mergeManagedEntry(sink, key, new ManagedEntry(version, source, List.of()));
   }
 
   /**
@@ -275,16 +332,16 @@ public class EffectivePomResolver {
    */
   private static void mergeManagedEntry(
       Map<ManagementKey, ManagedEntry> sink, ManagementKey key, ManagedEntry candidate) {
-    ManagedEntry existing = sink.get(key);
-    if (existing == null) {
-      sink.put(key, candidate);
-      return;
-    }
+    sink.merge(key, candidate, EffectivePomResolver::resolveManagedCollision);
+  }
+
+  private static ManagedEntry resolveManagedCollision(
+      ManagedEntry existing, ManagedEntry candidate) {
     if (existing.version().equals(candidate.version())
         && existing.managedBy().equals(candidate.managedBy())) {
       // Same source supplied the same value (e.g., a BOM walked via its parent chain handing the
       // same entry back). Not a meaningful conflict; keep the existing entry.
-      return;
+      return existing;
     }
     List<ManagedAlternative> losers =
         new ArrayList<>(
@@ -292,7 +349,7 @@ public class EffectivePomResolver {
     losers.addAll(existing.losingCandidates());
     losers.add(new ManagedAlternative(candidate.version(), candidate.managedBy()));
     losers.addAll(candidate.losingCandidates());
-    sink.put(key, new ManagedEntry(existing.version(), existing.managedBy(), List.copyOf(losers)));
+    return new ManagedEntry(existing.version(), existing.managedBy(), List.copyOf(losers));
   }
 
   /**
@@ -375,14 +432,14 @@ public class EffectivePomResolver {
   }
 
   private static MavenCoordinate rootCoordinate(Model root) {
-    String groupId =
-        root.getGroupId() != null
-            ? root.getGroupId()
-            : (root.getParent() != null ? root.getParent().getGroupId() : null);
-    String version =
-        root.getVersion() != null
-            ? root.getVersion()
-            : (root.getParent() != null ? root.getParent().getVersion() : null);
+    String groupId = root.getGroupId();
+    if (groupId == null && root.getParent() != null) {
+      groupId = root.getParent().getGroupId();
+    }
+    String version = root.getVersion();
+    if (version == null && root.getParent() != null) {
+      version = root.getParent().getVersion();
+    }
     return MavenCoordinate.of(groupId, root.getArtifactId(), version);
   }
 

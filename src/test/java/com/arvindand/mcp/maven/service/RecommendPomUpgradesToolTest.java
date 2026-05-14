@@ -39,7 +39,7 @@ class RecommendPomUpgradesToolTest {
     when(resolver.resolve("<pom/>"))
         .thenReturn(
             new EffectivePomResult(
-                List.of(explicit("com.example", "lib", "1.0.0")), List.of(), List.of()));
+                List.of(explicit("com.example", "lib", "1.0.0")), List.of(), List.of(), List.of()));
     // Newest first per Maven Central semantics.
     when(maven.getAllVersions(any())).thenReturn(List.of("1.0.1", "1.0.0"));
 
@@ -71,7 +71,10 @@ class RecommendPomUpgradesToolTest {
     when(resolver.resolve("<pom/>"))
         .thenReturn(
             new EffectivePomResult(
-                List.of(managed("com.example", "lib", "5.0.0", bom)), List.of(), List.of()));
+                List.of(managed("com.example", "lib", "5.0.0", bom)),
+                List.of(),
+                List.of(bom),
+                List.of()));
     when(maven.getAllVersions(any())).thenReturn(List.of("1.1.0", "1.0.0"));
 
     PomUpgradeRecommendation rec =
@@ -99,7 +102,7 @@ class RecommendPomUpgradesToolTest {
     when(resolver.resolve("<pom/>"))
         .thenReturn(
             new EffectivePomResult(
-                List.of(explicit("com.example", "lib", "1.5.0")), List.of(), List.of()));
+                List.of(explicit("com.example", "lib", "1.5.0")), List.of(), List.of(), List.of()));
     // Newest first: major 2.x available, 1.5.3 is the latest same-major stable.
     when(maven.getAllVersions(any())).thenReturn(List.of("2.0.0", "1.5.3", "1.5.0"));
 
@@ -129,7 +132,7 @@ class RecommendPomUpgradesToolTest {
     when(resolver.resolve("<pom/>"))
         .thenReturn(
             new EffectivePomResult(
-                List.of(explicit("com.example", "lib", "1.5.0")), List.of(), List.of()));
+                List.of(explicit("com.example", "lib", "1.5.0")), List.of(), List.of(), List.of()));
     when(maven.getAllVersions(any())).thenReturn(List.of("2.0.0", "1.5.0"));
 
     PomUpgradeRecommendation rec =
@@ -162,7 +165,7 @@ class RecommendPomUpgradesToolTest {
             Optional.of(bom),
             List.of(new ManagedAlternative("2.19.0", bom)));
     when(resolver.resolve("<pom/>"))
-        .thenReturn(new EffectivePomResult(List.of(override), List.of(), List.of()));
+        .thenReturn(new EffectivePomResult(List.of(override), List.of(), List.of(), List.of()));
     when(maven.getAllVersions(any())).thenReturn(List.of("2.20.5", "2.20.0"));
 
     PomUpgradeRecommendation rec =
@@ -206,7 +209,8 @@ class RecommendPomUpgradesToolTest {
             Optional.of(bomA),
             List.of(new ManagedAlternative("2.19.2", bomB)));
     when(resolver.resolve("<pom/>"))
-        .thenReturn(new EffectivePomResult(List.of(contestedManaged), List.of(), List.of()));
+        .thenReturn(
+            new EffectivePomResult(List.of(contestedManaged), List.of(), List.of(), List.of()));
     // The BOMs themselves have no newer versions in this fixture, so no bom_bump fires —
     // and the contested dep itself goes to needs_attention via the conflict branch.
     when(maven.getAllVersions(any())).thenReturn(List.of("2.20.0", "2.19.2", "2.18.0"));
@@ -243,7 +247,7 @@ class RecommendPomUpgradesToolTest {
     when(resolver.resolve("<pom/>"))
         .thenReturn(
             new EffectivePomResult(
-                List.of(explicit("com.example", "lib", "1.0.0")), List.of(), List.of()));
+                List.of(explicit("com.example", "lib", "1.0.0")), List.of(), List.of(), List.of()));
     when(maven.getAllVersions(any())).thenReturn(List.of("1.0.0", "0.9.0"));
 
     PomUpgradeRecommendation rec =
@@ -262,6 +266,7 @@ class RecommendPomUpgradesToolTest {
     when(resolver.resolve("<pom/>"))
         .thenReturn(
             new EffectivePomResult(
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of("Parent com.example:parent:1.0.0 could not be fetched")));
@@ -287,6 +292,77 @@ class RecommendPomUpgradesToolTest {
     assertThat(((ToolResponse.Error) response).error().message())
         .startsWith("Invalid POM input:")
         .contains("malformed");
+  }
+
+  @Test
+  void skipsTransitivelyManagedBomNotInUserPom() {
+    // Simulates jackson-bom being transitively imported via the parent chain. The user's POM
+    // has no jackson-bom entry, so even though jackson-bom 1.0.0 -> 1.0.1 is available we must
+    // NOT emit a bom_bump action (the agent would have nowhere to apply it).
+    EffectivePomResolver resolver = mock(EffectivePomResolver.class);
+    MavenCentralService maven = mock(MavenCentralService.class);
+
+    MavenCoordinate transitiveBom =
+        MavenCoordinate.of("com.fasterxml.jackson", "jackson-bom", "1.0.0");
+    MavenCoordinate directParent =
+        MavenCoordinate.of("org.springframework.boot", "spring-boot-starter-parent", "3.5.14");
+    when(resolver.resolve("<pom/>"))
+        .thenReturn(
+            new EffectivePomResult(
+                List.of(
+                    managed(
+                        "com.fasterxml.jackson.core", "jackson-databind", "2.18.0", transitiveBom)),
+                List.of(directParent),
+                List.of(), // no root imports
+                List.of()));
+    // jackson-bom HAS a newer version on Central, but it's not user-controllable here.
+    // Parent has no newer version in this fixture.
+    when(maven.getAllVersions(MavenCoordinate.of("com.fasterxml.jackson", "jackson-bom", null)))
+        .thenReturn(List.of("1.0.1", "1.0.0"));
+    when(maven.getAllVersions(
+            MavenCoordinate.of("org.springframework.boot", "spring-boot-starter-parent", null)))
+        .thenReturn(List.of("3.5.14"));
+
+    PomUpgradeRecommendation rec =
+        getSuccessData(
+            buildTools(resolver, maven)
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null));
+
+    assertThat(rec.deterministicActions())
+        .as("transitive jackson-bom must not be recommended as a bom_bump")
+        .noneMatch(a -> "jackson-bom".equals(a.artifactId()));
+    assertThat(rec.needsAttention())
+        .as("transitive jackson-bom must not surface as needs_attention either")
+        .noneMatch(n -> "jackson-bom".equals(n.artifactId()));
+  }
+
+  @Test
+  void classifiesDirectParentEvenWithoutManagedDeps() {
+    // The direct parent is always a user-controllable knob, even if no managed dep cites it as
+    // its immediate managedBy (most management cascades through deeper BOM imports).
+    EffectivePomResolver resolver = mock(EffectivePomResolver.class);
+    MavenCentralService maven = mock(MavenCentralService.class);
+
+    MavenCoordinate parent =
+        MavenCoordinate.of("org.springframework.boot", "spring-boot-starter-parent", "3.5.14");
+    when(resolver.resolve("<pom/>"))
+        .thenReturn(new EffectivePomResult(List.of(), List.of(parent), List.of(), List.of()));
+    when(maven.getAllVersions(any())).thenReturn(List.of("3.5.16", "3.5.14"));
+
+    PomUpgradeRecommendation rec =
+        getSuccessData(
+            buildTools(resolver, maven)
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null));
+
+    assertThat(rec.deterministicActions())
+        .singleElement()
+        .satisfies(
+            a -> {
+              assertThat(a.kind()).isEqualTo(UpgradeAction.KIND_BOM_BUMP);
+              assertThat(a.artifactId()).isEqualTo("spring-boot-starter-parent");
+              assertThat(a.current()).isEqualTo("3.5.14");
+              assertThat(a.target()).isEqualTo("3.5.16");
+            });
   }
 
   @Test
