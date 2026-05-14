@@ -33,10 +33,18 @@ public class CacheConfig {
     cacheManager.registerCustomCache(MAVEN_ACCURATE_HISTORICAL_DATA, mavenCentralCache());
     cacheManager.registerCustomCache(MAVEN_POM_XML, mavenCentralCache());
 
+    // Effective POM cache — keyed by raw pomXml. Smaller capacity since each entry holds a
+    // full resolver result and POMs are larger than the other coordinate-based keys.
+    cacheManager.registerCustomCache(MAVEN_EFFECTIVE_POM, effectivePomCache());
+
     return cacheManager;
   }
 
   private Cache<Object, Object> mavenCentralCache() {
     return Caffeine.newBuilder().maximumSize(2000).expireAfterWrite(Duration.ofHours(24)).build();
+  }
+
+  private Cache<Object, Object> effectivePomCache() {
+    return Caffeine.newBuilder().maximumSize(256).expireAfterWrite(Duration.ofHours(1)).build();
   }
 }

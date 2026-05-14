@@ -1,5 +1,7 @@
 package com.arvindand.mcp.maven.pom;
 
+import static com.arvindand.mcp.maven.config.CacheConstants.MAVEN_EFFECTIVE_POM;
+
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import java.io.IOException;
 import java.io.StringReader;
@@ -15,6 +17,7 @@ import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 /**
@@ -54,10 +57,17 @@ public class EffectivePomResolver {
   /**
    * Resolves the effective POM for the given POM XML string.
    *
+   * <p>Results are cached by raw {@code pomXml} content for 1 hour — a follow-up call from the same
+   * client (e.g., {@code analyze_pom_dependencies} then {@code recommend_pom_upgrades} on the same
+   * POM) skips the entire parent / DM walk including XML reparse. The TTL is shorter than the
+   * underlying Maven Central caches (24h) so a freshly-published parent is picked up within an hour
+   * even when the input pomXml hasn't changed.
+   *
    * @param pomXml the raw POM XML content
    * @return the resolved effective POM result
    * @throws IllegalArgumentException if the input is not valid POM XML
    */
+  @Cacheable(value = MAVEN_EFFECTIVE_POM, key = "#pomXml")
   public EffectivePomResult resolve(String pomXml) {
     Model root = parsePom(pomXml);
     List<String> warnings = new ArrayList<>();
