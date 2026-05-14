@@ -25,6 +25,8 @@ Use Maven Tools MCP when you want to:
 - plan upgrades with major/minor/patch context
 - audit a project for stale, risky, or weakly maintained dependencies
 - give an AI assistant structured, current dependency metadata instead of making it scrape docs or web pages
+- resolve a whole `pom.xml` into per-dependency effective versions — walking the parent chain, applying `<dependencyManagement>`, importing BOMs — without actually building the project (useful in CI pre-checks, dependency-update PRs, multi-module monorepos, and any project where bumping a library means bumping a BOM instead)
+- get a deterministic, applyable upgrade plan that a non-LLM agent can execute in one round-trip, with majors / conflicts / explicit overrides separated out for human or LLM judgement
 
 This project works with any JVM build tool that relies on Maven Central. The inputs are standard Maven coordinates, so the same data applies to Maven, Gradle, SBT, and Mill projects.
 
@@ -41,7 +43,9 @@ This project is most useful when a plain package search is not enough.
 
 One of the more interesting uses of this project is agent-driven dependency maintenance.
 
-The core server does not open PRs by itself, but it gives an agent enough current dependency context to make safer update decisions than a blind version-bump workflow. This repository's own weekly self-update flow is the clearest example: GitHub Actions orchestrates the run, direct MCP calls apply deterministic minor/patch updates, and the result is a reviewable PR. Major-upgrade review is the only path that asks Copilot for judgement and migration framing.
+The core server does not open PRs by itself, but it gives an agent enough current dependency context to make safer update decisions than a blind version-bump workflow. The `recommend_pom_upgrades` tool was built for exactly that shape: a non-LLM agent hands it a raw `pom.xml`, applies every `deterministic_actions[]` entry as a one-line `<version>` edit (parent block and dep block both handled), and surfaces `needs_attention[]` for a human or LLM to review separately. No per-coordinate fan-out, no Maven XML parsing in agent code, and no recommendations the agent can't actually apply — transitively-managed BOMs are filtered out because the caller has no `<version>` to bump.
+
+This repository's own weekly self-update flow is the clearest example: GitHub Actions orchestrates the run, one MCP call returns the action list, the agent applies the diffs, and the result is a reviewable PR. Major-upgrade review is the only path that asks Copilot for judgement and migration framing.
 
 That is also why the dogfooding setup matters beyond this repository. It demonstrates, in a small and concrete way, the same shape that broader GitHub Agentic Workflows can build on: a workflow orchestrator, structured tool output for deterministic edits, an AI worker only where judgement is useful, and a human-reviewed change at the end.
 
