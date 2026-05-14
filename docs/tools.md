@@ -18,14 +18,14 @@ Maven Tools MCP exposes 11 MCP tools: 9 core Maven/dependency tools and 2 raw Co
 
 ## POM-Aware Analysis
 
-`analyze_pom_dependencies` is the only tool that takes a whole POM (raw XML) rather than a coordinate. It walks the parent chain, applies `<properties>` interpolation (including `${project.version}` / `${project.parent.version}`), merges `<dependencyManagement>` with closest-ancestor-wins semantics, and resolves `<scope>import</scope>` BOMs against Maven Central. For each declared dependency it returns:
+`analyze_pom_dependencies` takes a whole POM (raw XML) rather than a coordinate (the same applies to `recommend_pom_upgrades`). It walks the parent chain, applies `<properties>` interpolation (including `${project.version}` / `${project.parent.version}`, scoped per-POM so an imported BOM's `${project.version}` resolves to that BOM's version, not the importer's), merges `<dependencyManagement>` with closest-ancestor-wins semantics, and resolves `<scope>import</scope>` BOMs against Maven Central. For each declared dependency it returns:
 
 - `effectiveVersion` — what would be used at build time
 - `source` — `EXPLICIT` (declared inline with a version), `MANAGED` (no version here, inherited), or `EXPLICIT_OVERRIDE` (declared AND inherited)
 - `managedBy` — which BOM or parent supplied the version, when applicable
 - `conflicts[]` — losing candidates when multiple BOMs at the same level disagree (e.g., Spring Boot + Spring Cloud + Jackson BOM all managing `jackson-databind`). Surfaced as raw data so the caller can decide whether to pin the version explicitly; the resolver does not recommend an action.
 
-The tool also returns the resolved `parentChain` and a `warnings[]` array listing every silent-drop site (unreachable parents, unresolvable property placeholders, depth-cap exhaustion, failed BOM fetches).
+The tool also returns the resolved `parentChain`, a `rootImportedBoms[]` list of BOMs the root POM declares directly via `<scope>import</scope>` (the user-controllable knobs alongside `parentChain[0]`), and a `warnings[]` array listing every silent-drop site (unreachable parents, unresolvable property placeholders, depth-cap exhaustion, failed BOM fetches).
 
 For multi-module / monorepo projects, pass an optional `sideloadedPoms: string[]` of additional POM XML strings (sibling modules, unreleased parents). The resolver indexes each by its self-declared GAV and tries the bundle before falling back to Maven Central — so a child whose parent is not yet published still resolves cleanly.
 
@@ -34,8 +34,10 @@ For multi-module / monorepo projects, pass an optional `sideloadedPoms: string[]
 The classification is the upgrade policy:
 
 - **`EXPLICIT`** + a newer same-major minor/patch on Maven Central → bump the version inline.
-- **`MANAGED`** + a newer same-major minor/patch of the *managing BOM* that ships a newer version of this dep → bump the **BOM**, not the dep. One BOM bump can pick up dozens of patch updates for free.
+- **`MANAGED`** + the *user-controllable* managing BOM has a newer same-major minor/patch on Maven Central → bump the **BOM**, not the dep. One BOM bump can pick up dozens of patch updates for free.
 - **`EXPLICIT_OVERRIDE`** → judgement call. The override exists for a reason (security pin, framework workaround, etc.). The tool surfaces every candidate version the override is choosing against, including from competing BOMs — useful context for a human or LLM reviewing the override.
+
+"User-controllable" means the BOM appears directly in the input POM — either as the `<parent>` or as an entry in the root POM's `<dependencyManagement>` imports. Transitively-imported BOMs (e.g., `jackson-bom` inherited through `spring-boot-dependencies`) are silently skipped because the caller has no `<version>` to edit; their upgrades surface via whichever user-controllable knob pulls them in.
 
 `recommend_pom_upgrades` applies this policy and returns a split response so the right consumer reads the right part:
 

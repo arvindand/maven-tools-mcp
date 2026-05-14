@@ -17,22 +17,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.0.0] - 2026-05-14
 
-**POM-Aware Dependency Analysis Release** — introduces a new MCP tool that resolves the effective version of every declared dependency in a Maven POM by walking the parent chain, applying `<dependencyManagement>`, and resolving `<scope>import</scope>` BOM imports. Where previous tools answered "what's the latest version of X on Maven Central?", the new tool answers "what version does this POM actually resolve to for X, and where does that version come from?" Required reading for multi-module projects, Spring Boot apps with BOM-managed transitives, and any project where bumping a dependency means bumping a BOM instead.
+**POM-Aware Dependency Analysis Release** — introduces two new MCP tools that resolve the effective version of every declared dependency in a Maven POM by walking the parent chain, applying `<dependencyManagement>`, and resolving `<scope>import</scope>` BOM imports. Where previous tools answered "what's the latest version of X on Maven Central?", the new tools answer "what version does this POM actually resolve to for X, and which knob in my POM controls it?" Useful for multi-module projects, Spring Boot apps with BOM-managed transitives, and any project where bumping a dependency means bumping a BOM instead.
 
 ### Added (3.0.0)
 
-- **`analyze_pom_dependencies` MCP tool**: takes raw POM XML and returns each declared dependency with its effective version classified as `EXPLICIT`, `MANAGED`, or `EXPLICIT_OVERRIDE`, the parent chain that was walked, the managing BOM / parent coordinate when applicable, and warnings for any unresolved bits. Optional `sideloadedPoms` argument accepts a bundle of additional POMs (sibling modules, unreleased parents) so monorepos and not-yet-published parents resolve without each side needing to be on Maven Central.
-- **`recommend_pom_upgrades` MCP tool**: builds on the resolver to return a split upgrade plan: `deterministic_actions[]` (mechanical `<version>` edits a non-LLM agent applies directly — `explicit_bump` for declared deps, `bom_bump` for BOM-managed deps where a newer minor/patch BOM is available) and `needs_attention[]` (majors, multi-BOM conflicts, and explicit overrides, each carrying the Maven Central latest so an LLM has full context in one round-trip). Lets the dogfood self-update agent stop parsing Maven XML in Python and skip per-dep `compare_dependency_versions` fan-out. Modes: `MINOR_PATCH` (default — majors route to `needs_attention`) and `ALL` (majors also count as deterministic; rarely the right call).
-- **POM resolver service** (`com.arvindand.mcp.maven.pom`): the engine behind the new tool. Walks parent POMs and `<scope>import</scope>` BOMs against Maven Central, interpolates `${name}` and `${project.version}` / `${project.parent.version}` placeholders, merges `<dependencyManagement>` with closest-ancestor-wins semantics (typed `(groupId, artifactId, type, classifier)` keys so `test-jar` and `jar` entries don't collide), walks each imported BOM's own parent chain, and surfaces warnings at every silent-drop site (unresolvable managed version, unreachable parent, BOM fetch failure, parent depth cap).
+- **`analyze_pom_dependencies` MCP tool**: takes raw POM XML and returns each declared dependency with its effective version classified as `EXPLICIT`, `MANAGED`, or `EXPLICIT_OVERRIDE`, the parent chain that was walked, the BOMs directly imported by the root POM (`rootImportedBoms`), the managing BOM / parent coordinate when applicable, and warnings for any unresolved bits. Optional `sideloadedPoms` argument accepts a bundle of additional POMs (sibling modules, unreleased parents) so monorepos and not-yet-published parents resolve without each side needing to be on Maven Central.
+- **`recommend_pom_upgrades` MCP tool**: builds on the resolver to return a split upgrade plan: `deterministic_actions[]` (mechanical `<version>` edits a non-LLM agent applies directly — `explicit_bump` for declared deps, `bom_bump` for user-controllable BOMs where a newer minor/patch is available) and `needs_attention[]` (majors, multi-BOM conflicts, and explicit overrides, each carrying the Maven Central latest so an LLM has full context in one round-trip). Lets the dogfood self-update agent stop parsing Maven XML in Python and skip per-dep `compare_dependency_versions` fan-out. Modes: `MINOR_PATCH` (default — majors route to `needs_attention`) and `ALL` (majors also count as deterministic; rarely the right call).
+- **POM resolver service** (`com.arvindand.mcp.maven.pom`): the engine behind both new tools. Walks parent POMs and `<scope>import</scope>` BOMs against Maven Central, interpolates `${name}` and `${project.version}` / `${project.parent.version}` placeholders, merges `<dependencyManagement>` with closest-ancestor-wins semantics (typed `(groupId, artifactId, type, classifier)` keys so `test-jar` and `jar` entries don't collide), walks each imported BOM's own parent chain, and surfaces warnings at every silent-drop site (unresolvable managed version, unreachable parent, BOM fetch failure, parent depth cap). Cycle-safe: a visited-set guard short-circuits pathological / self-referential BOM imports.
 - **Multi-BOM conflict tracking**: when two BOMs imported at the same level disagree on a dependency, the first-declared wins per Maven semantics and the losing candidates surface on `EffectiveDependency.conflicts[]` so the caller can detect the ambiguity. For `EXPLICIT_OVERRIDE` deps, `conflicts[]` lists every candidate the override is choosing against. The resolver does not recommend an action — surfacing the raw candidates is intentional so callers (typically an LLM with surrounding code context) can decide whether to pin the version explicitly.
-- **`MavenCentralService.fetchPomXml`**: direct repo fetch alongside the existing `maven-metadata.xml` fetcher. Annotated with `@Cacheable` (`mavenPomXml`, 24h TTL) + `@CircuitBreaker` / `@Retry` / `@RateLimiter`; 404s return `Optional.empty()`, other `RestClientException`s rethrow so the resilience4j stack actually engages.
+- **`MavenCentralService.fetchPomXml`**: direct repo fetch alongside the existing `maven-metadata.xml` fetcher. Annotated with `@Cacheable` (`maven-pom-xml`, 24h TTL) + `@CircuitBreaker` / `@Retry` / `@RateLimiter`; 404s return `Optional.empty()`, other `RestClientException`s rethrow so the resilience4j stack actually engages.
+- **Resolver-level caching**: `EffectivePomResolver.resolve(pomXml)` is `@Cacheable` (1h TTL, 256-entry cap) so a follow-up call on the same POM — e.g., `analyze_pom_dependencies` followed by `recommend_pom_upgrades` — skips the entire parent / DM walk including XML reparse. End-to-end on this repo's own POM: ~2800ms cold → ~80ms warm.
 
 ### Changed (3.0.0)
 
 - **Java toolchain**: upgraded from Java 24 to Java 25 (LTS). `<java.version>` bumped in `pom.xml`; `actions/setup-java` pinned to `25` in CI and Docker workflows; README badge updated. Buildpack JDK image is selected automatically from `<java.version>`.
 - **`maven-model 3.9.12`** added as a runtime dependency (data classes + Xpp3 reader, ~200KB). Used by the POM resolver. Deliberately not pulling in `maven-model-builder` or `maven-resolver` — the resolution loop is hand-rolled in `com.arvindand.mcp.maven.pom`.
-- **Native image hints**: `EffectivePomResult`, `EffectiveDependency`, `ManagedAlternative` records and the `Source` enum registered for reflection in `NativeImageConfiguration` so JSON serialization works in the native binary.
-- **Major version bump (2.x → 3.0)**: signals the qualitative shift from "Maven Central lookups" to "POM-aware analysis." Existing 10 tools are unchanged; the new tool is additive.
+- **Upgrade recommendations scoped to user-controllable BOMs**: `recommend_pom_upgrades` now classifies only BOMs the caller can actually edit in their own POM — the direct `<parent>` and root POM `<dependencyManagement>` imports. Transitively-imported BOMs (e.g., `jackson-bom` inherited through `spring-boot-dependencies`) are silently skipped because there's no `<version>` for the agent to edit; their upgrades surface through whichever user-controllable knob brings them in. Before the change the tool was emitting unactionable bom_bump entries that the agent couldn't apply.
+- **Dogfood agent collapses to one MCP call**: the Python self-update agent's deterministic path (minor/patch and `all` modes) now hands the raw `pom.xml` to `recommend_pom_upgrades` and applies the returned `deterministic_actions[]` directly. The previous per-coordinate `compare_dependency_versions` fan-out plus Python POM parsing is gone. Major-review mode still routes through the Copilot SDK.
+- **Native image hints**: `EffectivePomResult`, `EffectiveDependency`, `ManagedAlternative`, `PomUpgradeRecommendation`, `UpgradeAction`, and the `NeedsAttention.*` records plus `Source` / `UpgradeMode` enums registered for reflection in `NativeImageConfiguration`.
+- **Major version bump (2.x → 3.0)**: signals the qualitative shift from "Maven Central lookups" to "POM-aware analysis." Existing tools that survived consolidation are unchanged; the two new tools are additive.
+
+### Fixed (3.0.0)
+
+- **`project.*` properties scoped to the imported BOM**: when a BOM's `<dependencyManagement>` used `${project.version}` (a common pattern — Spring AI BOM does this), the importer's `project.version` was leaking into the BOM's interpolation context. Every managed entry in such a BOM came back at the importer's version (e.g., `3.0.0` instead of the BOM's `1.1.6`). `project.*` placeholders inside an imported BOM now resolve against that BOM's own coordinates; user-defined properties keep the prior "importer wins" semantics so callers can still override `${spring-ai.version}` etc.
+- **`NeedsAttention.kind` JSON discriminator**: Jackson was dropping the `kind()` interface method from the serialized output because record-component serialization doesn't cover interface methods. `kind` was missing from every `needs_attention` entry, leaving clients unable to tell `major_available` / `conflict` / `explicit_override` apart. Now annotated with `@JsonProperty` so it survives serialization (including in the native image).
+- **MCP server version metadata**: `application.yaml`'s `spring.ai.mcp.server.version` was left at `2.1.1` during release prep. Bumped to `3.0.0` so the MCP `serverInfo` matches the actual release.
 
 ### Removed (3.0.0)
 
@@ -42,8 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Notes (3.0.0)
 
-- **Out of scope**: transitive dependency walking, version range syntax (`[1.0,2.0)` treated as opaque), profile activation, CI-friendly `${revision}` / flatten-maven-plugin output, cyclic BOM imports (recursion is bounded by Maven Central's rejection of such cycles; a visited-set guard would harden against pathological input).
-- **Attribution**: the resolution algorithm shape is adapted from the MIT-licensed [maxxq-org/maxxq-maven](https://github.com/maxxq-org/maxxq-maven) by Guy Chauliac. No source was copied; the implementation is written from scratch. See [`NOTICE`](NOTICE).
+- **Out of scope**: transitive dependency walking, version range syntax (`[1.0,2.0)` treated as opaque), profile activation, CI-friendly `${revision}` / flatten-maven-plugin output.
+- **Perf detail**: `recommend_pom_upgrades` skips the Maven Central lookup for `MANAGED` dependencies without conflicts — their upgrade rides on whichever user-controllable BOM is already being classified, so a per-dep lookup would be wasted work even with cache hits absorbing the cost.
+- **Attribution**: the resolution algorithm shape follows [maxxq-org/maxxq-maven](https://github.com/maxxq-org/maxxq-maven) by Guy Chauliac (MIT). See [`NOTICE`](NOTICE).
 
 ## [2.1.1] - 2026-05-12
 
@@ -619,7 +629,11 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.6...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/arvindand/maven-tools-mcp/compare/v2.1.1...v3.0.0
+[2.1.1]: https://github.com/arvindand/maven-tools-mcp/compare/v2.1.0...v2.1.1
+[2.1.0]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.7...v2.1.0
+[2.0.7]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.6...v2.0.7
 [2.0.6]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.5...v2.0.6
 [2.0.5]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.4...v2.0.5
 [2.0.4]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.3...v2.0.4

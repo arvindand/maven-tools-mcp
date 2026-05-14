@@ -17,10 +17,9 @@
  * where applicable, and any losing {@link com.arvindand.mcp.maven.pom.ManagedAlternative candidate
  * versions} from competing BOMs.
  *
- * <p>The resolution algorithm shape (parent walk → properties → BOM import → depMgmt merge) is
- * adapted from the MIT-licensed <a
- * href="https://github.com/maxxq-org/maxxq-maven">maxxq-org/maxxq-maven</a> by Guy Chauliac. No
- * source was copied; the implementation is written from scratch.
+ * <p>The resolution shape (parent walk → properties → BOM import → depMgmt merge) follows the
+ * MIT-licensed <a href="https://github.com/maxxq-org/maxxq-maven">maxxq-org/maxxq-maven</a> by Guy
+ * Chauliac.
  *
  * @author Arvind Menon
  * @since 3.0.0
