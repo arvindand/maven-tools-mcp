@@ -11,7 +11,7 @@
     </parent>
     <groupId>com.arvindand.mcp</groupId>
     <artifactId>maven-tools-mcp</artifactId>
-    <version>2.1.1</version>
+    <version>3.0.0</version>
     <name>maven-tools-mcp</name>
     <description>Maven Tools MCP server with universal JVM dependency intelligence. Provides comprehensive dependency analysis for any build tool (Maven, Gradle, SBT, Mill) using Maven Central Repository. Works with Claude Desktop, GitHub Copilot, and other MCP clients.</description>
     <url>https://github.com/arvindand/maven-tools-mcp</url>
@@ -34,7 +34,7 @@
         <url>https://github.com/arvindand/maven-tools-mcp</url>
     </scm>
     <properties>
-        <java.version>24</java.version>
+        <java.version>25</java.version>
         <spring-ai.version>1.1.6</spring-ai.version>
         <!-- Temporary override: Logback 1.5.32 emits startup status lines on stdout in native stdio
              images, breaking MCP JSON-RPC parsing in VS Code/Copilot. Latest 1.5.32 still affected.
@@ -42,7 +42,7 @@
              a version with the fix. -->
         <logback.version>1.5.22</logback.version>
         <fmt-maven-plugin.version>2.29</fmt-maven-plugin.version>
-        <maven-artifact.version>3.9.14</maven-artifact.version>
+        <maven-artifact.version>3.9.15</maven-artifact.version>
         <okhttp.version>5.3.2</okhttp.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <!-- Test execution properties -->
@@ -81,6 +81,15 @@
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-artifact</artifactId>
             <version>${maven-artifact.version}</version>
+        </dependency>
+
+        <!-- Maven model XML reader and data classes for POM resolution (Phase 6a).
+             We deliberately do not pull in maven-model-builder or maven-resolver -
+             we hand-roll the resolution loop in com.arvindand.mcp.maven.pom. -->
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-model</artifactId>
+            <version>3.9.15</version>
         </dependency>
 
         <!-- Jackson for JSON processing -->

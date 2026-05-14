@@ -12,7 +12,10 @@ import pytest
 
 from scripts.upgrade import (
     PomUpdater,
-    extract_server_same_major_fallback_updates,
+    _action_key,
+    _apply_deterministic_actions,
+    _filter_actions_by_ignored,
+    _filter_attention_by_ignored,
     parse_ignored_dependency_keys,
     parse_mcp_response,
     should_use_copilot_session,
@@ -189,57 +192,131 @@ def test_extract_tool_response_payload_reads_text_content_json() -> None:
     assert payload == {"data": {"dependencies": [{"coordinate": "junit:junit"}]}}
 
 
-def test_extract_server_same_major_fallback_updates_reads_optional_field() -> None:
-    response = {
-        "data": {
-            "dependencies": [
-                {
-                    "coordinate": "org.springframework.boot:spring-boot-starter-parent",
-                    "currentVersion": "3.5.9",
-                    "latestVersion": "4.0.0",
-                    "updateType": "MAJOR",
-                    "sameMajorStableFallback": {
-                        "latestVersion": "3.5.11",
-                        "updateType": "PATCH",
-                    },
-                },
-                {
-                    "coordinate": "org.slf4j:slf4j-api",
-                    "currentVersion": "2.0.16",
-                    "latestVersion": "2.0.17",
-                    "updateType": "PATCH",
-                },
-            ]
-        }
-    }
-
-    fallback_updates = extract_server_same_major_fallback_updates(response)
-
-    assert len(fallback_updates) == 1
-    assert fallback_updates[0].coordinate == "org.springframework.boot:spring-boot-starter-parent"
-    assert fallback_updates[0].current_version == "3.5.9"
-    assert fallback_updates[0].latest_version == "3.5.11"
-    assert fallback_updates[0].update_type == "patch"
+def test_apply_action_updates_dependency_block(tmp_path: Path) -> None:
+    pom_path = _write_pom(
+        tmp_path,
+        """
+        <project>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+              <version>2.15.0</version>
+            </dependency>
+          </dependencies>
+        </project>
+        """,
+    )
+    updater = PomUpdater(pom_path)
+    assert (
+        updater.apply_action("com.fasterxml.jackson.core", "jackson-databind", "2.18.0") is True
+    )
+    assert "<version>2.18.0</version>" in updater.content
 
 
-def test_extract_server_same_major_fallback_updates_supports_snake_case_payload() -> None:
-    response = {
-        "dependencies": [
-            {
-                "dependency": "org.springframework.boot:spring-boot-starter-parent",
-                "current_version": "3.5.9",
-                "latest_version": "4.0.0",
-                "update_type": "major",
-                "same_major_stable_fallback": {
-                    "latest_version": "3.5.11",
-                    "update_type": "patch",
-                },
-            }
-        ]
-    }
+def test_apply_action_falls_back_to_parent_block(tmp_path: Path) -> None:
+    pom_path = _write_pom(
+        tmp_path,
+        """
+        <project>
+          <parent>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-parent</artifactId>
+            <version>3.5.9</version>
+          </parent>
+        </project>
+        """,
+    )
+    updater = PomUpdater(pom_path)
+    assert (
+        updater.apply_action(
+            "org.springframework.boot", "spring-boot-starter-parent", "3.5.11"
+        )
+        is True
+    )
+    assert "<version>3.5.11</version>" in updater.content
 
-    fallback_updates = extract_server_same_major_fallback_updates(response)
 
-    assert len(fallback_updates) == 1
-    assert fallback_updates[0].latest_version == "3.5.11"
-    assert fallback_updates[0].update_type == "patch"
+def test_apply_action_does_not_match_unrelated_parent(tmp_path: Path) -> None:
+    pom_path = _write_pom(
+        tmp_path,
+        """
+        <project>
+          <parent>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-parent</artifactId>
+            <version>3.5.9</version>
+          </parent>
+        </project>
+        """,
+    )
+    updater = PomUpdater(pom_path)
+    assert updater.apply_action("io.example", "some-bom", "1.0.0") is False
+    assert "<version>3.5.9</version>" in updater.content
+
+
+def test_filter_actions_by_ignored_drops_matching_coords() -> None:
+    actions = [
+        {"kind": "explicit_bump", "groupId": "g1", "artifactId": "a1"},
+        {"kind": "bom_bump", "groupId": "g2", "artifactId": "a2"},
+    ]
+    filtered = _filter_actions_by_ignored(actions, {"g1:a1"})
+    assert len(filtered) == 1
+    assert filtered[0]["groupId"] == "g2"
+
+
+def test_filter_attention_by_ignored_drops_matching_coords() -> None:
+    attention = [
+        {"kind": "major_available", "groupId": "g1", "artifactId": "a1"},
+        {"kind": "conflict", "groupId": "g2", "artifactId": "a2"},
+    ]
+    filtered = _filter_attention_by_ignored(attention, {"g2:a2"})
+    assert len(filtered) == 1
+    assert filtered[0]["groupId"] == "g1"
+
+
+def test_action_key_combines_group_and_artifact() -> None:
+    assert _action_key({"groupId": "g", "artifactId": "a"}) == "g:a"
+    assert _action_key({}) == ":"
+
+
+def test_apply_deterministic_actions_applies_and_reports_failures(tmp_path: Path) -> None:
+    pom_path = _write_pom(
+        tmp_path,
+        """
+        <project>
+          <dependencies>
+            <dependency>
+              <groupId>org.slf4j</groupId>
+              <artifactId>slf4j-api</artifactId>
+              <version>2.0.16</version>
+            </dependency>
+          </dependencies>
+        </project>
+        """,
+    )
+    updater = PomUpdater(pom_path)
+    actions = [
+        {
+            "kind": "explicit_bump",
+            "groupId": "org.slf4j",
+            "artifactId": "slf4j-api",
+            "current": "2.0.16",
+            "target": "2.0.17",
+            "updateType": "patch",
+        },
+        {
+            "kind": "bom_bump",
+            "groupId": "io.missing",
+            "artifactId": "not-in-pom",
+            "current": "1.0.0",
+            "target": "1.1.0",
+            "updateType": "minor",
+        },
+    ]
+    applied, failed = _apply_deterministic_actions(updater, actions)
+    assert len(applied) == 1
+    assert applied[0]["artifactId"] == "slf4j-api"
+    assert len(failed) == 1
+    assert failed[0]["artifactId"] == "not-in-pom"
+    assert "<version>2.0.17</version>" in updater.content

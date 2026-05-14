@@ -2,8 +2,10 @@
 """
 Automated dependency upgrade workflow.
 
-Analyzes dependencies using MCP tools and applies minor/patch updates.
-PR creation and build validation are handled externally (e.g. by GitHub Actions).
+Calls the recommend_pom_upgrades MCP tool and applies the server-returned
+deterministic_actions directly to pom.xml. The needs_attention list (majors,
+multi-BOM conflicts, explicit overrides) is surfaced for review. PR creation
+and build validation are handled externally (e.g. by GitHub Actions).
 
 @author Arvind Menon
 """
@@ -106,7 +108,7 @@ class PomUpdater:
         return False
 
     def update_parent_version(self, new_version: str) -> bool:
-        """Update the parent POM version."""
+        """Update the parent POM version (matches any parent block)."""
         parent_pattern = r"""
             (<parent>\s*
             <groupId>[^<]+</groupId>\s*
@@ -120,6 +122,29 @@ class PomUpdater:
             self.content = new_content
             return True
         return False
+
+    def update_parent_version_if_matches(
+        self, group_id: str, artifact_id: str, new_version: str
+    ) -> bool:
+        """Update the parent POM version only when groupId+artifactId match."""
+        parent_pattern = rf"""
+            (<parent>\s*
+            <groupId>{re.escape(group_id)}</groupId>\s*
+            <artifactId>{re.escape(artifact_id)}</artifactId>\s*
+            <version>)([^<]+)(</version>)
+        """
+        regex = re.compile(parent_pattern, re.VERBOSE | re.DOTALL)
+        new_content, count = regex.subn(rf"\g<1>{new_version}\g<3>", self.content)
+        if count > 0:
+            self.content = new_content
+            return True
+        return False
+
+    def apply_action(self, group_id: str, artifact_id: str, new_version: str) -> bool:
+        """Apply a version bump — tries dependency block first, then parent block."""
+        if self.update_version(group_id, artifact_id, new_version):
+            return True
+        return self.update_parent_version_if_matches(group_id, artifact_id, new_version)
 
     def save(self) -> None:
         """Save the updated POM."""
@@ -229,41 +254,6 @@ def _display_security_issues(mcp_response: dict[str, Any]) -> None:
     console.print(sec_table)
 
 
-def _apply_pom_updates(
-    pom_updater: PomUpdater,
-    updates: list[DependencyUpdate],
-    parsed_deps: list[ParsedDependency],
-) -> list[DependencyUpdate]:
-    """Apply updates to POM and return list of successfully applied updates."""
-    applied = []
-    for update in updates:
-        is_parent = any(
-            p.source == "parent"
-            and p.group_id == update.group_id
-            and p.artifact_id == update.artifact_id
-            for p in parsed_deps
-        )
-
-        if is_parent:
-            success = pom_updater.update_parent_version(update.latest_version)
-        else:
-            success = pom_updater.update_version(
-                update.group_id, update.artifact_id, update.latest_version
-            )
-
-        if success:
-            applied.append(update)
-            console.print(
-                f"  [green]✓[/green] {update.coordinate}: {update.current_version} → {update.latest_version}"
-            )
-        else:
-            console.print(
-                f"  [yellow]⚠[/yellow] Could not update {update.coordinate} (may be managed by BOM)"
-            )
-
-    return applied
-
-
 def _normalize_dependency_key(value: str) -> str:
     """Normalize a dependency identifier to 'groupId:artifactId'."""
     parts = [part.strip() for part in (value or "").split(":")]
@@ -367,43 +357,201 @@ def should_use_copilot_session(mode: str) -> bool:
     return mode == "major"
 
 
-async def _fetch_direct_mcp_updates(
-    project_dir: Path,
-    mcp_input: str,
-    mode: str,
-    mcp_transport: str,
-    mcp_url: Optional[str],
-) -> dict[str, Any]:
-    """Fetch dependency updates directly from MCP server."""
-    console.print("\n[bold]Step 2: Checking for updates via direct MCP...[/bold]")
-    stability_filter = "STABLE_ONLY" if mode in ("minor_patch", "major") else "ALL"
+def _action_key(action: dict[str, Any]) -> str:
+    """Return groupId:artifactId for an UpgradeAction-shaped dict."""
+    return f"{action.get('groupId', '')}:{action.get('artifactId', '')}"
 
-    async with DirectMcpClient(
-        transport=mcp_transport,
-        url=mcp_url,
-    ) as client:
-        console.print("[green]✓[/green] Connected directly to Maven Tools MCP")
-        mcp_response = await client.compare_versions(
-            dependencies=mcp_input,
-            stability_filter=stability_filter,
-            include_security=True,
+
+def _filter_actions_by_ignored(
+    actions: list[dict[str, Any]], ignored: set[str]
+) -> list[dict[str, Any]]:
+    if not ignored:
+        return actions
+    return [a for a in actions if _action_key(a) not in ignored]
+
+
+def _filter_attention_by_ignored(
+    attention: list[dict[str, Any]], ignored: set[str]
+) -> list[dict[str, Any]]:
+    if not ignored:
+        return attention
+    return [n for n in attention if _action_key(n) not in ignored]
+
+
+def _display_deterministic_actions(actions: list[dict[str, Any]]) -> None:
+    """Render the deterministic_actions table."""
+    if not actions:
+        return
+    table = Table(title="Deterministic Updates (will be applied)")
+    table.add_column("Kind", style="magenta")
+    table.add_column("Dependency", style="cyan")
+    table.add_column("Current", style="yellow")
+    table.add_column("Target", style="green")
+    table.add_column("Type", style="blue")
+    for a in actions:
+        table.add_row(
+            a.get("kind", "?"),
+            f"{a.get('groupId', '')}:{a.get('artifactId', '')}",
+            a.get("current", ""),
+            a.get("target", ""),
+            a.get("updateType", ""),
         )
-        console.print("[green]✓[/green] Received MCP response")
-        logger.debug(f"MCP response: {mcp_response}")
-        return mcp_response
+    console.print(table)
 
 
-async def _fetch_copilot_mcp_updates(
-    project_dir: Path,
-    mcp_input: str,
+def _display_needs_attention(attention: list[dict[str, Any]]) -> None:
+    """Render the needs_attention table (informational)."""
+    if not attention:
+        return
+    table = Table(title="Needs Attention (manual review)", style="yellow")
+    table.add_column("Kind", style="red")
+    table.add_column("Dependency", style="cyan")
+    table.add_column("Current", style="yellow")
+    table.add_column("Latest", style="green")
+    table.add_column("Notes", style="white")
+    for n in attention:
+        kind = n.get("kind", "?")
+        coord = f"{n.get('groupId', '')}:{n.get('artifactId', '')}"
+        if kind == "major_available":
+            current = n.get("current", "")
+            latest = n.get("latestStable", "")
+            notes = f"same-major latest: {n.get('currentMajorLatest', current)}"
+        elif kind == "conflict":
+            current = n.get("currentlyResolvesTo", "")
+            latest = n.get("latestOnCentral", "")
+            candidates = n.get("candidates", [])
+            notes = f"{len(candidates)} BOMs disagree"
+        elif kind == "explicit_override":
+            current = n.get("currentExplicit", "")
+            latest = n.get("latestOnCentral", "")
+            candidates = n.get("managingCandidates", [])
+            notes = f"override; {len(candidates)} managing candidate(s)"
+        else:
+            current = ""
+            latest = ""
+            notes = ""
+        table.add_row(kind, coord, current, latest, notes)
+    console.print(table)
+
+
+def _apply_deterministic_actions(
+    pom_updater: PomUpdater, actions: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Apply each action via PomUpdater. Returns (applied, failed)."""
+    applied: list[dict[str, Any]] = []
+    failed: list[dict[str, Any]] = []
+    for a in actions:
+        group_id = a.get("groupId", "")
+        artifact_id = a.get("artifactId", "")
+        target = a.get("target", "")
+        if not (group_id and artifact_id and target):
+            failed.append(a)
+            continue
+        if pom_updater.apply_action(group_id, artifact_id, target):
+            applied.append(a)
+            console.print(
+                f"  [green]✓[/green] [{a.get('kind', '?')}] "
+                f"{group_id}:{artifact_id}: {a.get('current', '')} → {target}"
+            )
+        else:
+            failed.append(a)
+            console.print(
+                f"  [yellow]⚠[/yellow] Could not locate {group_id}:{artifact_id} in POM"
+            )
+    return applied, failed
+
+
+async def _fetch_recommendations(
+    pom_content: str,
     mode: str,
     mcp_transport: str,
     mcp_url: Optional[str],
 ) -> dict[str, Any]:
-    """Fetch dependency updates through Copilot SDK for major-review mode."""
-    console.print("\n[bold]Step 2: Checking for updates via Copilot SDK + MCP...[/bold]")
-    stability_filter = "STABLE_ONLY" if mode in ("minor_patch", "major") else "ALL"
+    """Call recommend_pom_upgrades and return the parsed payload."""
+    server_mode = "ALL" if mode == "all" else "MINOR_PATCH"
+    async with DirectMcpClient(transport=mcp_transport, url=mcp_url) as client:
+        console.print("[green]✓[/green] Connected directly to Maven Tools MCP")
+        response = await client.recommend_upgrades(pom_content, server_mode)
+        console.print("[green]✓[/green] Received MCP response")
+        logger.debug(f"MCP response: {response}")
+        return response
 
+
+async def _run_deterministic_upgrade(
+    pom_path: Path,
+    pom_content: str,
+    mode: str,
+    dry_run: bool,
+    mcp_transport: str,
+    mcp_url: Optional[str],
+    ignored_keys: set[str],
+) -> int:
+    """Deterministic upgrade path — single MCP call, apply actions directly."""
+    console.print("\n[bold]Step 1: Asking MCP for upgrade recommendations...[/bold]")
+    try:
+        response = await _fetch_recommendations(pom_content, mode, mcp_transport, mcp_url)
+    except (RuntimeError, ValueError, ImportError) as e:
+        console.print(f"[red]Error calling MCP tool: {e}[/red]")
+        return 1
+
+    # ToolResponse.Success wraps the payload under "data" (snake_case envelope).
+    payload = response.get("data") if isinstance(response.get("data"), dict) else response
+    actions = payload.get("deterministicActions") or payload.get("deterministic_actions") or []
+    attention = payload.get("needsAttention") or payload.get("needs_attention") or []
+    warnings = payload.get("warnings") or []
+
+    actions = _filter_actions_by_ignored(actions, ignored_keys)
+    attention = _filter_attention_by_ignored(attention, ignored_keys)
+
+    console.print(
+        f"\n[bold]Found {len(actions)} deterministic action(s), "
+        f"{len(attention)} needing attention.[/bold]"
+    )
+    _display_deterministic_actions(actions)
+    _display_needs_attention(attention)
+    for warning in warnings:
+        console.print(f"[yellow]⚠ Warning:[/yellow] {warning}")
+
+    if dry_run:
+        console.print("\n[yellow]Dry run - no changes will be made[/yellow]")
+        return 0
+    if not actions:
+        console.print("\n[green]No deterministic upgrades to apply.[/green]")
+        return 0
+
+    console.print("\n[bold]Step 2: Applying actions...[/bold]")
+    pom_updater = PomUpdater(pom_path)
+    applied, failed = _apply_deterministic_actions(pom_updater, actions)
+
+    if not pom_updater.has_changes():
+        console.print("[yellow]No changes were made to the POM[/yellow]")
+        return 0
+
+    pom_updater.save()
+    console.print(f"\n[green]✓[/green] Applied {len(applied)} updates to POM")
+    if failed:
+        console.print(f"[yellow]Skipped {len(failed)} unmatched action(s)[/yellow]")
+
+    console.print("\n" + "=" * 50)
+    console.print(
+        Panel(
+            f"[green]Applied:[/green] {len(applied)} deterministic actions\n"
+            f"[yellow]Needs attention:[/yellow] {len(attention)} (manual review)",
+            title="Upgrade Summary",
+            expand=False,
+        )
+    )
+    return 0
+
+
+async def _fetch_copilot_major_review(
+    project_dir: Path,
+    mcp_input: str,
+    mcp_transport: str,
+    mcp_url: Optional[str],
+) -> dict[str, Any]:
+    """Fetch major-review updates through the Copilot SDK."""
+    console.print("\n[bold]Step 2: Checking for updates via Copilot SDK + MCP...[/bold]")
     async with CopilotSDKClient(
         working_dir=str(project_dir),
         mcp_transport=mcp_transport,
@@ -412,41 +560,12 @@ async def _fetch_copilot_mcp_updates(
         console.print("[green]✓[/green] Connected to Copilot SDK")
         mcp_response = await client.compare_versions(
             dependencies=mcp_input,
-            stability_filter=stability_filter,
+            stability_filter="STABLE_ONLY",
             include_security=True,
         )
         console.print("[green]✓[/green] Received MCP response")
         logger.debug(f"MCP response: {mcp_response}")
         return mcp_response
-
-
-async def _fetch_mcp_updates(
-    project_dir: Path,
-    mcp_input: str,
-    mode: str,
-    mcp_transport: str,
-    mcp_url: Optional[str],
-) -> dict[str, Any]:
-    """Fetch dependency updates through the deterministic or Copilot-backed path."""
-    if should_use_copilot_session(mode):
-        return await _fetch_copilot_mcp_updates(
-            project_dir, mcp_input, mode, mcp_transport, mcp_url
-        )
-    return await _fetch_direct_mcp_updates(project_dir, mcp_input, mode, mcp_transport, mcp_url)
-
-
-def _filter_updates_by_mode(
-    updates: list[DependencyUpdate],
-    mode: str,
-) -> tuple[list[DependencyUpdate], list[DependencyUpdate]]:
-    """Filter updates into minor/patch and major based on mode."""
-    if mode == "minor_patch":
-        minor_patch = [u for u in updates if u.update_type in ("minor", "patch")]
-        major = [u for u in updates if u.update_type == "major"]
-    else:
-        minor_patch = []
-        major = updates
-    return minor_patch, major
 
 
 def parse_mcp_response(response: dict[str, Any]) -> list[DependencyUpdate]:
@@ -465,58 +584,6 @@ def parse_mcp_response(response: dict[str, Any]) -> list[DependencyUpdate]:
             if update:
                 updates.append(update)
 
-    return updates
-
-
-def _extract_same_major_fallback_update(dep: dict[str, Any]) -> Optional[DependencyUpdate]:
-    """
-    Parse an optional server-computed same-major stable fallback from a dependency result.
-
-    The Maven Tools MCP server may include this when the latest stable recommendation is a major
-    update but a newer stable version exists on the current major line.
-    """
-    fallback = dep.get("sameMajorStableFallback", dep.get("same_major_stable_fallback"))
-    if not isinstance(fallback, dict):
-        return None
-
-    base_update = _parse_single_dependency(dep)
-    if not base_update or base_update.update_type != "major":
-        return None
-
-    latest = fallback.get("latestVersion", fallback.get("latest_version", ""))
-    update_type = fallback.get("updateType", fallback.get("update_type", ""))
-    if not isinstance(latest, str) or not latest.strip():
-        return None
-
-    normalized_type = str(update_type).strip().lower()
-    if normalized_type not in ("minor", "patch"):
-        return None
-
-    return DependencyUpdate(
-        group_id=base_update.group_id,
-        artifact_id=base_update.artifact_id,
-        current_version=base_update.current_version,
-        latest_version=latest.strip(),
-        update_type=normalized_type,
-    )
-
-
-def extract_server_same_major_fallback_updates(response: dict[str, Any]) -> list[DependencyUpdate]:
-    """Extract server-provided same-major stable fallback updates from compare_dependency_versions response."""
-    if not isinstance(response, dict):
-        return []
-
-    deps_data = _extract_deps_data(response)
-    if not isinstance(deps_data, list):
-        return []
-
-    updates: list[DependencyUpdate] = []
-    for dep in deps_data:
-        if not isinstance(dep, dict):
-            continue
-        fallback_update = _extract_same_major_fallback_update(dep)
-        if fallback_update:
-            updates.append(fallback_update)
     return updates
 
 
@@ -550,7 +617,19 @@ async def run_upgrade(
             f"[cyan]Ignored Dependencies:[/cyan] {', '.join(sorted(ignored_dependency_keys))}"
         )
 
-    # Step 1: Parse POM
+    # Deterministic path (minor_patch / all): single MCP call, no Python POM parsing.
+    if mode in ("minor_patch", "all"):
+        return await _run_deterministic_upgrade(
+            pom_path=pom_path,
+            pom_content=pom_content,
+            mode=mode,
+            dry_run=dry_run,
+            mcp_transport=mcp_transport,
+            mcp_url=mcp_url,
+            ignored_keys=ignored_dependency_keys,
+        )
+
+    # Major-review path (Copilot SDK): keeps the per-coordinate compare flow.
     try:
         parsed_deps, mcp_input = _parse_pom_dependencies(pom_content, ignored_dependency_keys)
         if not parsed_deps:
@@ -559,62 +638,23 @@ async def run_upgrade(
         console.print(f"[red]Error parsing POM: {e}[/red]")
         return 1
 
-    # Step 2: Fetch updates from MCP
     try:
-        mcp_response = await _fetch_mcp_updates(
-            project_dir, mcp_input, mode, mcp_transport, mcp_url
+        mcp_response = await _fetch_copilot_major_review(
+            project_dir, mcp_input, mcp_transport, mcp_url
         )
     except (RuntimeError, ValueError, ImportError) as e:
         console.print(f"[red]Error calling MCP tool: {e}[/red]")
         return 1
 
-    # Step 3: Parse and filter updates
     updates = _filter_ignored_updates(parse_mcp_response(mcp_response), ignored_dependency_keys)
     if not updates:
         console.print("\n[green]All dependencies are up to date![/green]")
         return 0
 
-    if mode == "minor_patch":
-        fallback_updates = _filter_ignored_updates(
-            extract_server_same_major_fallback_updates(mcp_response),
-            ignored_dependency_keys,
-        )
-        if fallback_updates:
-            console.print("\n[bold]Step 2b: Server-provided same-major stable fallbacks...[/bold]")
-            existing_pairs = {(u.coordinate, u.latest_version) for u in updates}
-            for fallback in fallback_updates:
-                if (fallback.coordinate, fallback.latest_version) in existing_pairs:
-                    continue
-                updates.append(fallback)
-                existing_pairs.add((fallback.coordinate, fallback.latest_version))
-                console.print(
-                    f"[green]✓[/green] Same-major fallback for {fallback.coordinate}: "
-                    f"{fallback.current_version} → {fallback.latest_version} ({fallback.update_type})"
-                )
-
-    minor_patch_updates, major_updates = _filter_updates_by_mode(updates, mode)
-
-    # Step 4: Display findings
-    _display_upgrade_findings(updates, minor_patch_updates, major_updates, mode, mcp_response)
-
-    # Early exit conditions
-    if _should_skip_apply(dry_run, mode, minor_patch_updates):
-        return 0
-
-    # Step 5: Apply updates
-    console.print("\n[bold]Step 3: Applying minor/patch updates...[/bold]")
-    pom_updater = PomUpdater(pom_path)
-    applied = _apply_pom_updates(pom_updater, minor_patch_updates, parsed_deps)
-
-    if not pom_updater.has_changes():
-        console.print("[yellow]No changes were made to the POM[/yellow]")
-        return 0
-
-    pom_updater.save()
-    console.print(f"\n[green]✓[/green] Applied {len(applied)} updates to POM")
-
-    # Summary
-    _print_upgrade_summary(len(applied), len(major_updates))
+    _display_upgrade_findings(updates, [], updates, mode, mcp_response)
+    console.print(
+        f"\n[yellow]Mode '{mode}' is report-only - no changes will be made[/yellow]"
+    )
     return 0
 
 
@@ -645,37 +685,6 @@ def _display_upgrade_findings(
             )
 
     _display_security_issues(mcp_response)
-
-
-def _print_upgrade_summary(applied_count: int, major_count: int) -> None:
-    """Print the upgrade summary panel."""
-    console.print("\n" + "=" * 50)
-    console.print(
-        Panel(
-            f"[green]Applied:[/green] {applied_count} minor/patch updates\n"
-            f"[yellow]Skipped:[/yellow] {major_count} major updates (manual review required)",
-            title="Upgrade Summary",
-            expand=False,
-        )
-    )
-
-
-def _should_skip_apply(
-    dry_run: bool, mode: str, minor_patch_updates: list[DependencyUpdate]
-) -> bool:
-    """Check if we should skip applying updates and print appropriate message."""
-    if dry_run:
-        console.print("\n[yellow]Dry run - no changes will be made[/yellow]")
-        return True
-    if mode != "minor_patch":
-        console.print(f"\n[yellow]Mode '{mode}' is report-only - no changes will be made[/yellow]")
-        return True
-    if not minor_patch_updates:
-        console.print(
-            "\n[yellow]No minor/patch updates to apply. Only major updates found.[/yellow]"
-        )
-        return True
-    return False
 
 
 @click.command()
@@ -735,14 +744,17 @@ def main(
     """
     Automated dependency upgrade workflow using MCP tools.
 
-    Analyzes Maven dependencies via compare_dependency_versions MCP tool,
-    applies minor/patch updates. PR creation and build validation are handled
-    externally (e.g. by GitHub Actions using peter-evans/create-pull-request).
+    Hands the raw pom.xml to the recommend_pom_upgrades MCP tool and applies
+    the returned deterministic_actions. The needs_attention list is displayed
+    for visibility but never auto-applied. PR creation and build validation are
+    handled externally (e.g. by GitHub Actions using peter-evans/create-pull-request).
 
     Modes:
-      - minor_patch (default): Auto-apply minor/patch updates, report major
-      - major: Report all updates including major (no auto-apply)
-      - all: Include pre-release versions (no auto-apply)
+      - minor_patch (default): Server mode MINOR_PATCH — apply minor/patch
+        bumps; majors land in needs_attention for manual review
+      - major: Route through Copilot SDK for human review of major upgrades
+      - all: Server mode ALL — apply majors as deterministic too (rarely
+        what you want)
 
     Examples:
         maven-agent -f pom.xml --dry-run

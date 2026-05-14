@@ -1,0 +1,15 @@
+maven-tools-mcp
+Copyright 2024-2026 Arvind Menon
+
+Licensed under the MIT License (see LICENSE).
+
+------------------------------------------------------------------------
+Third-party attributions
+------------------------------------------------------------------------
+
+The effective POM resolver (com.arvindand.mcp.maven.pom) is an independent
+implementation. Its algorithm shape — parent chain walking, property
+interpolation, dependencyManagement merge, and <scope>import</scope> BOM
+resolution — follows the MIT-licensed maxxq-org/maxxq-maven library by
+Guy Chauliac (https://github.com/maxxq-org/maxxq-maven), scoped to
+declared-dep resolution (no transitive dependency walking).

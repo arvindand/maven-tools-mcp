@@ -1,6 +1,6 @@
 # Maven Tools MCP Server
 
-[![Java](https://img.shields.io/badge/Java-24-orange.svg)](https://openjdk.java.net/)
+[![Java](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.java.net/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.14-green.svg)](https://spring.io/projects/spring-boot)
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-1.1.6-green.svg)](https://spring.io/projects/spring-ai)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--06--18-blue.svg)](https://modelcontextprotocol.io/)
@@ -92,7 +92,7 @@ For fuller setup guidance, including JAR/native usage, Docker Compose, and envir
 
 ## Core Tools
 
-The server exposes 10 MCP tools.
+The server exposes 11 MCP tools.
 
 ### Maven intelligence tools
 
@@ -104,8 +104,9 @@ The server exposes 10 MCP tools.
 | `compare_dependency_versions` | Compare current versions against available upgrades |
 | `analyze_dependency_age` | Classify how old a dependency is |
 | `analyze_release_patterns` | Look at release cadence and maintenance signals |
-| `get_version_timeline` | Inspect recent release history and gaps |
 | `analyze_project_health` | Run a broader dependency health audit |
+| `analyze_pom_dependencies` | POM-aware: resolve effective versions from raw pom.xml, classify as `EXPLICIT` / `MANAGED` / `EXPLICIT_OVERRIDE`, surface multi-BOM conflicts |
+| `recommend_pom_upgrades` | POM-aware: returns deterministic `<version>` edits (explicit + BOM bumps) for an agent to apply, plus a `needs_attention` list of majors / conflicts / overrides for human or LLM review |
 
 ### Context7 documentation tools
 
@@ -115,6 +116,15 @@ The server exposes 10 MCP tools.
 | `query-docs` | Fetch docs by Context7 library ID |
 
 For parameters, examples, and tool-by-tool notes, see [`docs/tools.md`](docs/tools.md).
+
+### POM-aware dependency analysis
+
+Two tools take a whole POM (raw XML) rather than a single coordinate. Both walk the parent chain, apply `<dependencyManagement>`, resolve `<scope>import</scope>` BOMs against Maven Central, and accept an optional `sideloadedPoms` bundle for monorepo siblings / unreleased parents:
+
+- **`analyze_pom_dependencies`** — returns each declared dep with effective version + classification (`EXPLICIT` / `MANAGED` / `EXPLICIT_OVERRIDE`) + managing BOM coordinate + any multi-BOM `conflicts`. Use when you want raw analysis ("what does my POM actually resolve to?").
+- **`recommend_pom_upgrades`** — builds on the analyzer and returns two lists: `deterministic_actions` (mechanical `<version>` edits — `explicit_bump` for declared deps, `bom_bump` for BOM-managed deps where a newer minor/patch BOM is available — applied directly by a non-LLM agent) and `needs_attention` (majors, multi-BOM conflicts, and explicit overrides, each carrying the Maven Central latest so an LLM has full context in one round-trip). Use for "what can I safely bump?" workflows.
+
+The split matters: the agent never needs to call `compare_dependency_versions` per-dep or parse Maven XML in Python — one `recommend_pom_upgrades` call returns everything mechanical, and the LLM review path picks up everything that needs judgment.
 
 ## Example
 
@@ -155,6 +165,12 @@ That flow is documented in [`docs/dogfooding.md`](docs/dogfooding.md), including
 - **Does it work for Gradle or other JVM build tools?** Yes, as long as the project depends on libraries that are resolved through Maven Central coordinates.
 
 For a few more usage notes, see the FAQ section in [`docs/examples.md`](docs/examples.md#faq).
+
+## Acknowledgements
+
+The effective POM resolver under `com.arvindand.mcp.maven.pom` follows the resolution
+shape of [maxxq-org/maxxq-maven](https://github.com/maxxq-org/maxxq-maven) (MIT,
+Guy Chauliac), scoped here to declared-dep resolution. See [`NOTICE`](NOTICE).
 
 ## More Docs
 

@@ -2,6 +2,7 @@ package com.arvindand.mcp.maven.service;
 
 import static com.arvindand.mcp.maven.config.CacheConstants.MAVEN_ACCURATE_HISTORICAL_DATA;
 import static com.arvindand.mcp.maven.config.CacheConstants.MAVEN_ALL_VERSIONS;
+import static com.arvindand.mcp.maven.config.CacheConstants.MAVEN_POM_XML;
 import static com.arvindand.mcp.maven.config.CacheConstants.MAVEN_VERSION_CHECKS;
 
 import com.arvindand.mcp.maven.MavenToolsConstants;
@@ -33,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -274,6 +276,56 @@ public class MavenCentralService {
           e);
       return Optional.empty();
     }
+  }
+
+  /**
+   * Fetches the raw POM XML for a Maven coordinate from the configured repository. Used by the POM
+   * resolver (see {@link com.arvindand.mcp.maven.pom.MavenCentralPomFetcher}) to walk parent chains
+   * and BOM imports.
+   *
+   * <p>Returns an empty {@link Optional} on 404 or any other client/server error — callers surface
+   * this as a resolution warning rather than failing the whole analysis.
+   *
+   * @param coordinate must have a non-null version
+   */
+  @Cacheable(
+      value = MAVEN_POM_XML,
+      key = "#coordinate.groupId() + ':' + #coordinate.artifactId() + ':' + #coordinate.version()")
+  @CircuitBreaker(name = "maven-central", fallbackMethod = "fetchPomXmlFallback")
+  @Retry(name = "maven-central")
+  @RateLimiter(name = "maven-central")
+  public Optional<String> fetchPomXml(MavenCoordinate coordinate) {
+    if (coordinate == null || coordinate.version() == null || coordinate.version().isBlank()) {
+      throw new IllegalArgumentException("coordinate.version() must be set to fetch a POM");
+    }
+    String url = buildPomUrl(coordinate, coordinate.version());
+    try {
+      String xml = restClient.get().uri(java.net.URI.create(url)).retrieve().body(String.class);
+      return Optional.ofNullable(xml);
+    } catch (HttpClientErrorException.NotFound ex) {
+      // 404 is a legitimate "POM doesn't exist for this coord" — not transient,
+      // don't retry, don't trip the circuit breaker.
+      logger.debug("POM not found for {}", coordinate.toCoordinateString());
+      return Optional.empty();
+    } catch (RestClientException ex) {
+      // Transient (5xx, network, timeout). Let @Retry + @CircuitBreaker handle it.
+      // The fetchPomXmlFallback method returns Optional.empty() when the breaker is
+      // open or all retries exhausted.
+      logger.debug(
+          "POM fetch failed for {} (rethrowing for resilience4j): {}",
+          coordinate.toCoordinateString(),
+          ex.getMessage());
+      throw ex;
+    }
+  }
+
+  @SuppressWarnings("unused")
+  private Optional<String> fetchPomXmlFallback(MavenCoordinate coordinate, Exception ex) {
+    logger.warn(
+        "Circuit breaker fallback for POM fetch {}: {}",
+        coordinate.groupId() + ":" + coordinate.artifactId() + ":" + coordinate.version(),
+        ex.getMessage());
+    return Optional.empty();
   }
 
   private MavenCentralService self() {

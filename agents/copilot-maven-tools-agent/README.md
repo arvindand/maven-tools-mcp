@@ -6,13 +6,13 @@ This agent is part of the [maven-tools-mcp](https://github.com/arvindand/maven-t
 
 ## What It Does
 
-1. Parses `pom.xml` and extracts all dependencies with explicit versions
-2. Calls the Maven Tools MCP `compare_dependency_versions` tool directly in minor/patch mode
-3. Applies stable minor/patch updates directly to `pom.xml`
-4. Uses the Copilot SDK only in `major` mode to report major updates for manual review
+1. Hands the raw `pom.xml` to the Maven Tools MCP `recommend_pom_upgrades` tool — the server walks the parent chain, resolves managed versions, and returns a `deterministicActions[]` list plus a `needsAttention[]` list
+2. Applies each `deterministicActions[]` entry directly to `pom.xml` (`explicit_bump` and `bom_bump` both collapse to a single `<version>` edit; the parent block is matched by groupId+artifactId)
+3. Displays `needsAttention[]` (major upgrades, multi-BOM conflicts, explicit overrides) for visibility — these never auto-apply
+4. Uses the Copilot SDK only in `major` mode to surface major updates for manual review
 5. Leaves build validation to the repo's normal PR CI
 
-PR creation is handled externally by GitHub Actions (`peter-evans/create-pull-request`).
+No Python POM parsing — the server is the single source of truth for what "the effective POM" means. PR creation is handled externally by GitHub Actions (`peter-evans/create-pull-request`).
 
 ## Usage
 
@@ -46,7 +46,7 @@ maven-agent -f pom.xml --mode major --dry-run
 | Option | Default | Description |
 |--------|---------|-------------|
 | `-f, --pom-file` | `pom.xml` | Path to POM file |
-| `-m, --mode` | `minor_patch` | `minor_patch` (direct MCP auto-apply), `major` (Copilot SDK report only), `all` (direct MCP include pre-release) |
+| `-m, --mode` | `minor_patch` | `minor_patch` (direct MCP auto-apply, server mode `MINOR_PATCH`), `major` (Copilot SDK report only), `all` (direct MCP auto-apply, server mode `ALL` — majors treated as deterministic) |
 | `--dry-run` | false | Analyze only, no changes |
 | `--http` | false | Use HTTP transport (connect to running MCP server) |
 | `--mcp-url` | `http://localhost:8080/mcp` | MCP server URL for HTTP transport |

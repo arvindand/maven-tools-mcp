@@ -8,17 +8,17 @@ import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
 import com.arvindand.mcp.maven.model.DependencyInfo;
 import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
+import com.arvindand.mcp.maven.model.NeedsAttention;
+import com.arvindand.mcp.maven.model.PomUpgradeRecommendation;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
 import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
 import com.arvindand.mcp.maven.model.StabilityFilter;
 import com.arvindand.mcp.maven.model.ToolResponse;
+import com.arvindand.mcp.maven.model.UpgradeAction;
+import com.arvindand.mcp.maven.model.UpgradeMode;
 import com.arvindand.mcp.maven.model.VersionComparison;
 import com.arvindand.mcp.maven.model.VersionInfo;
 import com.arvindand.mcp.maven.model.VersionInfo.VersionType;
-import com.arvindand.mcp.maven.model.VersionTimelineAnalysis;
-import com.arvindand.mcp.maven.model.VersionTimelineAnalysis.RecentActivity.ActivityLevel;
-import com.arvindand.mcp.maven.model.VersionTimelineAnalysis.TimelineEntry.ReleaseGap;
-import com.arvindand.mcp.maven.model.VersionTimelineAnalysis.VelocityTrend.TrendDirection;
 import com.arvindand.mcp.maven.model.VersionsByType;
 import com.arvindand.mcp.maven.model.license.LicenseFindings;
 import com.arvindand.mcp.maven.model.license.LicenseInfo;
@@ -26,6 +26,11 @@ import com.arvindand.mcp.maven.model.license.LicenseInfo.LicenseCategory;
 import com.arvindand.mcp.maven.model.security.SecurityAssessment;
 import com.arvindand.mcp.maven.model.security.SecurityFindings;
 import com.arvindand.mcp.maven.model.security.SecuritySummary;
+import com.arvindand.mcp.maven.pom.EffectiveDependency;
+import com.arvindand.mcp.maven.pom.EffectivePomResolver;
+import com.arvindand.mcp.maven.pom.EffectivePomResult;
+import com.arvindand.mcp.maven.pom.ManagedAlternative;
+import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.util.MavenCoordinateParser;
 import com.arvindand.mcp.maven.util.VersionComparator;
 import java.time.Duration;
@@ -92,7 +97,6 @@ public class MavenDependencyTools {
 
   // Analysis constants
   private static final int DEFAULT_ANALYSIS_MONTHS = 24;
-  private static final int DEFAULT_VERSION_COUNT = 20;
   private static final int ACCURATE_TIMESTAMP_VERSION_LIMIT = 30;
   private static final int RECENT_VERSIONS_LIMIT = 10;
   private static final int MILLISECONDS_TO_DAYS = 1000 * 60 * 60 * 24;
@@ -111,14 +115,11 @@ public class MavenDependencyTools {
   private static final int EXCELLENT_HEALTH_THRESHOLD = 80;
   private static final int GOOD_HEALTH_THRESHOLD = 65;
   private static final int FAIR_HEALTH_THRESHOLD = 50;
-
-  // Stability analysis constants
-  private static final int VERY_HIGH_STABILITY_THRESHOLD = 80;
-  private static final int LOW_STABILITY_THRESHOLD = 50;
   private final MavenCentralService mavenCentralService;
   private final VersionComparator versionComparator;
   private final Context7Properties context7Properties;
   private final VulnerabilityService vulnerabilityService;
+  private final EffectivePomResolver pomResolver;
 
   private static final int MAX_CONCURRENT_REQUESTS = MavenToolsConstants.MAX_CONCURRENT_REQUESTS;
   private final Semaphore batchSemaphore = new Semaphore(MAX_CONCURRENT_REQUESTS);
@@ -127,11 +128,13 @@ public class MavenDependencyTools {
       MavenCentralService mavenCentralService,
       VersionComparator versionComparator,
       Context7Properties context7Properties,
-      VulnerabilityService vulnerabilityService) {
+      VulnerabilityService vulnerabilityService,
+      EffectivePomResolver pomResolver) {
     this.mavenCentralService = mavenCentralService;
     this.versionComparator = versionComparator;
     this.context7Properties = context7Properties;
     this.vulnerabilityService = vulnerabilityService;
+    this.pomResolver = pomResolver;
   }
 
   /**
@@ -475,48 +478,6 @@ public class MavenDependencyTools {
 
           return analyzeReleasePattern(
               coordinate.toCoordinateString(), allVersions, analysisMonths);
-        });
-  }
-
-  /**
-   * Get enhanced version timeline with temporal analysis and release patterns.
-   *
-   * @param dependency the dependency coordinate (groupId:artifactId)
-   * @param versionCount number of recent versions to include (default: 20)
-   * @return JSON response with version timeline and temporal insights
-   */
-  @SuppressWarnings("java:S100") // MCP tool method naming
-  @Tool(
-      description =
-          "Single dependency. Returns a timeline of recent versions with dates, gaps, and stability"
-              + " patterns. Use for quick release history snapshots.")
-  public ToolResponse get_version_timeline(
-      @ToolParam(
-              description =
-                  "Maven dependency coordinate in format 'groupId:artifactId' (NO version)."
-                      + " Example: 'org.junit.jupiter:junit-jupiter'")
-          String dependency,
-      @ToolParam(
-              description =
-                  "Number of recent versions to include in timeline analysis. Default is 20"
-                      + " versions if not specified. Typical range: 10-50",
-              required = false)
-          @Nullable
-          Integer versionCount) {
-    return executeToolOperation(
-        () -> {
-          MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-          int maxVersions = versionCount != null ? versionCount : DEFAULT_VERSION_COUNT;
-
-          List<MavenArtifact> versions =
-              mavenCentralService.getRecentVersionsWithAccurateTimestamps(coordinate, maxVersions);
-
-          if (versions.isEmpty()) {
-            throw new MavenCentralException(
-                "No versions found for " + coordinate.toCoordinateString());
-          }
-
-          return analyzeVersionTimeline(coordinate.toCoordinateString(), versions);
         });
   }
 
@@ -1340,148 +1301,6 @@ public class MavenDependencyTools {
         recommendation);
   }
 
-  private VersionTimelineAnalysis analyzeVersionTimeline(
-      String dependency, List<MavenArtifact> versions) {
-
-    Instant now = Instant.now();
-
-    // Pre-calculate all intervals and average - single pass optimization
-    long[] intervalDays = new long[versions.size()];
-    List<Long> positiveIntervals = new ArrayList<>();
-
-    for (int i = 1; i < versions.size(); i++) {
-      long currentTimestamp = versions.get(i - 1).timestamp();
-      long prevTimestamp = versions.get(i).timestamp();
-      long interval = (currentTimestamp - prevTimestamp) / MILLISECONDS_TO_DAYS;
-      intervalDays[i] = interval;
-      if (interval > 0) positiveIntervals.add(interval);
-    }
-
-    double averageInterval =
-        positiveIntervals.isEmpty()
-            ? 0
-            : positiveIntervals.stream().mapToLong(Long::longValue).average().orElse(0);
-
-    // Build timeline entries using pre-calculated intervals
-    List<VersionTimelineAnalysis.TimelineEntry> timeline = new ArrayList<>();
-    for (int i = 0; i < versions.size(); i++) {
-      MavenArtifact version = versions.get(i);
-      Instant releaseDate = Instant.ofEpochMilli(version.timestamp());
-
-      String relativeTime = VersionTimelineAnalysis.formatRelativeTime(releaseDate, now);
-      VersionType versionType = versionComparator.getVersionType(version.version());
-
-      Long daysSincePrevious = i > 0 ? intervalDays[i] : null;
-      ReleaseGap gap =
-          i > 0 ? ReleaseGap.classify(intervalDays[i], averageInterval) : ReleaseGap.NORMAL;
-
-      boolean isBreakingChange =
-          MAJOR_UPDATE_TYPE.equals(
-              versionComparator.determineUpdateType("0.0.0", version.version()));
-
-      timeline.add(
-          new VersionTimelineAnalysis.TimelineEntry(
-              version.version(),
-              versionType,
-              releaseDate,
-              relativeTime,
-              daysSincePrevious,
-              isBreakingChange,
-              gap));
-    }
-
-    // Calculate metrics
-    Instant oldestDate = Instant.ofEpochMilli(versions.get(versions.size() - 1).timestamp());
-    int timeSpanMonths = (int) Duration.between(oldestDate, now).toDays() / DAYS_IN_MONTH;
-
-    // Count recent activity with optimized stream operations
-    Instant oneMonthAgo = now.minus(DAYS_IN_MONTH, ChronoUnit.DAYS);
-    Instant threeMonthsAgo = now.minus(3L * DAYS_IN_MONTH, ChronoUnit.DAYS);
-
-    long releasesLastMonth =
-        versions.stream()
-            .filter(v -> Instant.ofEpochMilli(v.timestamp()).isAfter(oneMonthAgo))
-            .count();
-
-    long releasesLastQuarter =
-        versions.stream()
-            .filter(v -> Instant.ofEpochMilli(v.timestamp()).isAfter(threeMonthsAgo))
-            .count();
-
-    // Create analysis objects
-    VersionTimelineAnalysis.VelocityTrend velocityTrend =
-        new VersionTimelineAnalysis.VelocityTrend(
-            TrendDirection.STABLE,
-            "Release velocity appears stable",
-            releasesLastQuarter / 3.0,
-            versions.size() / Math.max(timeSpanMonths, 1.0),
-            0.0);
-
-    long stableCount =
-        timeline.stream().mapToLong(t -> t.versionType() == VersionType.STABLE ? 1 : 0).sum();
-    double stablePercentage = (double) stableCount / timeline.size() * 100;
-
-    VersionTimelineAnalysis.StabilityPattern stabilityPattern =
-        new VersionTimelineAnalysis.StabilityPattern(
-            stablePercentage,
-            "Mix of stable and pre-release versions",
-            "Regular stable releases",
-            stablePercentage > 70
-                ? "Good stability pattern - safe for production use"
-                : "Consider waiting for stable releases");
-
-    long lastReleaseAge = Duration.between(timeline.get(0).releaseDate(), now).toDays();
-
-    VersionTimelineAnalysis.RecentActivity recentActivity =
-        new VersionTimelineAnalysis.RecentActivity(
-            (int) releasesLastMonth,
-            (int) releasesLastQuarter,
-            ActivityLevel.classify((int) releasesLastMonth, (int) releasesLastQuarter),
-            lastReleaseAge,
-            "Recent activity: " + releasesLastQuarter + " releases in last quarter");
-
-    List<String> insights = generateTimelineInsights(timeline, recentActivity, stabilityPattern);
-
-    return new VersionTimelineAnalysis(
-        dependency,
-        versions.size(),
-        timeline.size(),
-        timeSpanMonths,
-        timeline,
-        velocityTrend,
-        stabilityPattern,
-        recentActivity,
-        insights);
-  }
-
-  private List<String> generateTimelineInsights(
-      List<VersionTimelineAnalysis.TimelineEntry> timeline,
-      VersionTimelineAnalysis.RecentActivity recentActivity,
-      VersionTimelineAnalysis.StabilityPattern stabilityPattern) {
-
-    List<String> insights = new ArrayList<>();
-
-    if (recentActivity.activityLevel() == ActivityLevel.VERY_ACTIVE) {
-      insights.add("High release frequency indicates active development");
-    } else if (recentActivity.activityLevel() == ActivityLevel.DORMANT) {
-      insights.add("No recent releases - consider checking project status");
-    }
-
-    if (stabilityPattern.stablePercentage() > VERY_HIGH_STABILITY_THRESHOLD) {
-      insights.add("Strong preference for stable releases - good for production");
-    } else if (stabilityPattern.stablePercentage() < LOW_STABILITY_THRESHOLD) {
-      insights.add("Many pre-release versions - early-stage or experimental project");
-    }
-
-    long majorGaps =
-        timeline.stream().mapToLong(t -> t.releaseGap() == ReleaseGap.MAJOR_GAP ? 1 : 0).sum();
-    if (majorGaps > 0) {
-      insights.add("Found " + majorGaps + " significant gaps in release schedule");
-    }
-
-    return insights;
-  }
-
   private int calculateSimpleHealthScore(
       DependencyAgeAnalysis ageAnalysis, String maintenanceStatus, Integer maxAgeInDays) {
 
@@ -1680,6 +1499,315 @@ public class MavenDependencyTools {
     }
 
     return recommendations;
+  }
+
+  /**
+   * Analyze a Maven POM and return each declared dependency with its effective version, the source
+   * of that version, and the managing BOM / parent coordinate where applicable.
+   *
+   * @param pomXml the primary POM to analyze (raw XML)
+   * @param sideloadedPoms optional bundle of additional POMs (sibling modules, unreleased parents)
+   *     used before falling back to Maven Central. Null or empty is treated as single-POM analysis.
+   * @return JSON response wrapping an effective POM analysis result
+   */
+  @SuppressWarnings("java:S100") // MCP tool method naming
+  @Tool(
+      description =
+          "POM-aware dependency analysis. Takes raw pom.xml content and returns per-dependency"
+              + " effective versions classified as EXPLICIT (declared in this POM),"
+              + " MANAGED (inherited from a parent or BOM), or EXPLICIT_OVERRIDE (declared here"
+              + " AND managed elsewhere). Resolves parent POMs, ${name}/${project.version}"
+              + " placeholders, dependencyManagement, and <scope>import</scope> BOM imports"
+              + " against Maven Central. Optional sideloadedPoms accepts a bundle of additional"
+              + " POMs (monorepo siblings, unreleased parents) used before falling back to Maven"
+              + " Central. Use when asked: 'analyze my pom.xml', 'what versions does this POM"
+              + " actually resolve to?', or for multi-module monorepos. Returns the parent chain,"
+              + " the resolved dependencies, and a list of warnings for any unresolved bits.")
+  public ToolResponse analyze_pom_dependencies(
+      @ToolParam(description = "Raw <project>...</project> XML content of the POM to analyze.")
+          String pomXml,
+      @ToolParam(
+              description =
+                  "Optional bundle of additional POM XML strings (sibling modules, unreleased"
+                      + " parents). Each is indexed by its self-declared groupId:artifactId:version"
+                      + " and tried before Maven Central. Pass null or an empty array for"
+                      + " single-POM analysis.",
+              required = false)
+          @Nullable
+          List<String> sideloadedPoms) {
+    try {
+      EffectivePomResult result =
+          (sideloadedPoms == null || sideloadedPoms.isEmpty())
+              ? pomResolver.resolve(pomXml)
+              : pomResolver.resolve(pomXml, sideloadedPoms);
+      return ToolResponse.Success.of(result);
+    } catch (IllegalArgumentException e) {
+      return ToolResponse.Error.of("Invalid POM input: " + e.getMessage());
+    } catch (Exception e) {
+      logger.error(UNEXPECTED_ERROR, e);
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+    }
+  }
+
+  /**
+   * Recommend POM upgrades, split into a mechanical action list (for non-LLM agents that apply the
+   * edits directly) and a needs-attention list (for human / LLM review).
+   *
+   * @param pomXml the primary POM XML to analyze
+   * @param mode {@link UpgradeMode#MINOR_PATCH} (default) or {@link UpgradeMode#ALL}
+   * @param sideloadedPoms optional bundle of additional POMs (monorepo siblings, unreleased
+   *     parents) tried before Maven Central
+   * @return JSON response wrapping {@link PomUpgradeRecommendation}
+   */
+  @SuppressWarnings("java:S100") // MCP tool method naming
+  @Tool(
+      description =
+          "POM-aware upgrade recommender. Takes raw pom.xml content and returns two lists: (1)"
+              + " deterministic_actions — mechanical <version> edits a non-LLM agent can apply"
+              + " directly (explicit_bump for declared deps, bom_bump for BOM-managed deps where"
+              + " a newer BOM minor/patch is available); (2) needs_attention — major upgrades,"
+              + " multi-BOM conflicts, and explicit overrides that need human or LLM review,"
+              + " each carrying the Maven Central latest so the model has full context in one"
+              + " round-trip. Default mode MINOR_PATCH routes majors to needs_attention; mode"
+              + " ALL treats majors as deterministic (rarely what you want). Use when asked:"
+              + " 'recommend upgrades for my pom.xml', 'what can I safely bump?', or to drive an"
+              + " automated dependency-update workflow.")
+  public ToolResponse recommend_pom_upgrades(
+      @ToolParam(description = "Raw <project>...</project> XML content of the POM to analyze.")
+          String pomXml,
+      @ToolParam(
+              description =
+                  "Upgrade mode: MINOR_PATCH (default — only same-major minor / patch upgrades"
+                      + " are deterministic; majors go to needs_attention) or ALL (majors count"
+                      + " as deterministic too).",
+              required = false)
+          @Nullable
+          UpgradeMode mode,
+      @ToolParam(
+              description =
+                  "Optional bundle of additional POM XML strings (sibling modules, unreleased"
+                      + " parents). Each is indexed by its self-declared groupId:artifactId:version"
+                      + " and tried before Maven Central.",
+              required = false)
+          @Nullable
+          List<String> sideloadedPoms) {
+    try {
+      EffectivePomResult resolved =
+          (sideloadedPoms == null || sideloadedPoms.isEmpty())
+              ? pomResolver.resolve(pomXml)
+              : pomResolver.resolve(pomXml, sideloadedPoms);
+      UpgradeMode effectiveMode = mode != null ? mode : UpgradeMode.MINOR_PATCH;
+      return ToolResponse.Success.of(buildPomUpgradeRecommendation(resolved, effectiveMode));
+    } catch (IllegalArgumentException e) {
+      return ToolResponse.Error.of("Invalid POM input: " + e.getMessage());
+    } catch (Exception e) {
+      logger.error(UNEXPECTED_ERROR, e);
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+    }
+  }
+
+  private PomUpgradeRecommendation buildPomUpgradeRecommendation(
+      EffectivePomResult resolved, UpgradeMode mode) {
+    List<UpgradeAction> actions = new ArrayList<>();
+    List<NeedsAttention> attention = new ArrayList<>();
+
+    // Only BOMs the user can edit in their own POM are actionable: the direct <parent> and the
+    // root POM's direct <dependencyManagement> imports. Transitively-imported BOMs (e.g.,
+    // jackson-bom inherited through spring-boot-dependencies) are skipped — the user has no
+    // <version> to edit. Their upgrades surface through whichever user-controllable knob brings
+    // them in.
+    Map<String, MavenCoordinate> userControllableBoms = new LinkedHashMap<>();
+    if (!resolved.parentChain().isEmpty()) {
+      MavenCoordinate directParent = resolved.parentChain().get(0);
+      userControllableBoms.put(
+          directParent.groupId() + ":" + directParent.artifactId(), directParent);
+    }
+    for (MavenCoordinate bom : resolved.rootImportedBoms()) {
+      userControllableBoms.putIfAbsent(bom.groupId() + ":" + bom.artifactId(), bom);
+    }
+
+    // First pass: classify each user-controllable BOM (parent + root imports). This covers BOMs
+    // even when they don't directly manage any classified dep — bumping the parent is itself a
+    // useful upgrade signal.
+    for (MavenCoordinate bom : userControllableBoms.values()) {
+      classifyBomCandidate(bom, mode, actions, attention);
+    }
+
+    // Second pass: per-dep classification. MANAGED deps whose managedBy is user-controllable are
+    // covered by the BOM pass above; transitively-managed deps are silently skipped (their
+    // upgrade lives behind a user-controllable knob already classified).
+    for (EffectiveDependency dep : resolved.dependencies()) {
+      classifyDependencyCandidate(dep, mode, actions, attention);
+    }
+
+    return new PomUpgradeRecommendation(actions, attention, resolved.warnings());
+  }
+
+  /**
+   * Looks up the latest stable version of a managing BOM and either emits a {@link UpgradeAction
+   * bom_bump} action (minor/patch, or major when {@code mode == ALL}) or a {@link
+   * NeedsAttention.MajorAvailable major_available} entry. Network failures and missing-version
+   * cases drop silently — those would already surface as warnings on the upstream resolution.
+   */
+  private void classifyBomCandidate(
+      MavenCoordinate bom,
+      UpgradeMode mode,
+      List<UpgradeAction> actions,
+      List<NeedsAttention> attention) {
+    try {
+      String latest = getLatestStableVersion(bom);
+      if (latest == null || bom.version() == null) {
+        return;
+      }
+      if (versionComparator.compare(bom.version(), latest) >= 0) {
+        return;
+      }
+      String updateType = versionComparator.determineUpdateType(bom.version(), latest);
+      if (MAJOR_UPDATE_TYPE.equals(updateType) && mode == UpgradeMode.MINOR_PATCH) {
+        String currentMajorLatest = findCurrentMajorLatest(bom, bom.version());
+        attention.add(
+            new NeedsAttention.MajorAvailable(
+                bom.groupId(),
+                bom.artifactId(),
+                bom.version(),
+                currentMajorLatest != null ? currentMajorLatest : bom.version(),
+                latest,
+                Source.MANAGED.name(),
+                bom.toCoordinateString()));
+      } else if (!NO_UPDATE_TYPE.equals(updateType)) {
+        actions.add(
+            UpgradeAction.bomBump(
+                bom.groupId(), bom.artifactId(), bom.version(), latest, updateType));
+      }
+    } catch (MavenCentralException _) {
+      // upstream resolver already warned about unreachable parents; nothing to add here.
+    }
+  }
+
+  /**
+   * Classifies a single declared dependency: surfaces conflicts and explicit overrides into {@code
+   * needsAttention} regardless of upgrade availability; for EXPLICIT deps emits a {@link
+   * UpgradeAction explicit_bump} (or routes majors to {@code needsAttention} when mode is {@code
+   * MINOR_PATCH}); MANAGED deps without conflicts are covered by the upstream BOM bump pass and do
+   * not produce per-dep actions here.
+   */
+  private void classifyDependencyCandidate(
+      EffectiveDependency dep,
+      UpgradeMode mode,
+      List<UpgradeAction> actions,
+      List<NeedsAttention> attention) {
+    // Fast-exit MANAGED deps without conflicts before the Maven Central lookup — their upgrade
+    // path runs through the user-controllable BOM classified upstream, so this would be a wasted
+    // network call (even though cached, still serializes through the rate limiter).
+    if (dep.source() == Source.MANAGED && dep.conflicts().isEmpty()) {
+      return;
+    }
+
+    String latestOnCentral =
+        safeGetLatestStable(MavenCoordinate.of(dep.groupId(), dep.artifactId(), null));
+
+    if (!dep.conflicts().isEmpty() && dep.source() != Source.EXPLICIT_OVERRIDE) {
+      // MANAGED dep with multiple BOMs disagreeing — surface the conflict.
+      attention.add(
+          new NeedsAttention.Conflict(
+              dep.groupId(),
+              dep.artifactId(),
+              dep.effectiveVersion(),
+              dep.managedBy().map(MavenCoordinate::toCoordinateString).orElse(null),
+              toCandidates(dep, /* includeWinner= */ true),
+              latestOnCentral));
+      return;
+    }
+
+    if (dep.source() == Source.EXPLICIT_OVERRIDE) {
+      attention.add(
+          new NeedsAttention.ExplicitOverride(
+              dep.groupId(),
+              dep.artifactId(),
+              dep.effectiveVersion(),
+              toCandidates(dep, /* includeWinner= */ false),
+              latestOnCentral));
+      return;
+    }
+
+    // EXPLICIT path: bump candidate.
+    if (latestOnCentral == null) {
+      return;
+    }
+    if (versionComparator.compare(dep.effectiveVersion(), latestOnCentral) >= 0) {
+      return;
+    }
+    String updateType =
+        versionComparator.determineUpdateType(dep.effectiveVersion(), latestOnCentral);
+    if (MAJOR_UPDATE_TYPE.equals(updateType) && mode == UpgradeMode.MINOR_PATCH) {
+      String currentMajorLatest =
+          findCurrentMajorLatest(
+              MavenCoordinate.of(dep.groupId(), dep.artifactId(), null), dep.effectiveVersion());
+      attention.add(
+          new NeedsAttention.MajorAvailable(
+              dep.groupId(),
+              dep.artifactId(),
+              dep.effectiveVersion(),
+              currentMajorLatest != null ? currentMajorLatest : dep.effectiveVersion(),
+              latestOnCentral,
+              Source.EXPLICIT.name(),
+              null));
+    } else if (!NO_UPDATE_TYPE.equals(updateType)) {
+      actions.add(
+          UpgradeAction.explicitBump(
+              dep.groupId(),
+              dep.artifactId(),
+              dep.effectiveVersion(),
+              latestOnCentral,
+              updateType));
+    }
+  }
+
+  /** Wraps {@link #getLatestStableVersion} and swallows transient lookup failures. */
+  private String safeGetLatestStable(MavenCoordinate coord) {
+    try {
+      return getLatestStableVersion(coord);
+    } catch (MavenCentralException _) {
+      return null;
+    }
+  }
+
+  /**
+   * Finds the latest stable version sharing the same major as {@code current}, or null if no newer
+   * same-major stable version exists.
+   */
+  private String findCurrentMajorLatest(MavenCoordinate coordinate, String current) {
+    Integer currentMajor = extractMajorVersion(current);
+    if (currentMajor == null) {
+      return null;
+    }
+    try {
+      return mavenCentralService.getAllVersions(coordinate).stream()
+          .filter(versionComparator::isStableVersion)
+          .filter(candidate -> currentMajor.equals(extractMajorVersion(candidate)))
+          .filter(candidate -> versionComparator.compare(current, candidate) <= 0)
+          .findFirst()
+          .orElse(null);
+    } catch (MavenCentralException _) {
+      return null;
+    }
+  }
+
+  private static List<NeedsAttention.Candidate> toCandidates(
+      EffectiveDependency dep, boolean includeWinner) {
+    List<NeedsAttention.Candidate> out = new ArrayList<>();
+    if (includeWinner) {
+      dep.managedBy()
+          .ifPresent(
+              bom ->
+                  out.add(
+                      new NeedsAttention.Candidate(
+                          dep.effectiveVersion(), bom.toCoordinateString())));
+    }
+    for (ManagedAlternative alt : dep.conflicts()) {
+      out.add(new NeedsAttention.Candidate(alt.version(), alt.managedBy().toCoordinateString()));
+    }
+    return out;
   }
 
   private record DependencyMetrics(
