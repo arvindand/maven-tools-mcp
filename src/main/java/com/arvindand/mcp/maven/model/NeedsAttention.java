@@ -1,5 +1,6 @@
 package com.arvindand.mcp.maven.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
 /**
@@ -54,6 +55,7 @@ public sealed interface NeedsAttention
       implements NeedsAttention {
 
     @Override
+    @JsonProperty("kind")
     public String kind() {
       return "major_available";
     }
@@ -83,6 +85,7 @@ public sealed interface NeedsAttention
       implements NeedsAttention {
 
     @Override
+    @JsonProperty("kind")
     public String kind() {
       return "conflict";
     }
@@ -110,6 +113,7 @@ public sealed interface NeedsAttention
       implements NeedsAttention {
 
     @Override
+    @JsonProperty("kind")
     public String kind() {
       return "explicit_override";
     }

@@ -19,6 +19,7 @@ import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedAlternative;
 import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.util.VersionComparator;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -286,6 +287,21 @@ class RecommendPomUpgradesToolTest {
     assertThat(((ToolResponse.Error) response).error().message())
         .startsWith("Invalid POM input:")
         .contains("malformed");
+  }
+
+  @Test
+  void serializesNeedsAttentionKindDiscriminator() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    NeedsAttention major =
+        new NeedsAttention.MajorAvailable("g", "a", "1.0", "1.5", "2.0", "EXPLICIT", null);
+    NeedsAttention conflict =
+        new NeedsAttention.Conflict("g", "a", "1.0", "bom:1", List.of(), "2.0");
+    NeedsAttention override =
+        new NeedsAttention.ExplicitOverride("g", "a", "1.0", List.of(), "2.0");
+
+    assertThat(mapper.writeValueAsString(major)).contains("\"kind\":\"major_available\"");
+    assertThat(mapper.writeValueAsString(conflict)).contains("\"kind\":\"conflict\"");
+    assertThat(mapper.writeValueAsString(override)).contains("\"kind\":\"explicit_override\"");
   }
 
   private static EffectiveDependency explicit(String groupId, String artifactId, String version) {
