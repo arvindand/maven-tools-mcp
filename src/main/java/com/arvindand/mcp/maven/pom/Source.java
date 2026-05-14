@@ -12,6 +12,9 @@ package com.arvindand.mcp.maven.pom;
  *       <dependencyManagement>} entry also covers the same coordinate. The explicit value wins, but
  *       the override is worth surfacing to the user.
  * </ul>
+ *
+ * @author Arvind Menon
+ * @since 2.2.0
  */
 public enum Source {
   EXPLICIT,

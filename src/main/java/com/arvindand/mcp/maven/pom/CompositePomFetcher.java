@@ -10,6 +10,9 @@ import org.apache.maven.model.Model;
  * Chains multiple {@link PomFetcher}s. Returns the first non-empty result for a given coordinate.
  * Typical use: {@code new CompositePomFetcher(List.of(localBundleFetcher, mavenCentralFetcher))} —
  * local POMs win, Maven Central is the fallback.
+ *
+ * @author Arvind Menon
+ * @since 2.2.0
  */
 public final class CompositePomFetcher implements PomFetcher {
 

@@ -16,6 +16,9 @@ import org.springframework.stereotype.Component;
  * {@link PomFetcher} that delegates raw XML retrieval to {@link MavenCentralService} and parses the
  * result with {@link MavenXpp3Reader}. Any fetch or parse failure becomes an empty {@link
  * Optional}; the resolver records it as a warning.
+ *
+ * @author Arvind Menon
+ * @since 2.2.0
  */
 @Component
 public class MavenCentralPomFetcher implements PomFetcher {

@@ -7,14 +7,17 @@ import java.util.Objects;
 /**
  * The complete result of resolving a POM.
  *
- * @param dependencies one entry per declared dependency in the input POM (transitive dependencies
- *     are intentionally NOT included — Phase 6a scope)
+ * @param dependencies one entry per declared dependency in the input POM. Transitive dependencies
+ *     are intentionally not included; the resolver answers "what version does this POM resolve for
+ *     each thing it declares?", not "what's the full classpath?"
  * @param parentChain the resolved parent coordinates walked during resolution, closest-first (the
  *     input POM's immediate parent at index 0; deeper ancestors at higher indices). Empty if the
  *     POM has no parent.
  * @param warnings non-fatal issues — unresolved properties, parents that couldn't be fetched,
  *     ranges left as opaque strings, etc. Resolution still produces a result; warnings let the
  *     caller decide whether to trust each entry.
+ * @author Arvind Menon
+ * @since 2.2.0
  */
 public record EffectivePomResult(
     List<EffectiveDependency> dependencies,

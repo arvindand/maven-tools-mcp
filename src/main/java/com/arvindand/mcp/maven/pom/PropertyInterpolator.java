@@ -12,9 +12,14 @@ import java.util.regex.Pattern;
  * depth (10 passes) to guarantee termination on cyclic property definitions. Unknown placeholders
  * are left unchanged — the resolver surfaces them as warnings, not errors.
  *
- * <p>Edge cases deliberately not supported in Phase 6a: {@code ${project.version}}, {@code
- * ${project.parent.version}}, {@code ${revision}}, environment variables. These are future work;
- * for now they appear as literal unresolved placeholders in the output.
+ * <p>This interpolator is intentionally dumb about Maven semantics — it does plain string
+ * substitution. The resolver pre-seeds well-known {@code project.*} properties (so {@code
+ * ${project.version}} resolves) before invoking this class; placeholders the resolver does not
+ * pre-seed (e.g., {@code ${revision}}, environment variables) appear as literal unresolved
+ * placeholders in the output.
+ *
+ * @author Arvind Menon
+ * @since 2.2.0
  */
 final class PropertyInterpolator {
 

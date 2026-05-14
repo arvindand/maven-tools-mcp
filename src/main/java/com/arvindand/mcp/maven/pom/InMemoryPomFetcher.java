@@ -23,6 +23,9 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Used as the local-side of a {@link CompositePomFetcher} so callers can sideload unreleased
  * monorepo POMs alongside Maven Central as the fallback.
+ *
+ * @author Arvind Menon
+ * @since 2.2.0
  */
 public final class InMemoryPomFetcher implements PomFetcher {
 

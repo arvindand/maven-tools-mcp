@@ -9,6 +9,9 @@ import org.apache.maven.model.Model;
  * fetching the POM XML (typically from Maven Central) and parsing it. Returns an empty {@link
  * Optional} for any coordinate that cannot be fetched or parsed — callers (the resolver) record
  * this as a warning rather than an error.
+ *
+ * @author Arvind Menon
+ * @since 2.2.0
  */
 public interface PomFetcher {
 
