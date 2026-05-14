@@ -8,10 +8,14 @@ import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
 import com.arvindand.mcp.maven.model.DependencyInfo;
 import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
+import com.arvindand.mcp.maven.model.NeedsAttention;
+import com.arvindand.mcp.maven.model.PomUpgradeRecommendation;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
 import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
 import com.arvindand.mcp.maven.model.StabilityFilter;
 import com.arvindand.mcp.maven.model.ToolResponse;
+import com.arvindand.mcp.maven.model.UpgradeAction;
+import com.arvindand.mcp.maven.model.UpgradeMode;
 import com.arvindand.mcp.maven.model.VersionComparison;
 import com.arvindand.mcp.maven.model.VersionInfo;
 import com.arvindand.mcp.maven.model.VersionInfo.VersionType;
@@ -22,8 +26,11 @@ import com.arvindand.mcp.maven.model.license.LicenseInfo.LicenseCategory;
 import com.arvindand.mcp.maven.model.security.SecurityAssessment;
 import com.arvindand.mcp.maven.model.security.SecurityFindings;
 import com.arvindand.mcp.maven.model.security.SecuritySummary;
+import com.arvindand.mcp.maven.pom.EffectiveDependency;
 import com.arvindand.mcp.maven.pom.EffectivePomResolver;
 import com.arvindand.mcp.maven.pom.EffectivePomResult;
+import com.arvindand.mcp.maven.pom.ManagedAlternative;
+import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.util.MavenCoordinateParser;
 import com.arvindand.mcp.maven.util.VersionComparator;
 import java.time.Duration;
@@ -1540,6 +1547,253 @@ public class MavenDependencyTools {
       logger.error(UNEXPECTED_ERROR, e);
       return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
     }
+  }
+
+  /**
+   * Recommend POM upgrades, split into a mechanical action list (for non-LLM agents that apply the
+   * edits directly) and a needs-attention list (for human / LLM review).
+   *
+   * @param pomXml the primary POM XML to analyze
+   * @param mode {@link UpgradeMode#MINOR_PATCH} (default) or {@link UpgradeMode#ALL}
+   * @param sideloadedPoms optional bundle of additional POMs (monorepo siblings, unreleased
+   *     parents) tried before Maven Central
+   * @return JSON response wrapping {@link PomUpgradeRecommendation}
+   */
+  @SuppressWarnings("java:S100") // MCP tool method naming
+  @Tool(
+      description =
+          "POM-aware upgrade recommender. Takes raw pom.xml content and returns two lists: (1)"
+              + " deterministic_actions — mechanical <version> edits a non-LLM agent can apply"
+              + " directly (explicit_bump for declared deps, bom_bump for BOM-managed deps where"
+              + " a newer BOM minor/patch is available); (2) needs_attention — major upgrades,"
+              + " multi-BOM conflicts, and explicit overrides that need human or LLM review,"
+              + " each carrying the Maven Central latest so the model has full context in one"
+              + " round-trip. Default mode MINOR_PATCH routes majors to needs_attention; mode"
+              + " ALL treats majors as deterministic (rarely what you want). Use when asked:"
+              + " 'recommend upgrades for my pom.xml', 'what can I safely bump?', or to drive an"
+              + " automated dependency-update workflow.")
+  public ToolResponse recommend_pom_upgrades(
+      @ToolParam(description = "Raw <project>...</project> XML content of the POM to analyze.")
+          String pomXml,
+      @ToolParam(
+              description =
+                  "Upgrade mode: MINOR_PATCH (default — only same-major minor / patch upgrades"
+                      + " are deterministic; majors go to needs_attention) or ALL (majors count"
+                      + " as deterministic too).",
+              required = false)
+          @Nullable
+          UpgradeMode mode,
+      @ToolParam(
+              description =
+                  "Optional bundle of additional POM XML strings (sibling modules, unreleased"
+                      + " parents). Each is indexed by its self-declared groupId:artifactId:version"
+                      + " and tried before Maven Central.",
+              required = false)
+          @Nullable
+          List<String> sideloadedPoms) {
+    try {
+      EffectivePomResult resolved =
+          (sideloadedPoms == null || sideloadedPoms.isEmpty())
+              ? pomResolver.resolve(pomXml)
+              : pomResolver.resolve(pomXml, sideloadedPoms);
+      UpgradeMode effectiveMode = mode != null ? mode : UpgradeMode.MINOR_PATCH;
+      return ToolResponse.Success.of(buildPomUpgradeRecommendation(resolved, effectiveMode));
+    } catch (IllegalArgumentException e) {
+      return ToolResponse.Error.of("Invalid POM input: " + e.getMessage());
+    } catch (Exception e) {
+      logger.error(UNEXPECTED_ERROR, e);
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+    }
+  }
+
+  private PomUpgradeRecommendation buildPomUpgradeRecommendation(
+      EffectivePomResult resolved, UpgradeMode mode) {
+    List<UpgradeAction> actions = new ArrayList<>();
+    List<NeedsAttention> attention = new ArrayList<>();
+
+    // First pass: BOM bumps for unique managing BOMs (covers every MANAGED dep in one edit).
+    Map<String, MavenCoordinate> bomsByKey = new LinkedHashMap<>();
+    for (EffectiveDependency dep : resolved.dependencies()) {
+      if (dep.source() == Source.MANAGED) {
+        dep.managedBy()
+            .ifPresent(bom -> bomsByKey.putIfAbsent(bom.groupId() + ":" + bom.artifactId(), bom));
+      }
+    }
+    for (MavenCoordinate bom : bomsByKey.values()) {
+      classifyBomCandidate(bom, mode, actions, attention);
+    }
+
+    // Second pass: per-dep classification.
+    for (EffectiveDependency dep : resolved.dependencies()) {
+      classifyDependencyCandidate(dep, mode, actions, attention);
+    }
+
+    return new PomUpgradeRecommendation(actions, attention, resolved.warnings());
+  }
+
+  /**
+   * Looks up the latest stable version of a managing BOM and either emits a {@link UpgradeAction
+   * bom_bump} action (minor/patch, or major when {@code mode == ALL}) or a {@link
+   * NeedsAttention.MajorAvailable major_available} entry. Network failures and missing-version
+   * cases drop silently — those would already surface as warnings on the upstream resolution.
+   */
+  private void classifyBomCandidate(
+      MavenCoordinate bom,
+      UpgradeMode mode,
+      List<UpgradeAction> actions,
+      List<NeedsAttention> attention) {
+    try {
+      String latest = getLatestStableVersion(bom);
+      if (latest == null || bom.version() == null) {
+        return;
+      }
+      if (versionComparator.compare(bom.version(), latest) >= 0) {
+        return;
+      }
+      String updateType = versionComparator.determineUpdateType(bom.version(), latest);
+      if (MAJOR_UPDATE_TYPE.equals(updateType) && mode == UpgradeMode.MINOR_PATCH) {
+        String currentMajorLatest = findCurrentMajorLatest(bom, bom.version());
+        attention.add(
+            new NeedsAttention.MajorAvailable(
+                bom.groupId(),
+                bom.artifactId(),
+                bom.version(),
+                currentMajorLatest != null ? currentMajorLatest : bom.version(),
+                latest,
+                Source.MANAGED.name(),
+                bom.toCoordinateString()));
+      } else if (!NO_UPDATE_TYPE.equals(updateType)) {
+        actions.add(
+            UpgradeAction.bomBump(
+                bom.groupId(), bom.artifactId(), bom.version(), latest, updateType));
+      }
+    } catch (MavenCentralException _) {
+      // upstream resolver already warned about unreachable parents; nothing to add here.
+    }
+  }
+
+  /**
+   * Classifies a single declared dependency: surfaces conflicts and explicit overrides into {@code
+   * needsAttention} regardless of upgrade availability; for EXPLICIT deps emits a {@link
+   * UpgradeAction explicit_bump} (or routes majors to {@code needsAttention} when mode is {@code
+   * MINOR_PATCH}); MANAGED deps without conflicts are covered by the upstream BOM bump pass and do
+   * not produce per-dep actions here.
+   */
+  private void classifyDependencyCandidate(
+      EffectiveDependency dep,
+      UpgradeMode mode,
+      List<UpgradeAction> actions,
+      List<NeedsAttention> attention) {
+    String latestOnCentral =
+        safeGetLatestStable(MavenCoordinate.of(dep.groupId(), dep.artifactId(), null));
+
+    if (!dep.conflicts().isEmpty() && dep.source() != Source.EXPLICIT_OVERRIDE) {
+      // MANAGED dep with multiple BOMs disagreeing — surface the conflict.
+      attention.add(
+          new NeedsAttention.Conflict(
+              dep.groupId(),
+              dep.artifactId(),
+              dep.effectiveVersion(),
+              dep.managedBy().map(MavenCoordinate::toCoordinateString).orElse(null),
+              toCandidates(dep, /* includeWinner= */ true),
+              latestOnCentral));
+      return;
+    }
+
+    if (dep.source() == Source.EXPLICIT_OVERRIDE) {
+      attention.add(
+          new NeedsAttention.ExplicitOverride(
+              dep.groupId(),
+              dep.artifactId(),
+              dep.effectiveVersion(),
+              toCandidates(dep, /* includeWinner= */ false),
+              latestOnCentral));
+      return;
+    }
+
+    if (dep.source() == Source.MANAGED) {
+      // Covered by the BOM bump pass; no per-dep action.
+      return;
+    }
+
+    // EXPLICIT path: bump candidate.
+    if (latestOnCentral == null) {
+      return;
+    }
+    if (versionComparator.compare(dep.effectiveVersion(), latestOnCentral) >= 0) {
+      return;
+    }
+    String updateType =
+        versionComparator.determineUpdateType(dep.effectiveVersion(), latestOnCentral);
+    if (MAJOR_UPDATE_TYPE.equals(updateType) && mode == UpgradeMode.MINOR_PATCH) {
+      String currentMajorLatest =
+          findCurrentMajorLatest(
+              MavenCoordinate.of(dep.groupId(), dep.artifactId(), null), dep.effectiveVersion());
+      attention.add(
+          new NeedsAttention.MajorAvailable(
+              dep.groupId(),
+              dep.artifactId(),
+              dep.effectiveVersion(),
+              currentMajorLatest != null ? currentMajorLatest : dep.effectiveVersion(),
+              latestOnCentral,
+              Source.EXPLICIT.name(),
+              null));
+    } else if (!NO_UPDATE_TYPE.equals(updateType)) {
+      actions.add(
+          UpgradeAction.explicitBump(
+              dep.groupId(),
+              dep.artifactId(),
+              dep.effectiveVersion(),
+              latestOnCentral,
+              updateType));
+    }
+  }
+
+  /** Wraps {@link #getLatestStableVersion} and swallows transient lookup failures. */
+  private String safeGetLatestStable(MavenCoordinate coord) {
+    try {
+      return getLatestStableVersion(coord);
+    } catch (MavenCentralException _) {
+      return null;
+    }
+  }
+
+  /**
+   * Finds the latest stable version sharing the same major as {@code current}, or null if no newer
+   * same-major stable version exists.
+   */
+  private String findCurrentMajorLatest(MavenCoordinate coordinate, String current) {
+    Integer currentMajor = extractMajorVersion(current);
+    if (currentMajor == null) {
+      return null;
+    }
+    try {
+      return mavenCentralService.getAllVersions(coordinate).stream()
+          .filter(versionComparator::isStableVersion)
+          .filter(candidate -> currentMajor.equals(extractMajorVersion(candidate)))
+          .filter(candidate -> versionComparator.compare(current, candidate) <= 0)
+          .findFirst()
+          .orElse(null);
+    } catch (MavenCentralException _) {
+      return null;
+    }
+  }
+
+  private static List<NeedsAttention.Candidate> toCandidates(
+      EffectiveDependency dep, boolean includeWinner) {
+    List<NeedsAttention.Candidate> out = new ArrayList<>();
+    if (includeWinner) {
+      dep.managedBy()
+          .ifPresent(
+              bom ->
+                  out.add(
+                      new NeedsAttention.Candidate(
+                          dep.effectiveVersion(), bom.toCoordinateString())));
+    }
+    for (ManagedAlternative alt : dep.conflicts()) {
+      out.add(new NeedsAttention.Candidate(alt.version(), alt.managedBy().toCoordinateString()));
+    }
+    return out;
   }
 
   private record DependencyMetrics(

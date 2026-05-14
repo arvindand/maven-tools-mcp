@@ -92,7 +92,7 @@ For fuller setup guidance, including JAR/native usage, Docker Compose, and envir
 
 ## Core Tools
 
-The server exposes 10 MCP tools.
+The server exposes 11 MCP tools.
 
 ### Maven intelligence tools
 
@@ -106,6 +106,7 @@ The server exposes 10 MCP tools.
 | `analyze_release_patterns` | Look at release cadence and maintenance signals |
 | `analyze_project_health` | Run a broader dependency health audit |
 | `analyze_pom_dependencies` | POM-aware: resolve effective versions from raw pom.xml, classify as `EXPLICIT` / `MANAGED` / `EXPLICIT_OVERRIDE`, surface multi-BOM conflicts |
+| `recommend_pom_upgrades` | POM-aware: returns deterministic `<version>` edits (explicit + BOM bumps) for an agent to apply, plus a `needs_attention` list of majors / conflicts / overrides for human or LLM review |
 
 ### Context7 documentation tools
 
@@ -118,7 +119,12 @@ For parameters, examples, and tool-by-tool notes, see [`docs/tools.md`](docs/too
 
 ### POM-aware dependency analysis
 
-`analyze_pom_dependencies` is the one tool that takes a whole POM, not a coordinate. It walks the parent chain, applies `<dependencyManagement>`, resolves `<scope>import</scope>` BOMs against Maven Central, and returns each declared dependency with its effective version plus where that version came from. The intended use is upgrade reasoning: an agent that knows a dep is `MANAGED` by `spring-boot-dependencies` will bump the BOM rather than override the dep version directly. Multi-module monorepos and unreleased parents resolve via an optional `sideloadedPoms` bundle — the caller passes the sibling POMs, the resolver uses them ahead of Maven Central.
+Two tools take a whole POM (raw XML) rather than a single coordinate. Both walk the parent chain, apply `<dependencyManagement>`, resolve `<scope>import</scope>` BOMs against Maven Central, and accept an optional `sideloadedPoms` bundle for monorepo siblings / unreleased parents:
+
+- **`analyze_pom_dependencies`** — returns each declared dep with effective version + classification (`EXPLICIT` / `MANAGED` / `EXPLICIT_OVERRIDE`) + managing BOM coordinate + any multi-BOM `conflicts`. Use when you want raw analysis ("what does my POM actually resolve to?").
+- **`recommend_pom_upgrades`** — builds on the analyzer and returns two lists: `deterministic_actions` (mechanical `<version>` edits — `explicit_bump` for declared deps, `bom_bump` for BOM-managed deps where a newer minor/patch BOM is available — applied directly by a non-LLM agent) and `needs_attention` (majors, multi-BOM conflicts, and explicit overrides, each carrying the Maven Central latest so an LLM has full context in one round-trip). Use for "what can I safely bump?" workflows.
+
+The split matters: the agent never needs to call `compare_dependency_versions` per-dep or parse Maven XML in Python — one `recommend_pom_upgrades` call returns everything mechanical, and the LLM review path picks up everything that needs judgment.
 
 ## Example
 

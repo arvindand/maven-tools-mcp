@@ -8,9 +8,13 @@ import com.arvindand.mcp.maven.model.DependencyInfo;
 import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.MavenMetadata;
+import com.arvindand.mcp.maven.model.NeedsAttention;
+import com.arvindand.mcp.maven.model.PomUpgradeRecommendation;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
 import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
 import com.arvindand.mcp.maven.model.ToolResponse;
+import com.arvindand.mcp.maven.model.UpgradeAction;
+import com.arvindand.mcp.maven.model.UpgradeMode;
 import com.arvindand.mcp.maven.model.VersionComparison;
 import com.arvindand.mcp.maven.model.VersionInfo;
 import com.arvindand.mcp.maven.model.VersionsByType;
@@ -122,6 +126,14 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, EffectiveDependency.class);
       registerRecordClass(hints, ManagedAlternative.class);
 
+      // Register recommend_pom_upgrades response records.
+      registerRecordClass(hints, PomUpgradeRecommendation.class);
+      registerRecordClass(hints, UpgradeAction.class);
+      registerRecordClass(hints, NeedsAttention.MajorAvailable.class);
+      registerRecordClass(hints, NeedsAttention.Conflict.class);
+      registerRecordClass(hints, NeedsAttention.ExplicitOverride.class);
+      registerRecordClass(hints, NeedsAttention.Candidate.class);
+
       // Register configuration properties record classes
       registerRecordClass(hints, MavenCentralProperties.class);
       registerRecordClass(hints, MavenCentralProperties.Auth.class);
@@ -134,6 +146,7 @@ public class NativeImageConfiguration {
       registerEnumClass(hints, VersionInfo.VersionType.class);
       registerEnumClass(hints, BulkCheckResult.Status.class);
       registerEnumClass(hints, Source.class);
+      registerEnumClass(hints, UpgradeMode.class);
 
       // Register security + license enum classes (v2.0.0+)
       registerEnumClass(hints, SecurityAssessment.Status.class);
