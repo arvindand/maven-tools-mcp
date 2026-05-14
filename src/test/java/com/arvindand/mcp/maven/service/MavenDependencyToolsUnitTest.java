@@ -10,6 +10,7 @@ import com.arvindand.mcp.maven.config.Context7Properties;
 import com.arvindand.mcp.maven.model.StabilityFilter;
 import com.arvindand.mcp.maven.model.ToolResponse;
 import com.arvindand.mcp.maven.model.VersionComparison;
+import com.arvindand.mcp.maven.pom.EffectivePomResolver;
 import com.arvindand.mcp.maven.util.VersionComparator;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -27,9 +28,14 @@ class MavenDependencyToolsUnitTest {
     VulnerabilityService vulnerabilityService = mock(VulnerabilityService.class);
     VersionComparator versionComparator = new VersionComparator();
     Context7Properties context7Properties = new Context7Properties(false, null);
+    EffectivePomResolver pomResolver = mock(EffectivePomResolver.class);
     MavenDependencyTools tools =
         new MavenDependencyTools(
-            mavenCentralService, versionComparator, context7Properties, vulnerabilityService);
+            mavenCentralService,
+            versionComparator,
+            context7Properties,
+            vulnerabilityService,
+            pomResolver);
 
     when(mavenCentralService.getAllVersions(any()))
         .thenReturn(List.of("4.0.0", "3.5.11", "3.5.10", "3.5.9"));

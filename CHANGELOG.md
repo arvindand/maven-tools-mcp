@@ -9,12 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added (Unreleased)
 
-- **POM resolver service** (`com.arvindand.mcp.maven.pom`): internal service that takes
-  pasted POM content and returns per-dependency effective versions classified as
-  `EXPLICIT`, `MANAGED`, or `EXPLICIT_OVERRIDE`, walking parent POMs and BOM imports
-  via Maven Central. Supports multi-module bundles via `resolve(pomXml, sideloadedPoms)`
-  and `resolveAll(poms)` plus `${project.version}` / `${project.parent.version}`
-  interpolation. No MCP tool exposed yet — that arrives in Phase 6b.
+- **`analyze_pom_dependencies` MCP tool**: takes raw POM XML and returns each declared
+  dependency with its effective version classified as `EXPLICIT`, `MANAGED`, or
+  `EXPLICIT_OVERRIDE`, the parent chain that was walked, the managing BOM/parent
+  coordinate when applicable, and warnings for any unresolved bits. Optional
+  `sideloadedPoms` argument accepts a bundle of additional POMs (sibling modules,
+  unreleased parents) so monorepos and not-yet-published parents resolve without
+  network access for those POMs.
+- **POM resolver service** (`com.arvindand.mcp.maven.pom`): the engine behind the new
+  tool. Walks parent POMs and BOM imports against Maven Central, interpolates
+  `${name}` and `${project.version}` / `${project.parent.version}` placeholders,
+  merges `<dependencyManagement>` with closest-ancestor-wins semantics (typed
+  `(groupId, artifactId, type, classifier)` keys so `test-jar` and `jar` entries
+  don't collide), and surfaces warnings at every silent-drop site (unresolvable
+  managed version, unreachable parent, BOM fetch failure, parent depth cap).
+  Multi-module use cases are served via `resolve(pomXml, sideloadedPoms)` and
+  `resolveAll(poms)`.
 
 ### Changed (Unreleased)
 

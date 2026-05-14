@@ -604,4 +604,156 @@ class EffectivePomResolverTest {
                   .contains(MavenCoordinate.of("com.example.platform", "platform-parent", "1.0.0"));
             });
   }
+
+  @Test
+  void surfacesConflictWhenTwoBomsImportedAtTheSameLevelManageTheSameDep() {
+    // Two BOMs imported by the root POM, both manage jackson-databind at different versions.
+    // Maven first-declared semantics: BOM A wins, BOM B's value is the losing candidate.
+    Model bomA =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>bom-a</artifactId>
+              <version>1.0.0</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                    <version>2.18.0</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    Model bomB =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>bom-b</artifactId>
+              <version>2.0.0</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                    <version>2.19.2</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    PomFetcher fetcher =
+        stub(Map.of("com.example:bom-a:1.0.0", bomA, "com.example:bom-b:2.0.0", bomB));
+
+    String pom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.example</groupId>
+          <artifactId>app</artifactId>
+          <version>1.0.0</version>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>com.example</groupId>
+                <artifactId>bom-a</artifactId>
+                <version>1.0.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+              </dependency>
+              <dependency>
+                <groupId>com.example</groupId>
+                <artifactId>bom-b</artifactId>
+                <version>2.0.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(pom);
+
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(
+            d -> {
+              // BOM A is first-declared in the importing POM → wins.
+              assertThat(d.effectiveVersion()).isEqualTo("2.18.0");
+              assertThat(d.source()).isEqualTo(Source.MANAGED);
+              assertThat(d.managedBy())
+                  .contains(MavenCoordinate.of("com.example", "bom-a", "1.0.0"));
+              // BOM B's 2.19.2 surfaces as a losing candidate so the caller can detect the
+              // conflict (and an LLM can reason about whether to pin the version explicitly).
+              assertThat(d.conflicts())
+                  .singleElement()
+                  .satisfies(
+                      c -> {
+                        assertThat(c.version()).isEqualTo("2.19.2");
+                        assertThat(c.managedBy())
+                            .isEqualTo(MavenCoordinate.of("com.example", "bom-b", "2.0.0"));
+                      });
+            });
+  }
+
+  @Test
+  void emitsEmptyConflictsForUncontentedManagedEntries() {
+    Model parent =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>parent</artifactId>
+              <version>1.0.0</version>
+              <dependencyManagement>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                    <version>2.19.2</version>
+                  </dependency>
+                </dependencies>
+              </dependencyManagement>
+            </project>
+            """);
+    PomFetcher fetcher = stub(Map.of("com.example:parent:1.0.0", parent));
+
+    String pom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>parent</artifactId>
+            <version>1.0.0</version>
+          </parent>
+          <artifactId>child</artifactId>
+          <dependencies>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+            </dependency>
+          </dependencies>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(pom);
+
+    assertThat(result.dependencies())
+        .singleElement()
+        .satisfies(d -> assertThat(d.conflicts()).isEmpty());
+  }
 }

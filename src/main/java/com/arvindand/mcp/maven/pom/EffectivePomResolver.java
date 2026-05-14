@@ -29,8 +29,14 @@ import org.springframework.stereotype.Service;
  * <p>BOM imports ({@code <scope>import</scope><type>pom</type>}) in {@code <dependencyManagement>}
  * are resolved recursively: the BOM is fetched, its properties are merged (caller wins on
  * collision), and its managed entries are accumulated with the same closest-ancestor-wins logic.
+ * When multiple BOMs imported at the same level disagree about a coordinate, the first-declared
+ * wins per Maven semantics and the losing candidates are exposed on {@link
+ * EffectiveDependency#conflicts()} so the caller can decide whether to pin the version explicitly.
  *
  * <p>See {@code package-info.java} for design notes and attribution.
+ *
+ * @author Arvind Menon
+ * @since 2.2.0
  */
 @Service
 public class EffectivePomResolver {
@@ -172,7 +178,8 @@ public class EffectivePomResolver {
                 d.getArtifactId(),
                 mgmt.version(),
                 Source.MANAGED,
-                Optional.of(mgmt.managedBy())));
+                Optional.of(mgmt.managedBy()),
+                mgmt.losingCandidates()));
       } else {
         String resolved = PropertyInterpolator.interpolate(declared, properties);
         // Heuristic: residual "${" means interpolation left a placeholder unresolved —
@@ -185,9 +192,14 @@ public class EffectivePomResolver {
         Source source = mgmt == null ? Source.EXPLICIT : Source.EXPLICIT_OVERRIDE;
         Optional<MavenCoordinate> managedBy =
             mgmt == null ? Optional.empty() : Optional.of(mgmt.managedBy());
+        // For EXPLICIT_OVERRIDE, surface BOTH the winning managed entry AND its losers so the
+        // caller can see every candidate version their override is choosing against. For EXPLICIT
+        // (no managed entry at all) conflicts is empty.
+        List<ManagedAlternative> conflicts =
+            mgmt == null ? List.of() : prependWinnerToConflicts(mgmt);
         deps.add(
             new EffectiveDependency(
-                d.getGroupId(), d.getArtifactId(), resolved, source, managedBy));
+                d.getGroupId(), d.getArtifactId(), resolved, source, managedBy, conflicts));
       }
     }
     return deps;
@@ -229,10 +241,6 @@ public class EffectivePomResolver {
         continue;
       }
       ManagementKey key = ManagementKey.from(d);
-      if (sink.containsKey(key)) {
-        // Closer ancestor (or the root POM itself) already won.
-        continue;
-      }
       String version = PropertyInterpolator.interpolate(d.getVersion(), properties);
       if (version == null || version.isBlank() || version.contains("${")) {
         warnings.add(
@@ -245,8 +253,48 @@ public class EffectivePomResolver {
                 + ")");
         continue;
       }
-      sink.put(key, new ManagedEntry(version, source));
+      mergeManagedEntry(sink, key, new ManagedEntry(version, source, List.of()));
     }
+  }
+
+  /**
+   * Inserts {@code candidate} into {@code sink}, or — when the key already has a winner — appends
+   * the candidate to the winner's {@code losingCandidates} list. Preserves closest-wins /
+   * first-declared semantics (the existing entry's version + managedBy never change), and surfaces
+   * every losing parent / BOM so a caller can detect multi-BOM disagreements.
+   */
+  private static void mergeManagedEntry(
+      Map<ManagementKey, ManagedEntry> sink, ManagementKey key, ManagedEntry candidate) {
+    ManagedEntry existing = sink.get(key);
+    if (existing == null) {
+      sink.put(key, candidate);
+      return;
+    }
+    if (existing.version().equals(candidate.version())
+        && existing.managedBy().equals(candidate.managedBy())) {
+      // Same source supplied the same value (e.g., a BOM walked via its parent chain handing the
+      // same entry back). Not a meaningful conflict; keep the existing entry.
+      return;
+    }
+    List<ManagedAlternative> losers =
+        new ArrayList<>(
+            existing.losingCandidates().size() + 1 + candidate.losingCandidates().size());
+    losers.addAll(existing.losingCandidates());
+    losers.add(new ManagedAlternative(candidate.version(), candidate.managedBy()));
+    losers.addAll(candidate.losingCandidates());
+    sink.put(key, new ManagedEntry(existing.version(), existing.managedBy(), List.copyOf(losers)));
+  }
+
+  /**
+   * Builds the {@code conflicts} list for an {@code EXPLICIT_OVERRIDE} dependency: the winning
+   * managed candidate (what the BOM/parent would have supplied) followed by every losing candidate
+   * — so the caller sees every version their explicit override is choosing against.
+   */
+  private static List<ManagedAlternative> prependWinnerToConflicts(ManagedEntry mgmt) {
+    List<ManagedAlternative> all = new ArrayList<>(mgmt.losingCandidates().size() + 1);
+    all.add(new ManagedAlternative(mgmt.version(), mgmt.managedBy()));
+    all.addAll(mgmt.losingCandidates());
+    return all;
   }
 
   /**
@@ -301,7 +349,7 @@ public class EffectivePomResolver {
     // threaded through importBom would harden against pathological / malicious input.
     Map<ManagementKey, ManagedEntry> effective =
         effectiveManagementForImportedBom(bom.get(), properties, warnings);
-    effective.forEach(sink::putIfAbsent);
+    effective.forEach((k, v) -> mergeManagedEntry(sink, k, v));
   }
 
   private static MavenCoordinate rootCoordinate(Model root) {
@@ -362,8 +410,13 @@ public class EffectivePomResolver {
   private record ParentContext(
       List<MavenCoordinate> chain, List<Model> models, Map<String, String> properties) {}
 
-  /** A {@code <dependencyManagement>} entry that has been resolved, with its source POM. */
-  private record ManagedEntry(String version, MavenCoordinate managedBy) {}
+  /**
+   * A {@code <dependencyManagement>} entry that has been resolved, with its source POM and any
+   * losing candidates from BOMs / parents that would have supplied a different version but lost to
+   * the closer-ancestor / first-declared semantics.
+   */
+  private record ManagedEntry(
+      String version, MavenCoordinate managedBy, List<ManagedAlternative> losingCandidates) {}
 
   /**
    * Composite key for {@code <dependencyManagement>} entries. Per Maven semantics, the same {@code

@@ -26,6 +26,8 @@ import com.arvindand.mcp.maven.model.license.LicenseInfo.LicenseCategory;
 import com.arvindand.mcp.maven.model.security.SecurityAssessment;
 import com.arvindand.mcp.maven.model.security.SecurityFindings;
 import com.arvindand.mcp.maven.model.security.SecuritySummary;
+import com.arvindand.mcp.maven.pom.EffectivePomResolver;
+import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.util.MavenCoordinateParser;
 import com.arvindand.mcp.maven.util.VersionComparator;
 import java.time.Duration;
@@ -119,6 +121,7 @@ public class MavenDependencyTools {
   private final VersionComparator versionComparator;
   private final Context7Properties context7Properties;
   private final VulnerabilityService vulnerabilityService;
+  private final EffectivePomResolver pomResolver;
 
   private static final int MAX_CONCURRENT_REQUESTS = MavenToolsConstants.MAX_CONCURRENT_REQUESTS;
   private final Semaphore batchSemaphore = new Semaphore(MAX_CONCURRENT_REQUESTS);
@@ -127,11 +130,13 @@ public class MavenDependencyTools {
       MavenCentralService mavenCentralService,
       VersionComparator versionComparator,
       Context7Properties context7Properties,
-      VulnerabilityService vulnerabilityService) {
+      VulnerabilityService vulnerabilityService,
+      EffectivePomResolver pomResolver) {
     this.mavenCentralService = mavenCentralService;
     this.versionComparator = versionComparator;
     this.context7Properties = context7Properties;
     this.vulnerabilityService = vulnerabilityService;
+    this.pomResolver = pomResolver;
   }
 
   /**
@@ -1680,6 +1685,54 @@ public class MavenDependencyTools {
     }
 
     return recommendations;
+  }
+
+  /**
+   * Analyze a Maven POM and return each declared dependency with its effective version, the source
+   * of that version, and the managing BOM / parent coordinate where applicable.
+   *
+   * @param pomXml the primary POM to analyze (raw XML)
+   * @param sideloadedPoms optional bundle of additional POMs (sibling modules, unreleased parents)
+   *     used before falling back to Maven Central. Null or empty is treated as single-POM analysis.
+   * @return JSON response wrapping an effective POM analysis result
+   */
+  @SuppressWarnings("java:S100") // MCP tool method naming
+  @Tool(
+      description =
+          "POM-aware dependency analysis. Takes raw pom.xml content and returns per-dependency"
+              + " effective versions classified as EXPLICIT (declared in this POM),"
+              + " MANAGED (inherited from a parent or BOM), or EXPLICIT_OVERRIDE (declared here"
+              + " AND managed elsewhere). Resolves parent POMs, ${name}/${project.version}"
+              + " placeholders, dependencyManagement, and <scope>import</scope> BOM imports"
+              + " against Maven Central. Optional sideloadedPoms accepts a bundle of additional"
+              + " POMs (monorepo siblings, unreleased parents) used before falling back to Maven"
+              + " Central. Use when asked: 'analyze my pom.xml', 'what versions does this POM"
+              + " actually resolve to?', or for multi-module monorepos. Returns the parent chain,"
+              + " the resolved dependencies, and a list of warnings for any unresolved bits.")
+  public ToolResponse analyze_pom_dependencies(
+      @ToolParam(description = "Raw <project>...</project> XML content of the POM to analyze.")
+          String pomXml,
+      @ToolParam(
+              description =
+                  "Optional bundle of additional POM XML strings (sibling modules, unreleased"
+                      + " parents). Each is indexed by its self-declared groupId:artifactId:version"
+                      + " and tried before Maven Central. Pass null or an empty array for"
+                      + " single-POM analysis.",
+              required = false)
+          @Nullable
+          List<String> sideloadedPoms) {
+    try {
+      EffectivePomResult result =
+          (sideloadedPoms == null || sideloadedPoms.isEmpty())
+              ? pomResolver.resolve(pomXml)
+              : pomResolver.resolve(pomXml, sideloadedPoms);
+      return ToolResponse.Success.of(result);
+    } catch (IllegalArgumentException e) {
+      return ToolResponse.Error.of("Invalid POM input: " + e.getMessage());
+    } catch (Exception e) {
+      logger.error(UNEXPECTED_ERROR, e);
+      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+    }
   }
 
   private record DependencyMetrics(

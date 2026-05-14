@@ -21,6 +21,10 @@ import com.arvindand.mcp.maven.model.security.SecurityAssessment;
 import com.arvindand.mcp.maven.model.security.SecurityFindings;
 import com.arvindand.mcp.maven.model.security.SecuritySummary;
 import com.arvindand.mcp.maven.model.security.VulnerabilityInfo;
+import com.arvindand.mcp.maven.pom.EffectiveDependency;
+import com.arvindand.mcp.maven.pom.EffectivePomResult;
+import com.arvindand.mcp.maven.pom.ManagedAlternative;
+import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.service.VulnerabilityService;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
@@ -119,6 +123,11 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, ToolResponse.Success.class);
       registerRecordClass(hints, ToolResponse.Error.class);
 
+      // Register POM-aware analysis records for JSON serialization in analyze_pom_dependencies.
+      registerRecordClass(hints, EffectivePomResult.class);
+      registerRecordClass(hints, EffectiveDependency.class);
+      registerRecordClass(hints, ManagedAlternative.class);
+
       // Register configuration properties record classes
       registerRecordClass(hints, MavenCentralProperties.class);
       registerRecordClass(hints, MavenCentralProperties.Auth.class);
@@ -130,6 +139,7 @@ public class NativeImageConfiguration {
       // Register enum classes for Jackson serialization and reflection access
       registerEnumClass(hints, VersionInfo.VersionType.class);
       registerEnumClass(hints, BulkCheckResult.Status.class);
+      registerEnumClass(hints, Source.class);
 
       // Register security + license enum classes (v2.0.0+)
       registerEnumClass(hints, SecurityAssessment.Status.class);
