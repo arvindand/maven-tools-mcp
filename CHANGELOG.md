@@ -15,6 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [3.0.1] - 2026-05-15
+
+**Qualifier Classification Patch** — fixes Maven versions that publish pre-release qualifiers as
+dot-separated segments instead of hyphen-separated suffixes.
+
+### Fixed (3.0.1)
+
+- **Dot-separated pre-release qualifiers**: versions such as `1.2.0.Beta1` and `1.2.0.RC1` now
+  classify as pre-releases instead of `stable`. Stable-only upgrade paths, including
+  `recommend_pom_upgrades`, no longer treat these pre-releases as deterministic minor/patch
+  targets.
+
 ## [3.0.0] - 2026-05-14
 
 **POM-Aware Dependency Analysis Release** — introduces two new MCP tools that resolve the effective version of every declared dependency in a Maven POM by walking the parent chain, applying `<dependencyManagement>`, and resolving `<scope>import</scope>` BOM imports. Where previous tools answered "what's the latest version of X on Maven Central?", the new tools answer "what version does this POM actually resolve to for X, and which knob in my POM controls it?" Useful for multi-module projects, Spring Boot apps with BOM-managed transitives, and any project where bumping a dependency means bumping a BOM instead.
@@ -629,7 +641,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.0.1...HEAD
+[3.0.1]: https://github.com/arvindand/maven-tools-mcp/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/arvindand/maven-tools-mcp/compare/v2.1.1...v3.0.0
 [2.1.1]: https://github.com/arvindand/maven-tools-mcp/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/arvindand/maven-tools-mcp/compare/v2.0.7...v2.1.0

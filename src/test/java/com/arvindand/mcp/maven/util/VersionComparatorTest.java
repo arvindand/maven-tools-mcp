@@ -363,6 +363,10 @@ class VersionComparatorTest {
     VersionComparator.VersionComponents parsed2 = versionComparator.parseVersion("1.0.0-SNAPSHOT");
     assertThat(parsed2.qualifier()).isEqualTo("snapshot");
     assertThat(parsed2.numericParts()).containsExactly(1, 0, 0);
+
+    VersionComparator.VersionComponents parsed3 = versionComparator.parseVersion("1.7.0.Beta1");
+    assertThat(parsed3.qualifier()).isEqualTo("beta1");
+    assertThat(parsed3.numericParts()).containsExactly(1, 7, 0);
   }
 
   private static Stream<Arguments> updateTypeTestData() {
@@ -416,7 +420,10 @@ class VersionComparatorTest {
         // Pre-release versions
         Arguments.of("1.0.0-alpha", false, "Alpha version is not stable"),
         Arguments.of("1.0.0-beta", false, "Beta version is not stable"),
+        Arguments.of("1.0.0.Beta1", false, "Dot-separated beta version is not stable"),
         Arguments.of("1.0.0-rc", false, "RC version is not stable"),
+        Arguments.of("1.0.0.RC1", false, "Dot-separated RC version is not stable"),
+        Arguments.of("1.0.0.CR1", false, "Dot-separated CR version is not stable"),
         Arguments.of("1.0.0-snapshot", false, "Snapshot version is not stable"),
         Arguments.of("1.0.0-milestone", false, "Milestone version is not stable"),
 
@@ -451,11 +458,13 @@ class VersionComparatorTest {
         // Beta versions
         Arguments.of("1.0.0-beta", "beta", "Beta version"),
         Arguments.of("1.0.0-b1", "beta", "Beta with number"),
+        Arguments.of("1.7.0.Beta1", "beta", "Dot-separated beta version"),
 
         // RC versions
         Arguments.of("1.0.0-rc", "rc", "RC version"),
         Arguments.of("1.0.0-cr", "rc", "CR version treated as RC"),
         Arguments.of("1.0.0-candidate", "rc", "Candidate version treated as RC"),
+        Arguments.of("1.0.0.CR1", "rc", "Dot-separated CR version treated as RC"),
 
         // Milestone versions
         Arguments.of("1.0.0-milestone", "milestone", "Milestone version"),

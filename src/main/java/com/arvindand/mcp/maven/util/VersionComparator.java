@@ -135,34 +135,58 @@ public final class VersionComparator implements Comparator<String> {
 
     String trimmed = version.trim();
 
-    // Split on first hyphen to separate numeric part from qualifier
-    int hyphenIndex = findFirstQualifierSeparator(trimmed);
-    String numericPart = hyphenIndex != -1 ? trimmed.substring(0, hyphenIndex) : trimmed;
-    String qualifier = hyphenIndex != -1 ? trimmed.substring(hyphenIndex + 1).toLowerCase() : "";
+    // Split on explicit separators first; dot-separated qualifiers are handled below.
+    int qualifierSeparatorIndex = findFirstQualifierSeparator(trimmed);
+    String numericPart =
+        qualifierSeparatorIndex != -1 ? trimmed.substring(0, qualifierSeparatorIndex) : trimmed;
+    String qualifier =
+        qualifierSeparatorIndex != -1
+            ? trimmed.substring(qualifierSeparatorIndex + 1).toLowerCase()
+            : "";
 
     // Parse numeric components (major.minor.patch.etc)
     String[] segments = numericPart.split("\\.");
-    int[] numericParts = new int[segments.length];
+    int numericLength = findNumericSegmentLength(segments, qualifier.isEmpty());
+    if (numericLength < segments.length && qualifier.isEmpty()) {
+      qualifier = String.join(".", Arrays.copyOfRange(segments, numericLength, segments.length));
+      qualifier = qualifier.toLowerCase();
+    }
+    int[] numericParts = new int[numericLength];
 
-    for (int i = 0; i < segments.length; i++) {
+    for (int i = 0; i < numericLength; i++) {
       try {
-        // Handle cases like "1.0.0-SNAPSHOT" where hyphen is within a segment
-        String segment = segments[i];
-        int segmentHyphen = segment.indexOf('-');
-        if (segmentHyphen != -1) {
-          segment = segment.substring(0, segmentHyphen);
-          // If this is the first time we see a qualifier, capture it
-          if (qualifier.isEmpty()) {
-            qualifier = segments[i].substring(segmentHyphen + 1).toLowerCase();
-          }
-        }
-        numericParts[i] = Integer.parseInt(segment);
+        numericParts[i] = Integer.parseInt(segments[i]);
       } catch (NumberFormatException _) {
         numericParts[i] = 0;
       }
     }
 
     return new VersionComponents(numericParts, qualifier);
+  }
+
+  private int findNumericSegmentLength(String[] segments, boolean detectDotQualifier) {
+    if (!detectDotQualifier) {
+      return segments.length;
+    }
+
+    for (int i = 0; i < segments.length; i++) {
+      if (!isNumericSegment(segments[i])) {
+        return i;
+      }
+    }
+    return segments.length;
+  }
+
+  private boolean isNumericSegment(String segment) {
+    if (segment.isEmpty()) {
+      return false;
+    }
+    for (int i = 0; i < segment.length(); i++) {
+      if (!Character.isDigit(segment.charAt(i))) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private int findFirstQualifierSeparator(String version) {

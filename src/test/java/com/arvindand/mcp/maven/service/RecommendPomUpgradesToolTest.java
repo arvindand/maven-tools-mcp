@@ -63,6 +63,38 @@ class RecommendPomUpgradesToolTest {
   }
 
   @Test
+  void ignoresDotSeparatedPreReleaseWhenChoosingStableExplicitBumpTarget() {
+    EffectivePomResolver resolver = mock(EffectivePomResolver.class);
+    MavenCentralService maven = mock(MavenCentralService.class);
+    when(resolver.resolve("<pom/>"))
+        .thenReturn(
+            new EffectivePomResult(
+                List.of(explicit("org.mapstruct", "mapstruct", "1.6.3")),
+                List.of(),
+                List.of(),
+                List.of()));
+    when(maven.getAllVersions(any())).thenReturn(List.of("1.7.0.Beta1", "1.6.4", "1.6.3"));
+
+    PomUpgradeRecommendation rec =
+        getSuccessData(
+            buildTools(resolver, maven)
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null));
+
+    assertThat(rec.deterministicActions())
+        .singleElement()
+        .satisfies(
+            a -> {
+              assertThat(a.kind()).isEqualTo(UpgradeAction.KIND_EXPLICIT_BUMP);
+              assertThat(a.groupId()).isEqualTo("org.mapstruct");
+              assertThat(a.artifactId()).isEqualTo("mapstruct");
+              assertThat(a.current()).isEqualTo("1.6.3");
+              assertThat(a.target()).isEqualTo("1.6.4");
+              assertThat(a.updateType()).isEqualTo("patch");
+            });
+    assertThat(rec.needsAttention()).isEmpty();
+  }
+
+  @Test
   void emitsBomBumpForMinorPatchAvailableManagedBom() {
     EffectivePomResolver resolver = mock(EffectivePomResolver.class);
     MavenCentralService maven = mock(MavenCentralService.class);
