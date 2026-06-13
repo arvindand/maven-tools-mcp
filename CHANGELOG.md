@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [3.1.1] - 2026-06-14
+
+**Context7 Tool Proxying Fix** — restores the internal Context7 tools (`resolve_library_id`, `query_docs`) that the 3.1.0 Spring AI 2.0 upgrade silently dropped.
+
+### Fixed (3.1.1)
+
+- **Context7 internal tools not exposed under Spring AI 2.0**: after the 3.1.0 platform migration the Context7 MCP client still connected, but its tools were no longer re-exported by the maven-tools server — `tools/list` returned only the 9 native tools. Spring AI 2.0 registers its MCP-client `ToolCallbackProvider` only via `@ConditionalOnMissingBean(ToolCallbackProvider.class)`, so the app's own native-tool provider suppressed it (Spring AI 1.x had wired both automatically). `McpToolsConfig` now aggregates the native `@Tool` callbacks and the connected client's callbacks into a single `ToolCallbackProvider`, restoring the proxying. The `-noc7` variant is unaffected (degrades to native-only). The Context7 tools require `CONTEXT7_API_KEY` to function.
+
 ## [3.1.0] - 2026-06-13
 
 **Spring Boot 4 Platform Migration** — upgrades the runtime from Spring Boot 3.5 / Spring AI 1.1 to Spring Boot 4.1 / Spring AI 2.0 (MCP Java SDK 2.0), completes the move to Jackson 3, and replaces the OkHttp transport with the JDK `HttpClient`. The MCP tool surface and every JSON response shape are unchanged — this is a platform refresh, not an API change. `SYNC` server/client mode, the docker-profile stdio enablement, and stderr-only logging are intentionally retained (MCP SDK issue #686 and stdio JSON-RPC safety still apply).
