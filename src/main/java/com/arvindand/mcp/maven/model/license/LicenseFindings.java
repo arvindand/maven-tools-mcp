@@ -1,10 +1,10 @@
 package com.arvindand.mcp.maven.model.license;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import java.util.ArrayList;
 import java.util.List;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.databind.annotation.JsonNaming;
 
 /**
  * Aggregated license findings for project health analysis.

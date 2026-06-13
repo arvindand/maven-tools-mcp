@@ -12,13 +12,11 @@ import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.MavenMetadata;
 import com.arvindand.mcp.maven.model.license.LicenseInfo;
 import com.arvindand.mcp.maven.util.VersionComparator;
-import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
-import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -37,6 +35,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.dataformat.xml.XmlMapper;
 
 /**
  * Service for interacting with Maven Central via direct repository metadata access. Fetches
@@ -267,7 +267,7 @@ public class MavenCentralService {
       }
 
       return Optional.empty();
-    } catch (RestClientException | IOException e) {
+    } catch (RestClientException | JacksonException e) {
       logger.debug(
           "Failed to fetch metadata for {}:{}: {}",
           coordinate.groupId(),

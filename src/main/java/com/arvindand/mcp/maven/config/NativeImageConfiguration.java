@@ -29,13 +29,13 @@ import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedAlternative;
 import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.service.VulnerabilityService;
+import org.jspecify.annotations.Nullable;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.ImportRuntimeHints;
-import org.springframework.lang.NonNull;
-import org.springframework.lang.Nullable;
+import tools.jackson.databind.PropertyNamingStrategies;
 
 /**
  * Native image configuration for reflection hints. This configuration ensures that record classes
@@ -59,7 +59,7 @@ public class NativeImageConfiguration {
    */
   static class MavenRecordHints implements RuntimeHintsRegistrar {
     @Override
-    public void registerHints(@NonNull RuntimeHints hints, @Nullable ClassLoader classLoader) {
+    public void registerHints(RuntimeHints hints, @Nullable ClassLoader classLoader) {
       // Register all record classes with comprehensive reflection access
       registerRecordClass(hints, MavenCoordinate.class);
       registerRecordClass(hints, BulkCheckResult.class);
@@ -157,6 +157,16 @@ public class NativeImageConfiguration {
       registerEnumClass(hints, DependencyAgeAnalysis.AgeClassification.class);
       registerEnumClass(hints, ReleasePatternAnalysis.MaintenanceLevel.class);
       registerEnumClass(hints, ReleasePatternAnalysis.ReleaseConsistency.class);
+
+      // Jackson 3 instantiates the @JsonNaming strategy class reflectively at serialization time;
+      // the native image needs its no-arg constructor so snake_case tool-response naming works.
+      // (Works on the JVM via open reflection, but fails at runtime in the native image without
+      // this hint — every @JsonNaming response record uses SnakeCaseStrategy.)
+      hints
+          .reflection()
+          .registerType(
+              PropertyNamingStrategies.SnakeCaseStrategy.class,
+              MemberCategory.INVOKE_DECLARED_CONSTRUCTORS);
     }
 
     /**
@@ -170,13 +180,13 @@ public class NativeImageConfiguration {
               recordClass,
               typeHint ->
                   typeHint.withMembers(
+                      // Spring Framework 7: INVOKE_* implies introspection, so the deprecated
+                      // INTROSPECT_* categories are dropped; field categories use the ACCESS_*
+                      // form.
                       MemberCategory.INVOKE_PUBLIC_CONSTRUCTORS,
                       MemberCategory.INVOKE_PUBLIC_METHODS,
-                      MemberCategory.DECLARED_FIELDS,
-                      MemberCategory.PUBLIC_FIELDS,
-                      MemberCategory.INTROSPECT_PUBLIC_CONSTRUCTORS,
-                      MemberCategory.INTROSPECT_PUBLIC_METHODS,
-                      MemberCategory.INTROSPECT_DECLARED_METHODS));
+                      MemberCategory.ACCESS_DECLARED_FIELDS,
+                      MemberCategory.ACCESS_PUBLIC_FIELDS));
     }
 
     /**
@@ -190,10 +200,7 @@ public class NativeImageConfiguration {
               enumClass,
               typeHint ->
                   typeHint.withMembers(
-                      MemberCategory.PUBLIC_FIELDS,
-                      MemberCategory.INVOKE_PUBLIC_METHODS,
-                      MemberCategory.INTROSPECT_PUBLIC_METHODS,
-                      MemberCategory.INTROSPECT_DECLARED_METHODS));
+                      MemberCategory.ACCESS_PUBLIC_FIELDS, MemberCategory.INVOKE_PUBLIC_METHODS));
     }
   }
 }

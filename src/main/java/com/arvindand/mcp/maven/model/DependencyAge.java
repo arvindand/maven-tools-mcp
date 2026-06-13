@@ -1,9 +1,9 @@
 package com.arvindand.mcp.maven.model;
 
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import java.time.Instant;
 import java.util.Optional;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.databind.annotation.JsonNaming;
 
 /**
  * Comprehensive dependency age information with analysis and guidance.

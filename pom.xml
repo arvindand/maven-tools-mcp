@@ -6,12 +6,12 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.14</version>
+        <version>4.1.0</version>
         <relativePath /> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.arvindand.mcp</groupId>
     <artifactId>maven-tools-mcp</artifactId>
-    <version>3.0.2-SNAPSHOT</version>
+    <version>3.1.0</version>
     <name>maven-tools-mcp</name>
     <description>Maven Tools MCP server with universal JVM dependency intelligence. Provides comprehensive dependency analysis for any build tool (Maven, Gradle, SBT, Mill) using Maven Central Repository. Works with Claude Desktop, GitHub Copilot, and other MCP clients.</description>
     <url>https://github.com/arvindand/maven-tools-mcp</url>
@@ -35,15 +35,9 @@
     </scm>
     <properties>
         <java.version>25</java.version>
-        <spring-ai.version>1.1.7</spring-ai.version>
-        <!-- Temporary override: Logback 1.5.32 emits startup status lines on stdout in native stdio
-             images, breaking MCP JSON-RPC parsing in VS Code/Copilot. Latest 1.5.32 still affected.
-             Remove when: Logback fixes stdout status output in native images, or Spring Boot manages
-             a version with the fix. -->
-        <logback.version>1.5.22</logback.version>
+        <spring-ai.version>2.0.0</spring-ai.version>
         <fmt-maven-plugin.version>2.29</fmt-maven-plugin.version>
         <maven-artifact.version>3.9.16</maven-artifact.version>
-        <okhttp.version>5.3.2</okhttp.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <!-- Test execution properties -->
         <skipUTs>false</skipUTs>
@@ -98,42 +92,23 @@
             <artifactId>spring-boot-starter-json</artifactId>
         </dependency>
 
-        <!-- Jackson JDK8 module for Optional support -->
+        <!-- Jackson 3 XML module for maven-metadata.xml parsing -->
         <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jdk8</artifactId>
-        </dependency>
-
-        <!-- Jackson JSR310 module for Java 8 time types -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-        </dependency>
-
-        <!-- Jackson XML module for maven-metadata.xml parsing -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <groupId>tools.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-xml</artifactId>
-        </dependency>
-
-        <!-- OkHttp for HTTP/2 and connection pooling -->
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp-jvm</artifactId>
-            <version>${okhttp.version}</version>
         </dependency>
 
         <!-- Resilience4j for circuit breaker, retry, rate limiter -->
         <dependency>
             <groupId>io.github.resilience4j</groupId>
-            <artifactId>resilience4j-spring-boot3</artifactId>
+            <artifactId>resilience4j-spring-boot4</artifactId>
             <version>${resilience4j.version}</version>
         </dependency>
 
-        <!-- AOP for @CircuitBreaker, @Retry, @RateLimiter annotations -->
+        <!-- AspectJ for @CircuitBreaker, @Retry, @RateLimiter annotations -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-aop</artifactId>
+            <artifactId>spring-boot-starter-aspectj</artifactId>
         </dependency>
 
         <!-- Actuator for health probes (container orchestration) -->

@@ -52,11 +52,11 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
-import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 /**
@@ -189,8 +189,7 @@ public class MavenDependencyTools {
                       + " PREFER_STABLE (prioritize stable, show others too). Default:"
                       + " PREFER_STABLE",
               required = false)
-          @Nullable
-          StabilityFilter stabilityFilter) {
+          @Nullable StabilityFilter stabilityFilter) {
     return executeToolOperation(
         () -> {
           MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
@@ -279,8 +278,7 @@ public class MavenDependencyTools {
                   "Stability filter: ALL (all versions), STABLE_ONLY (production-ready only), or"
                       + " PREFER_STABLE (prioritize stable). Default: ALL",
               required = false)
-          @Nullable
-          StabilityFilter stabilityFilter) {
+          @Nullable StabilityFilter stabilityFilter) {
     return executeToolOperation(
         () -> {
           List<String> depList = parseDependencies(dependencies);
@@ -318,15 +316,13 @@ public class MavenDependencyTools {
                   "Stability filter: ALL (any version), STABLE_ONLY (production-ready only), or"
                       + " PREFER_STABLE (prioritize stable). Default: ALL",
               required = false)
-          @Nullable
-          StabilityFilter stabilityFilter,
+          @Nullable StabilityFilter stabilityFilter,
       @ToolParam(
               description =
                   "Whether to scan dependencies for known vulnerabilities using OSV.dev. Default:"
                       + " true",
               required = false)
-          @Nullable
-          Boolean includeSecurityScan) {
+          @Nullable Boolean includeSecurityScan) {
     return executeToolOperation(
         () -> {
           List<String> depList = parseDependencies(currentDependencies);
@@ -396,8 +392,7 @@ public class MavenDependencyTools {
                       + " exceeds this age, additional recommendations are provided. No limit if"
                       + " not specified",
               required = false)
-          @Nullable
-          Integer maxAgeInDays) {
+          @Nullable Integer maxAgeInDays) {
     return executeToolOperation(
         () -> {
           MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
@@ -460,8 +455,7 @@ public class MavenDependencyTools {
                   "Number of months of historical release data to analyze for patterns and"
                       + " predictions. Default is 24 months if not specified",
               required = false)
-          @Nullable
-          Integer monthsToAnalyze) {
+          @Nullable Integer monthsToAnalyze) {
     return executeToolOperation(
         () -> {
           MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
@@ -511,27 +505,23 @@ public class MavenDependencyTools {
                       + " Dependencies exceeding this age receive lower health scores. No age"
                       + " penalty if not specified",
               required = false)
-          @Nullable
-          Integer maxAgeInDays,
+          @Nullable Integer maxAgeInDays,
       @ToolParam(
               description =
                   "Stability filter: ALL (any version), STABLE_ONLY (production-ready only), or"
                       + " PREFER_STABLE (prioritize stable). Default: PREFER_STABLE",
               required = false)
-          @Nullable
-          StabilityFilter stabilityFilter,
+          @Nullable StabilityFilter stabilityFilter,
       @ToolParam(
               description =
                   "Whether to scan dependencies for known vulnerabilities using OSV.dev. Default:"
                       + " true",
               required = false)
-          @Nullable
-          Boolean includeSecurityScan,
+          @Nullable Boolean includeSecurityScan,
       @ToolParam(
               description = "Whether to check license information for dependencies. Default: true",
               required = false)
-          @Nullable
-          Boolean includeLicenseScan) {
+          @Nullable Boolean includeLicenseScan) {
     return executeToolOperation(
         () -> {
           List<String> depList = parseDependencies(dependencies);
@@ -1533,8 +1523,7 @@ public class MavenDependencyTools {
                       + " and tried before Maven Central. Pass null or an empty array for"
                       + " single-POM analysis.",
               required = false)
-          @Nullable
-          List<String> sideloadedPoms) {
+          @Nullable List<String> sideloadedPoms) {
     try {
       EffectivePomResult result =
           (sideloadedPoms == null || sideloadedPoms.isEmpty())
@@ -1581,16 +1570,14 @@ public class MavenDependencyTools {
                       + " are deterministic; majors go to needs_attention) or ALL (majors count"
                       + " as deterministic too).",
               required = false)
-          @Nullable
-          UpgradeMode mode,
+          @Nullable UpgradeMode mode,
       @ToolParam(
               description =
                   "Optional bundle of additional POM XML strings (sibling modules, unreleased"
                       + " parents). Each is indexed by its self-declared groupId:artifactId:version"
                       + " and tried before Maven Central.",
               required = false)
-          @Nullable
-          List<String> sideloadedPoms) {
+          @Nullable List<String> sideloadedPoms) {
     try {
       EffectivePomResult resolved =
           (sideloadedPoms == null || sideloadedPoms.isEmpty())

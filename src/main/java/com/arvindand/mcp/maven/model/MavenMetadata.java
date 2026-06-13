@@ -1,10 +1,9 @@
 package com.arvindand.mcp.maven.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
 import java.util.List;
+import tools.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
+import tools.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 
 /**
  * Represents the structure of maven-metadata.xml files found in Maven repositories.
@@ -20,7 +19,6 @@ import java.util.List;
  * @since 1.4.0
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-@JacksonXmlRootElement(localName = "metadata")
 public record MavenMetadata(
     @JacksonXmlProperty(localName = "groupId") String groupId,
     @JacksonXmlProperty(localName = "artifactId") String artifactId,

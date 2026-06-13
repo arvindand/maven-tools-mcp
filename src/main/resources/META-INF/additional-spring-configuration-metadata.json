@@ -17,12 +17,6 @@
       "description": "The maximum number of results to retrieve per request from the Maven Central repository."
     },
     {
-      "name": "maven.central.connection-pool-size",
-      "type": "java.lang.Integer",
-      "description": "The maximum number of idle connections to maintain in the OkHttp connection pool for Maven Central repository requests.",
-      "defaultValue": 50
-    },
-    {
       "name": "maven.central.auth.type",
       "type": "java.lang.String",
       "description": "Authentication type for private Maven repositories. Supported values: none, basic, bearer.",

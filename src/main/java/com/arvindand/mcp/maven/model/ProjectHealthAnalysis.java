@@ -4,11 +4,11 @@ import com.arvindand.mcp.maven.model.license.LicenseFindings;
 import com.arvindand.mcp.maven.model.license.LicenseInfo;
 import com.arvindand.mcp.maven.model.security.SecurityAssessment;
 import com.arvindand.mcp.maven.model.security.SecurityFindings;
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.databind.annotation.JsonNaming;
 
 /**
  * Comprehensive health analysis for multiple dependencies in a project.

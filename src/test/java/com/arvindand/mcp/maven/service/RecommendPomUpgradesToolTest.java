@@ -19,10 +19,10 @@ import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedAlternative;
 import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.util.VersionComparator;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Unit tests for the {@code recommend_pom_upgrades} MCP tool. Mocks the POM resolver and Maven
@@ -398,8 +398,8 @@ class RecommendPomUpgradesToolTest {
   }
 
   @Test
-  void serializesNeedsAttentionKindDiscriminator() throws Exception {
-    ObjectMapper mapper = new ObjectMapper();
+  void serializesNeedsAttentionKindDiscriminator() {
+    JsonMapper mapper = new JsonMapper();
     NeedsAttention major =
         new NeedsAttention.MajorAvailable("g", "a", "1.0", "1.5", "2.0", "EXPLICIT", null);
     NeedsAttention conflict =

@@ -15,6 +15,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [3.1.0] - 2026-06-13
+
+**Spring Boot 4 Platform Migration** — upgrades the runtime from Spring Boot 3.5 / Spring AI 1.1 to Spring Boot 4.1 / Spring AI 2.0 (MCP Java SDK 2.0), completes the move to Jackson 3, and replaces the OkHttp transport with the JDK `HttpClient`. The MCP tool surface and every JSON response shape are unchanged — this is a platform refresh, not an API change. `SYNC` server/client mode, the docker-profile stdio enablement, and stderr-only logging are intentionally retained (MCP SDK issue #686 and stdio JSON-RPC safety still apply).
+
+### Changed (3.1.0)
+
+- **Spring Boot 4.1.0 / Spring AI 2.0.0**: upgraded the platform parent and the Spring AI BOM; Spring AI 2.0 brings MCP Java SDK 2.0. Tool definitions, response models, and both transports (stdio + streamable HTTP) are unchanged.
+- **Jackson 3**: migrated application and XML-parsing code from Jackson 2 (`com.fasterxml.jackson.databind` / `dataformat`) to Jackson 3 (`tools.jackson.*`). Jackson annotations stay under `com.fasterxml.jackson.annotation` (retained by Jackson 3). Boot's auto-configured Jackson 3 `JsonMapper` now serializes tool responses, and `Optional` / Java time types are handled natively by Jackson 3 core.
+- **HTTP transport**: Maven Central / OSV access now uses the JDK `HttpClient` via Spring's `JdkClientHttpRequestFactory` (HTTP/2, normal redirects, connect timeout from `maven.central.timeout`, read timeout + 2s). BASIC / BEARER private-repository authentication is preserved through a `RestClient` request interceptor; connection reuse is managed internally by the JDK client and the Resilience4j retry policy is unchanged.
+- **Resilience4j Boot 4 integration**: `resilience4j-spring-boot3` → `resilience4j-spring-boot4`; the `@CircuitBreaker` / `@Retry` / `@RateLimiter` AOP support moved from `spring-boot-starter-aop` to `spring-boot-starter-aspectj`.
+- **Native reflection hints**: updated `NativeImageConfiguration` for Spring Framework 7 — field categories use the `ACCESS_*` form and the deprecated `INTROSPECT_*` member categories are dropped (invocation hints already imply introspection).
+
+### Removed (3.1.0)
+
+- **Logback native-stdio version pin**: the `logback.version=1.5.22` override is gone — Boot 4.1's managed Logback keeps native stdio stdout clean (verified by the native `initialize` smoke test).
+- **OkHttp transport**: removed the `okhttp-jvm` dependency, the `okhttp.version` property, and the deprecated `OkHttp3ClientHttpRequestFactory`, which is unavailable on Spring Framework 7.
+- **`maven.central.connection-pool-size` property**: an OkHttp-specific idle-pool knob with no JDK `HttpClient` equivalent; removed from `application.yaml` and the configuration metadata.
+- **Custom Jackson 2 mapper and datatype modules**: deleted `JacksonConfig` and the `jackson-datatype-jdk8` / `jackson-datatype-jsr310` dependencies in favor of Boot's Jackson 3 auto-configuration.
+
 ## [3.0.1] - 2026-05-15
 
 **Qualifier Classification Patch** — fixes Maven versions that publish pre-release qualifiers as

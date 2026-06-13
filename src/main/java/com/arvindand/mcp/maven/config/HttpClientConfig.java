@@ -3,28 +3,23 @@ package com.arvindand.mcp.maven.config;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
 import io.github.resilience4j.retry.RetryRegistry;
-import java.time.Duration;
-import java.util.Base64;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-import okhttp3.ConnectionPool;
-import okhttp3.Interceptor;
-import okhttp3.OkHttpClient;
-import okhttp3.Protocol;
+import java.net.http.HttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.OkHttp3ClientHttpRequestFactory;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 /**
- * HTTP client configuration with OkHttp for improved performance and HTTP/2 support.
+ * HTTP client configuration backed by the JDK {@link HttpClient} for HTTP/2 support.
  *
- * <p>Configures connection pooling, timeouts, and protocols for Maven Central and OSV API access.
- * OkHttp3ClientHttpRequestFactory is deprecated but still functional; we use it for superior HTTP/2
- * support and connection pooling until Spring provides a better alternative.
+ * <p>Configures timeouts and protocol for Maven Central and OSV API access, plus optional BASIC /
+ * BEARER authentication for private repositories. Replaces the previous OkHttp transport, which
+ * relied on Spring Framework's removed {@code OkHttp3ClientHttpRequestFactory}. Connection reuse is
+ * managed internally by the JDK client; the application-level Resilience4j retry policy remains the
+ * retry mechanism.
  *
  * @author Arvind Menon
  * @since 1.5.0
@@ -35,39 +30,31 @@ public class HttpClientConfig {
   private static final Logger log = LoggerFactory.getLogger(HttpClientConfig.class);
 
   @Bean
-  OkHttpClient okHttpClient(
-      MavenCentralProperties properties,
-      @Value("${maven.central.connection-pool-size:50}") int poolSize,
-      @Value("${maven.central.timeout:8s}") Duration timeout) {
-
-    ConnectionPool connectionPool =
-        new ConnectionPool(
-            poolSize, // maxIdleConnections
-            24, // keepAliveDuration
-            TimeUnit.HOURS);
-
-    OkHttpClient.Builder builder =
-        new OkHttpClient.Builder()
-            .connectionPool(connectionPool)
-            .connectTimeout(timeout)
-            .readTimeout(timeout.plusSeconds(2))
-            .writeTimeout(timeout)
-            .protocols(List.of(Protocol.HTTP_2, Protocol.HTTP_1_1))
-            .retryOnConnectionFailure(true);
-
-    if (properties.auth() != null
-        && properties.auth().type() != MavenCentralProperties.Auth.AuthType.NONE) {
-      builder.addInterceptor(repositoryAuthInterceptor(properties.auth()));
-      log.info("Repository authentication enabled (type={})", properties.auth().type().name());
-    }
-
-    return builder.build();
+  HttpClient mavenCentralHttpClient(MavenCentralProperties properties) {
+    return HttpClient.newBuilder()
+        .connectTimeout(properties.timeout())
+        .version(HttpClient.Version.HTTP_2)
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .build();
   }
 
   @Bean
-  @SuppressWarnings("removal") // OkHttp3ClientHttpRequestFactory deprecated but still best option
-  RestClient.Builder restClientBuilder(OkHttpClient okHttpClient) {
-    return RestClient.builder().requestFactory(new OkHttp3ClientHttpRequestFactory(okHttpClient));
+  RestClient.Builder restClientBuilder(
+      MavenCentralProperties properties, HttpClient mavenCentralHttpClient) {
+    JdkClientHttpRequestFactory requestFactory =
+        new JdkClientHttpRequestFactory(mavenCentralHttpClient);
+    // Preserve the previous read-timeout margin (connect timeout + 2s).
+    requestFactory.setReadTimeout(properties.timeout().plusSeconds(2));
+
+    RestClient.Builder builder = RestClient.builder().requestFactory(requestFactory);
+
+    if (properties.auth() != null
+        && properties.auth().type() != MavenCentralProperties.Auth.AuthType.NONE) {
+      builder.requestInterceptor(repositoryAuthInterceptor(properties.auth()));
+      log.info("Repository authentication enabled (type={})", properties.auth().type().name());
+    }
+
+    return builder;
   }
 
   @Bean
@@ -90,23 +77,14 @@ public class HttpClientConfig {
     return RateLimiterRegistry.ofDefaults();
   }
 
-  private Interceptor repositoryAuthInterceptor(MavenCentralProperties.Auth auth) {
-    return chain -> {
-      okhttp3.Request original = chain.request();
-      okhttp3.Request.Builder requestBuilder = original.newBuilder();
-
+  private ClientHttpRequestInterceptor repositoryAuthInterceptor(MavenCentralProperties.Auth auth) {
+    return (request, body, execution) -> {
       switch (auth.type()) {
-        case BASIC -> {
-          String credentials =
-              Base64.getEncoder()
-                  .encodeToString((auth.username() + ":" + auth.password()).getBytes());
-          requestBuilder.header("Authorization", "Basic " + credentials);
-        }
-        case BEARER -> requestBuilder.header("Authorization", "Bearer " + auth.token());
+        case BASIC -> request.getHeaders().setBasicAuth(auth.username(), auth.password());
+        case BEARER -> request.getHeaders().setBearerAuth(auth.token());
         default -> {}
       }
-
-      return chain.proceed(requestBuilder.build());
+      return execution.execute(request, body);
     };
   }
 }

@@ -39,15 +39,15 @@ class EffectivePomResolverIT {
         .isNotEmpty()
         .anyMatch(c -> c.artifactId().equals("spring-boot-starter-parent"));
 
-    // maven-model 3.9.12 is an explicit dep with a literal version — must come back as EXPLICIT.
+    // maven-model 3.9.16 is an explicit dep with a literal version — must come back as EXPLICIT.
     assertThat(result.dependencies())
         .filteredOn(d -> d.artifactId().equals("maven-model"))
         .singleElement()
         .satisfies(
             d -> {
               assertThat(d.effectiveVersion())
-                  .as("maven-model should have explicit version 3.9.12")
-                  .isEqualTo("3.9.12");
+                  .as("maven-model should have explicit version 3.9.16")
+                  .isEqualTo("3.9.16");
               assertThat(d.source())
                   .as("maven-model should be classified as EXPLICIT")
                   .isEqualTo(Source.EXPLICIT);

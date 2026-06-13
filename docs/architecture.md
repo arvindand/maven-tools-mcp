@@ -150,10 +150,10 @@ Key points:
 
 ## Technical Snapshot
 
-- Framework: Spring Boot 3.5.14
+- Framework: Spring Boot 4.1.0
 - Java: 25 (LTS)
 - Protocol: MCP 2025-06-18
-- POM parser: `org.apache.maven:maven-model:3.9.12` (data classes + Xpp3 reader only; no maven-model-builder, no maven-resolver)
+- POM parser: `org.apache.maven:maven-model:3.9.16` (data classes + Xpp3 reader only; no maven-model-builder, no maven-resolver)
 - Default transport for desktop images: stdio
 - HTTP transport available as `:latest-http`
 - Data source: Maven Central metadata

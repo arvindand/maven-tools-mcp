@@ -1,10 +1,10 @@
 package com.arvindand.mcp.maven.model.security;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import java.util.Comparator;
 import java.util.List;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.databind.annotation.JsonNaming;
 
 /**
  * Security assessment for a single dependency version. Designed for embedding in existing response
