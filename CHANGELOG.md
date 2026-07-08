@@ -15,6 +15,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [3.1.2] - 2026-07-08
+
+**Parallel STDIO Reliability Patch** — prevents concurrent MCP tool completions from dropping a
+JSON-RPC response and leaving agents waiting until timeout.
+
+### Changed (3.1.2)
+
+- **GitHub Actions refresh**: upgraded the official checkout, Java/Python setup, cache, artifact
+  upload, Docker login, and pull-request actions to their current supported majors.
+- **Release metadata and documentation**: aligned the POM, MCP server metadata, build-script
+  fallbacks, registry manifest, and documented protocol version for the 3.1.2 release. The two
+  Maven 3.9.16 components now share one version property.
+
+### Fixed (3.1.2)
+
+- **Concurrent stdio responses dropped by the MCP Java SDK**: parallel tool calls could complete on
+  different threads and race while emitting to the SDK's unicast response sink, causing `Failed to
+  enqueue message`, a missing JSON-RPC response, and cancellation/interruption noise in other
+  in-flight Maven Central and OSV work. The stdio profile now serializes only the final response-send
+  subscriptions while leaving tool execution concurrent (upstream issue
+  [modelcontextprotocol/java-sdk#686](https://github.com/modelcontextprotocol/java-sdk/issues/686)).
+
 ## [3.1.1] - 2026-06-14
 
 **Context7 Tool Proxying Fix** — restores the internal Context7 tools (`resolve_library_id`, `query_docs`) that the 3.1.0 Spring AI 2.0 upgrade silently dropped.
@@ -668,7 +690,10 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.0.1...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.2...HEAD
+[3.1.2]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.1...v3.1.2
+[3.1.1]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.0...v3.1.1
+[3.1.0]: https://github.com/arvindand/maven-tools-mcp/compare/v3.0.1...v3.1.0
 [3.0.1]: https://github.com/arvindand/maven-tools-mcp/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/arvindand/maven-tools-mcp/compare/v2.1.1...v3.0.0
 [2.1.1]: https://github.com/arvindand/maven-tools-mcp/compare/v2.1.0...v2.1.1

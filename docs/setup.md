@@ -89,7 +89,7 @@ For environments where Docker is restricted, you can run the packaged applicatio
 
 **Prerequisites:**
 
-- Java 24
+- Java 25
 - Maven 3.9+
 
 ```bash
@@ -101,7 +101,7 @@ cd maven-tools-mcp
 For a fuller test build:
 
 ```bash
-./mvnw clean package -Pfull
+./mvnw clean verify -Pfull
 ```
 
 Run the JAR:

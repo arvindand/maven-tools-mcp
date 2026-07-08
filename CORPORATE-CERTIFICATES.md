@@ -18,7 +18,7 @@ Spring Boot's Maven plugin supports [certificate bindings](https://docs.spring.i
 ## Prerequisites
 
 - Docker installed and running
-- Java 24
+- Java 25
 - Maven 3.9+
 - Your corporate CA certificate(s) in `.crt` or `.pem` format
 
