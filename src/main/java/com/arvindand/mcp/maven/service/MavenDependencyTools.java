@@ -30,6 +30,8 @@ import com.arvindand.mcp.maven.pom.EffectiveDependency;
 import com.arvindand.mcp.maven.pom.EffectivePomResolver;
 import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedAlternative;
+import com.arvindand.mcp.maven.pom.ManagedDeclaration;
+import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
 import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.util.MavenCoordinateParser;
 import com.arvindand.mcp.maven.util.VersionComparator;
@@ -1512,7 +1514,8 @@ public class MavenDependencyTools {
               + " POMs (monorepo siblings, unreleased parents) used before falling back to Maven"
               + " Central. Use when asked: 'analyze my pom.xml', 'what versions does this POM"
               + " actually resolve to?', or for multi-module monorepos. Returns the parent chain,"
-              + " the resolved dependencies, and a list of warnings for any unresolved bits.")
+              + " resolved dependencies, directly editable root dependency-management and"
+              + " build/plugin dependency declarations, and warnings for unresolved bits.")
   public ToolResponse analyze_pom_dependencies(
       @ToolParam(description = "Raw <project>...</project> XML content of the POM to analyze.")
           String pomXml,
@@ -1552,9 +1555,12 @@ public class MavenDependencyTools {
   @Tool(
       description =
           "POM-aware upgrade recommender. Takes raw pom.xml content and returns two lists: (1)"
-              + " deterministic_actions — mechanical <version> edits a non-LLM agent can apply"
-              + " directly (explicit_bump for declared deps, bom_bump for BOM-managed deps where"
-              + " a newer BOM minor/patch is available); (2) needs_attention — major upgrades,"
+              + " deterministic_actions — mechanical version/property edits a non-LLM agent can"
+              + " apply"
+              + " directly (explicit_bump for declared deps, bom_bump for user-editable BOMs,"
+              + " managed_decl_bump for direct root dependency-management entries,"
+              + " plugin_dep_bump for direct build/plugin dependencies); (2)"
+              + " needs_attention — major upgrades,"
               + " multi-BOM conflicts, and explicit overrides that need human or LLM review,"
               + " each carrying the Maven Central latest so the model has full context in one"
               + " round-trip. Default mode MINOR_PATCH routes majors to needs_attention; mode"
@@ -1620,6 +1626,16 @@ public class MavenDependencyTools {
       classifyBomCandidate(bom, mode, actions, attention);
     }
 
+    // Direct non-import dependency-management declarations are independent user-owned knobs. They
+    // remain actionable even when the platform POM has no normal <dependencies> usage of its own.
+    for (ManagedDeclaration declaration : resolved.rootManagedDeclarations()) {
+      classifyManagedDeclarationCandidate(declaration, mode, actions, attention);
+    }
+
+    for (PluginDependencyDeclaration declaration : resolved.rootPluginDependencyDeclarations()) {
+      classifyPluginDependencyCandidate(declaration, mode, actions, attention);
+    }
+
     // Second pass: per-dep classification. MANAGED deps whose managedBy is user-controllable are
     // covered by the BOM pass above; transitively-managed deps are silently skipped (their
     // upgrade lives behind a user-controllable knob already classified).
@@ -1668,6 +1684,85 @@ public class MavenDependencyTools {
       }
     } catch (MavenCentralException _) {
       // upstream resolver already warned about unreachable parents; nothing to add here.
+    }
+  }
+
+  /** Classifies a direct root dependency-management declaration with a known edit target. */
+  private void classifyManagedDeclarationCandidate(
+      ManagedDeclaration declaration,
+      UpgradeMode mode,
+      List<UpgradeAction> actions,
+      List<NeedsAttention> attention) {
+    MavenCoordinate coordinate =
+        MavenCoordinate.of(declaration.groupId(), declaration.artifactId(), declaration.version());
+    String latest = safeGetLatestStable(coordinate);
+    if (latest == null || versionComparator.compare(declaration.version(), latest) >= 0) {
+      return;
+    }
+
+    String updateType = versionComparator.determineUpdateType(declaration.version(), latest);
+    if (MAJOR_UPDATE_TYPE.equals(updateType) && mode == UpgradeMode.MINOR_PATCH) {
+      String currentMajorLatest = findCurrentMajorLatest(coordinate, declaration.version());
+      attention.add(
+          new NeedsAttention.MajorAvailable(
+              declaration.groupId(),
+              declaration.artifactId(),
+              declaration.version(),
+              currentMajorLatest != null ? currentMajorLatest : declaration.version(),
+              latest,
+              "MANAGED_DECLARATION",
+              null));
+    } else if (!NO_UPDATE_TYPE.equals(updateType)) {
+      actions.add(
+          UpgradeAction.managedDeclarationBump(
+              declaration.groupId(),
+              declaration.artifactId(),
+              declaration.version(),
+              latest,
+              updateType,
+              declaration.editTarget(),
+              declaration.propertyName()));
+    }
+  }
+
+  /** Classifies a direct build/plugin dependency declaration with a known edit target. */
+  private void classifyPluginDependencyCandidate(
+      PluginDependencyDeclaration declaration,
+      UpgradeMode mode,
+      List<UpgradeAction> actions,
+      List<NeedsAttention> attention) {
+    MavenCoordinate coordinate =
+        MavenCoordinate.of(declaration.groupId(), declaration.artifactId(), declaration.version());
+    String latest = safeGetLatestStable(coordinate);
+    if (latest == null || versionComparator.compare(declaration.version(), latest) >= 0) {
+      return;
+    }
+
+    String updateType = versionComparator.determineUpdateType(declaration.version(), latest);
+    if (MAJOR_UPDATE_TYPE.equals(updateType) && mode == UpgradeMode.MINOR_PATCH) {
+      String currentMajorLatest = findCurrentMajorLatest(coordinate, declaration.version());
+      attention.add(
+          new NeedsAttention.MajorAvailable(
+              declaration.groupId(),
+              declaration.artifactId(),
+              declaration.version(),
+              currentMajorLatest != null ? currentMajorLatest : declaration.version(),
+              latest,
+              "PLUGIN_DEPENDENCY",
+              null));
+    } else if (!NO_UPDATE_TYPE.equals(updateType)) {
+      actions.add(
+          UpgradeAction.pluginDependencyBump(
+              declaration.groupId(),
+              declaration.artifactId(),
+              declaration.version(),
+              latest,
+              updateType,
+              declaration.editTarget(),
+              declaration.propertyName(),
+              declaration.declaredIn(),
+              declaration.pluginGroupId(),
+              declaration.pluginArtifactId()));
     }
   }
 

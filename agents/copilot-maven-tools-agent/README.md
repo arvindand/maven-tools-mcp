@@ -7,7 +7,7 @@ This agent is part of the [maven-tools-mcp](https://github.com/arvindand/maven-t
 ## What It Does
 
 1. Hands the raw `pom.xml` to the Maven Tools MCP `recommend_pom_upgrades` tool — the server walks the parent chain, resolves managed versions, and returns a `deterministicActions[]` list plus a `needsAttention[]` list
-2. Applies each `deterministicActions[]` entry directly to `pom.xml` (`explicit_bump` and `bom_bump` both collapse to a single `<version>` edit; the parent block is matched by groupId+artifactId)
+2. Applies each `deterministicActions[]` entry directly to `pom.xml` (`explicit_bump` and `bom_bump` use coordinate matching; owned declarations use exact literal/property metadata; `plugin_dep_bump` literal edits are scoped to the owner plugin)
 3. Displays `needsAttention[]` (major upgrades, multi-BOM conflicts, explicit overrides) for visibility — these never auto-apply
 4. Uses the Copilot SDK only in `major` mode to surface major updates for manual review
 5. Leaves build validation to the repo's normal PR CI

@@ -320,3 +320,117 @@ def test_apply_deterministic_actions_applies_and_reports_failures(tmp_path: Path
     assert len(failed) == 1
     assert failed[0]["artifactId"] == "not-in-pom"
     assert "<version>2.0.17</version>" in updater.content
+
+
+def test_apply_managed_declaration_action_uses_exact_property_metadata(
+    tmp_path: Path,
+) -> None:
+    pom_path = _write_pom(
+        tmp_path,
+        """
+        <project>
+          <properties>
+            <shared.platform.line>1.0.0</shared.platform.line>
+          </properties>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>io.fabric8</groupId>
+                <artifactId>kubernetes-client</artifactId>
+                <version>${shared.platform.line}</version>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+        </project>
+        """,
+    )
+    updater = PomUpdater(pom_path)
+    action = {
+        "kind": "managed_decl_bump",
+        "groupId": "io.fabric8",
+        "artifactId": "kubernetes-client",
+        "current": "1.0.0",
+        "target": "1.1.0",
+        "updateType": "minor",
+        "editTarget": "property",
+        "propertyName": "shared.platform.line",
+        "declaredIn": "dependency_management",
+    }
+
+    applied, failed = _apply_deterministic_actions(updater, [action])
+
+    assert applied == [action]
+    assert failed == []
+    assert "<shared.platform.line>1.1.0</shared.platform.line>" in updater.content
+    assert "<version>${shared.platform.line}</version>" in updater.content
+
+
+def test_apply_plugin_dependency_action_scopes_literal_edit_to_owner_plugin(
+    tmp_path: Path,
+) -> None:
+    pom_path = _write_pom(
+        tmp_path,
+        """
+        <project>
+          <dependencies>
+            <dependency>
+              <groupId>com.puppycrawl.tools</groupId>
+              <artifactId>checkstyle</artifactId>
+              <version>9.0.0</version>
+            </dependency>
+          </dependencies>
+          <build>
+            <plugins>
+              <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.puppycrawl.tools</groupId>
+                    <artifactId>checkstyle</artifactId>
+                    <version>10.0.0</version>
+                  </dependency>
+                </dependencies>
+              </plugin>
+            </plugins>
+            <pluginManagement>
+              <plugins>
+                <plugin>
+                  <groupId>org.apache.maven.plugins</groupId>
+                  <artifactId>maven-checkstyle-plugin</artifactId>
+                  <dependencies>
+                    <dependency>
+                      <groupId>com.puppycrawl.tools</groupId>
+                      <artifactId>checkstyle</artifactId>
+                      <version>8.0.0</version>
+                    </dependency>
+                  </dependencies>
+                </plugin>
+              </plugins>
+            </pluginManagement>
+          </build>
+        </project>
+        """,
+    )
+    updater = PomUpdater(pom_path)
+    action = {
+        "kind": "plugin_dep_bump",
+        "groupId": "com.puppycrawl.tools",
+        "artifactId": "checkstyle",
+        "current": "10.0.0",
+        "target": "10.1.0",
+        "updateType": "minor",
+        "editTarget": "literal_version",
+        "declaredIn": "build.plugins.plugin.dependencies",
+        "ownerGroupId": "org.apache.maven.plugins",
+        "ownerArtifactId": "maven-checkstyle-plugin",
+    }
+
+    applied, failed = _apply_deterministic_actions(updater, [action])
+
+    assert applied == [action]
+    assert failed == []
+    assert "<version>8.0.0</version>" in updater.content
+    assert "<version>9.0.0</version>" in updater.content
+    assert "<version>10.1.0</version>" in updater.content
+    assert "<version>10.0.0</version>" not in updater.content

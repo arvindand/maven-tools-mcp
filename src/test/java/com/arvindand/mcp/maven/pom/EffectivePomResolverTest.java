@@ -323,6 +323,158 @@ class EffectivePomResolverTest {
   }
 
   @Test
+  void surfacesEditableRootDependencyManagementDeclarationsWithoutDependencyUsage() {
+    String pom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.example</groupId>
+          <artifactId>platform</artifactId>
+          <version>1.0.0</version>
+          <properties>
+            <fabric8.version>7.3.0</fabric8.version>
+          </properties>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>io.fabric8</groupId>
+                <artifactId>kubernetes-client</artifactId>
+                <version>${fabric8.version}</version>
+              </dependency>
+              <dependency>
+                <groupId>io.nats</groupId>
+                <artifactId>jnats</artifactId>
+                <version>2.20.5</version>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(stub(Map.of())).resolve(pom);
+
+    assertThat(result.dependencies()).isEmpty();
+    assertThat(result.rootManagedDeclarations())
+        .containsExactly(
+            ManagedDeclaration.property(
+                "io.fabric8", "kubernetes-client", "7.3.0", "fabric8.version"),
+            ManagedDeclaration.literal("io.nats", "jnats", "2.20.5"));
+  }
+
+  @Test
+  void skipsRootManagedDeclarationWhenBackingPropertyIsNotOwnedByRoot() {
+    Model parent =
+        parse(
+            """
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>parent</artifactId>
+              <version>1.0.0</version>
+              <properties>
+                <inherited.version>3.2.1</inherited.version>
+              </properties>
+            </project>
+            """);
+    String child =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <parent>
+            <groupId>com.example</groupId>
+            <artifactId>parent</artifactId>
+            <version>1.0.0</version>
+          </parent>
+          <artifactId>platform</artifactId>
+          <dependencyManagement>
+            <dependencies>
+              <dependency>
+                <groupId>com.example</groupId>
+                <artifactId>inherited-property-lib</artifactId>
+                <version>${inherited.version}</version>
+              </dependency>
+              <dependency>
+                <groupId>com.example</groupId>
+                <artifactId>compound-property-lib</artifactId>
+                <version>${inherited.version}-custom</version>
+              </dependency>
+            </dependencies>
+          </dependencyManagement>
+        </project>
+        """;
+
+    EffectivePomResult result =
+        new EffectivePomResolver(stub(Map.of("com.example:parent:1.0.0", parent))).resolve(child);
+
+    assertThat(result.rootManagedDeclarations()).isEmpty();
+  }
+
+  @Test
+  void surfacesEditableDependenciesFromBuildPluginsAndPluginManagement() {
+    String pom =
+        """
+        <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.example</groupId>
+          <artifactId>build-parent</artifactId>
+          <version>1.0.0</version>
+          <properties>
+            <checkstyle.version>10.26.1</checkstyle.version>
+          </properties>
+          <build>
+            <plugins>
+              <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <dependencies>
+                  <dependency>
+                    <groupId>com.puppycrawl.tools</groupId>
+                    <artifactId>checkstyle</artifactId>
+                    <version>${checkstyle.version}</version>
+                  </dependency>
+                </dependencies>
+              </plugin>
+            </plugins>
+            <pluginManagement>
+              <plugins>
+                <plugin>
+                  <artifactId>maven-antrun-plugin</artifactId>
+                  <dependencies>
+                    <dependency>
+                      <groupId>org.apache.ant</groupId>
+                      <artifactId>ant</artifactId>
+                      <version>1.10.15</version>
+                    </dependency>
+                  </dependencies>
+                </plugin>
+              </plugins>
+            </pluginManagement>
+          </build>
+        </project>
+        """;
+
+    EffectivePomResult result = new EffectivePomResolver(stub(Map.of())).resolve(pom);
+
+    assertThat(result.rootPluginDependencyDeclarations())
+        .containsExactly(
+            PluginDependencyDeclaration.property(
+                "com.puppycrawl.tools",
+                "checkstyle",
+                "10.26.1",
+                "checkstyle.version",
+                "org.apache.maven.plugins",
+                "maven-checkstyle-plugin",
+                PluginDependencyDeclaration.BUILD_PLUGINS),
+            PluginDependencyDeclaration.literal(
+                "org.apache.ant",
+                "ant",
+                "1.10.15",
+                "org.apache.maven.plugins",
+                "maven-antrun-plugin",
+                PluginDependencyDeclaration.PLUGIN_MANAGEMENT));
+  }
+
+  @Test
   void flagsExplicitOverrideWhenChildSpecifiesVersionForManagedDep() {
     Model parent =
         parse(
@@ -517,6 +669,9 @@ class EffectivePomResolverTest {
     // import in their own POM and can therefore edit its version.
     assertThat(result.rootImportedBoms())
         .containsExactly(MavenCoordinate.of("com.example.bom", "my-bom", "1.0.0"));
+    assertThat(result.rootManagedDeclarations())
+        .as("a root BOM import must not also surface as a managed declaration")
+        .isEmpty();
   }
 
   @Test

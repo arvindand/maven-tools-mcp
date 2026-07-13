@@ -15,6 +15,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Unreleased)
 
+## [3.2.0] - 2026-07-13
+
+**Owned POM Upgrade Targets** — extends the POM-aware upgrade path to platform-managed and build
+plugin dependency versions that are directly editable in the caller's POM.
+
+### Added (3.2.0)
+
+- **Root dependency-management upgrade actions**: `recommend_pom_upgrades` now treats direct,
+  non-import `<dependencyManagement>` declarations in the input POM as first-class upgrade targets,
+  even when a platform/master POM has no normal `<dependencies>` usage. New
+  `managed_decl_bump` actions identify whether the client should edit a literal `<version>` or a
+  root-owned backing property (`editTarget`, `propertyName`, and `declaredIn`), so non-LLM clients
+  can apply the owning edit directly.
+- **Build plugin dependency upgrades**: direct dependencies under both `build/plugins` and
+  `build/pluginManagement` now surface as `plugin_dep_bump` actions. Each action carries the owner
+  plugin coordinate and build path in addition to literal/property edit metadata, covering cases
+  such as `com.puppycrawl.tools:checkstyle` inside `maven-checkstyle-plugin`.
+
+### Changed (3.2.0)
+
+- **POM analysis edit ownership**: `EffectivePomResult.rootManagedDeclarations` exposes only direct
+  managed entries with an unambiguous edit site in the input POM. Exact property references are
+  included only when the property is declared by that root POM; inherited and compound property
+  expressions remain non-deterministic and are excluded.
+- **Reference updater plugin scoping**: literal plugin dependency actions are applied only inside
+  their identified owner plugin block; property-backed plugin dependencies update the exact
+  server-supplied property.
+- **Release metadata**: aligned the project version, MCP runtime metadata, registry manifest,
+  Docker workflow fallbacks, and Unix/Windows build helper fallbacks for 3.2.0.
+
 ## [3.1.2] - 2026-07-08
 
 **Parallel STDIO Reliability Patch** — prevents concurrent MCP tool completions from dropping a
@@ -690,7 +720,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.2...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.2...v3.2.0
 [3.1.2]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.1...v3.1.2
 [3.1.1]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/arvindand/maven-tools-mcp/compare/v3.0.1...v3.1.0

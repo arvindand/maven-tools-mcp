@@ -24,12 +24,14 @@ The dependency agent lives in [`agents/copilot-maven-tools-agent/`](../agents/co
 It is a local Python subproject that:
 
 - reads the repository `pom.xml` and hands it to the `recommend_pom_upgrades` MCP tool
-- applies the returned `deterministicActions[]` (mechanical `<version>` edits) directly
+- applies the returned `deterministicActions[]` directly, using exact property metadata when a
+  root dependency-management or plugin dependency declaration owns the version, and owner-plugin
+  metadata to scope literal plugin dependency edits
 - displays `needsAttention[]` (majors, conflicts, explicit overrides) for visibility
 - uses the Copilot SDK only in major-review mode
 - leaves PR creation to GitHub Actions
 
-That split keeps the agent focused on applying server-decided edits while GitHub Actions handles branch and PR mechanics. There is no Python POM parsing — the server is the single source of truth for what "the effective POM" means.
+That split keeps the agent focused on applying server-decided edits while GitHub Actions handles branch and PR mechanics. The server is the single source of truth for resolution and identifies the owning property for managed declaration actions; the client only performs the bounded text edit.
 
 ## Deterministic And Major Modes
 

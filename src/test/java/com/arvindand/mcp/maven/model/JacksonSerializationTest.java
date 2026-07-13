@@ -56,6 +56,62 @@ class JacksonSerializationTest {
   }
 
   @Test
+  void managedDeclarationActionSerializesEditMetadata() {
+    UpgradeAction action =
+        UpgradeAction.managedDeclarationBump(
+            "io.fabric8",
+            "kubernetes-client",
+            "7.3.0",
+            "7.4.0",
+            "minor",
+            "property",
+            "fabric8.version");
+
+    String out = json.writeValueAsString(action);
+
+    assertThat(out)
+        .contains("\"kind\":\"managed_decl_bump\"")
+        .contains("\"editTarget\":\"property\"")
+        .contains("\"propertyName\":\"fabric8.version\"")
+        .contains("\"declaredIn\":\"dependency_management\"");
+  }
+
+  @Test
+  void legacyUpgradeActionOmitsUnavailableEditMetadata() {
+    String out =
+        json.writeValueAsString(
+            UpgradeAction.explicitBump("com.example", "lib", "1.0.0", "1.0.1", "patch"));
+
+    assertThat(out)
+        .contains("\"kind\":\"explicit_bump\"")
+        .doesNotContain(
+            "editTarget", "propertyName", "declaredIn", "ownerGroupId", "ownerArtifactId");
+  }
+
+  @Test
+  void pluginDependencyActionSerializesOwnerMetadata() {
+    UpgradeAction action =
+        UpgradeAction.pluginDependencyBump(
+            "com.puppycrawl.tools",
+            "checkstyle",
+            "10.26.1",
+            "10.27.0",
+            "minor",
+            "property",
+            "checkstyle.version",
+            "build.plugins.plugin.dependencies",
+            "org.apache.maven.plugins",
+            "maven-checkstyle-plugin");
+
+    String out = json.writeValueAsString(action);
+
+    assertThat(out)
+        .contains("\"kind\":\"plugin_dep_bump\"")
+        .contains("\"ownerGroupId\":\"org.apache.maven.plugins\"")
+        .contains("\"ownerArtifactId\":\"maven-checkstyle-plugin\"");
+  }
+
+  @Test
   void optionalPresentSerializesUnwrapped() {
     EffectiveDependency managed =
         new EffectiveDependency(

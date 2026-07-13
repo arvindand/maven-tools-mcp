@@ -3,6 +3,8 @@ package com.arvindand.mcp.maven.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.arvindand.mcp.maven.model.ToolResponse;
+import com.arvindand.mcp.maven.pom.ManagedDeclaration;
+import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
 import org.junit.jupiter.api.Test;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
@@ -37,6 +39,18 @@ class NativeImageConfigurationTest {
   @Test
   void registersToolResponseSuccessForReflection() {
     assertThat(RuntimeHintsPredicates.reflection().onType(ToolResponse.Success.class))
+        .accepts(register());
+  }
+
+  @Test
+  void registersManagedDeclarationForReflection() {
+    assertThat(RuntimeHintsPredicates.reflection().onType(ManagedDeclaration.class))
+        .accepts(register());
+  }
+
+  @Test
+  void registersPluginDependencyDeclarationForReflection() {
+    assertThat(RuntimeHintsPredicates.reflection().onType(PluginDependencyDeclaration.class))
         .accepts(register());
   }
 }

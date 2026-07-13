@@ -56,7 +56,7 @@ class PomUpdater:
         self.original_content = pom_path.read_text()
         self.content = self.original_content
 
-    def _update_property_by_name(self, prop_name: str, new_version: str) -> bool:
+    def update_property(self, prop_name: str, new_version: str) -> bool:
         """Update an exact property value in the POM."""
         prop_pattern = rf"(<{re.escape(prop_name)}>)([^<]+)(</{re.escape(prop_name)}>)"
         new_content, count = re.subn(prop_pattern, rf"\g<1>{new_version}\g<3>", self.content)
@@ -86,7 +86,7 @@ class PomUpdater:
             prop_ref_match = re.fullmatch(r"\$\{([^}]+)\}", current_declared_version)
             if prop_ref_match:
                 # Preserve shared property-based versioning by updating the property value instead.
-                return self._update_property_by_name(prop_ref_match.group(1), new_version)
+                return self.update_property(prop_ref_match.group(1), new_version)
 
             new_content, count = regex.subn(rf"\g<1>{new_version}\g<3>", self.content)
             if count > 0:
@@ -102,7 +102,7 @@ class PomUpdater:
         ]
 
         for prop_name in property_names:
-            if self._update_property_by_name(prop_name, new_version):
+            if self.update_property(prop_name, new_version):
                 return True
 
         return False
@@ -123,6 +123,57 @@ class PomUpdater:
             return True
         return False
 
+    def update_plugin_dependency_version(
+        self,
+        owner_artifact_id: str,
+        group_id: str,
+        artifact_id: str,
+        new_version: str,
+        declared_in: str,
+    ) -> bool:
+        """Update one dependency only inside the identified owner plugin block."""
+        plugin_pattern = re.compile(
+            rf"<plugin>(?:(?!</plugin>).)*?"
+            rf"<artifactId>{re.escape(owner_artifact_id)}</artifactId>"
+            rf"(?:(?!</plugin>).)*?</plugin>",
+            re.DOTALL,
+        )
+        dependency_pattern = re.compile(
+            rf"(<dependency>\s*"
+            rf"<groupId>{re.escape(group_id)}</groupId>\s*"
+            rf"<artifactId>{re.escape(artifact_id)}</artifactId>\s*"
+            rf"<version>)([^<]+)(</version>)",
+            re.DOTALL,
+        )
+        plugin_management_spans = [
+            match.span()
+            for match in re.finditer(
+                r"<pluginManagement>.*?</pluginManagement>", self.content, re.DOTALL
+            )
+        ]
+        expects_plugin_management = (
+            declared_in == "build.pluginManagement.plugins.plugin.dependencies"
+        )
+        for plugin_match in plugin_pattern.finditer(self.content):
+            in_plugin_management = any(
+                start <= plugin_match.start() < end
+                for start, end in plugin_management_spans
+            )
+            if in_plugin_management != expects_plugin_management:
+                continue
+            plugin_block = plugin_match.group(0)
+            updated_block, count = dependency_pattern.subn(
+                rf"\g<1>{new_version}\g<3>", plugin_block, count=1
+            )
+            if count > 0:
+                self.content = (
+                    self.content[: plugin_match.start()]
+                    + updated_block
+                    + self.content[plugin_match.end() :]
+                )
+                return True
+        return False
+
     def update_parent_version_if_matches(
         self, group_id: str, artifact_id: str, new_version: str
     ) -> bool:
@@ -140,8 +191,26 @@ class PomUpdater:
             return True
         return False
 
-    def apply_action(self, group_id: str, artifact_id: str, new_version: str) -> bool:
-        """Apply a version bump — tries dependency block first, then parent block."""
+    def apply_action(
+        self,
+        group_id: str,
+        artifact_id: str,
+        new_version: str,
+        edit_target: Optional[str] = None,
+        property_name: Optional[str] = None,
+        declared_in: Optional[str] = None,
+        owner_artifact_id: Optional[str] = None,
+    ) -> bool:
+        """Apply a version bump using exact edit metadata when the server supplies it."""
+        if edit_target == "property":
+            return bool(property_name) and self.update_property(property_name, new_version)
+        if declared_in in {
+            "build.plugins.plugin.dependencies",
+            "build.pluginManagement.plugins.plugin.dependencies",
+        }:
+            return bool(owner_artifact_id) and self.update_plugin_dependency_version(
+                owner_artifact_id, group_id, artifact_id, new_version, declared_in
+            )
         if self.update_version(group_id, artifact_id, new_version):
             return True
         return self.update_parent_version_if_matches(group_id, artifact_id, new_version)
@@ -447,7 +516,15 @@ def _apply_deterministic_actions(
         if not (group_id and artifact_id and target):
             failed.append(a)
             continue
-        if pom_updater.apply_action(group_id, artifact_id, target):
+        if pom_updater.apply_action(
+            group_id,
+            artifact_id,
+            target,
+            edit_target=a.get("editTarget"),
+            property_name=a.get("propertyName"),
+            declared_in=a.get("declaredIn"),
+            owner_artifact_id=a.get("ownerArtifactId"),
+        ):
             applied.append(a)
             console.print(
                 f"  [green]✓[/green] [{a.get('kind', '?')}] "

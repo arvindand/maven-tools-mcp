@@ -45,10 +45,12 @@ public sealed interface NeedsAttention
    *     {@code current} if already at the latest of that major)
    * @param latestStable the highest stable version on Maven Central regardless of major
    * @param source where the current version came from ({@code EXPLICIT}, {@code MANAGED}, {@code
-   *     EXPLICIT_OVERRIDE}) — drives whether the model should propose editing the dep's version or
-   *     the managing BOM's version
+   *     EXPLICIT_OVERRIDE}, {@code MANAGED_DECLARATION}, or {@code PLUGIN_DEPENDENCY}) — drives
+   *     whether the model should propose editing the dep's version, its owning declaration, or the
+   *     managing BOM
    * @param managedByCoordinate the BOM or parent coordinate that supplies {@code current} when
    *     {@code source} is {@code MANAGED} or {@code EXPLICIT_OVERRIDE}; null for {@code EXPLICIT}
+   *     {@code MANAGED_DECLARATION}, and {@code PLUGIN_DEPENDENCY}
    */
   record MajorAvailable(
       String groupId,

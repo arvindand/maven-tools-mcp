@@ -17,6 +17,8 @@ import com.arvindand.mcp.maven.pom.EffectiveDependency;
 import com.arvindand.mcp.maven.pom.EffectivePomResolver;
 import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedAlternative;
+import com.arvindand.mcp.maven.pom.ManagedDeclaration;
+import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
 import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.util.VersionComparator;
 import java.util.List;
@@ -124,6 +126,104 @@ class RecommendPomUpgradesToolTest {
               assertThat(a.current()).isEqualTo("1.0.0");
               assertThat(a.target()).isEqualTo("1.1.0");
               assertThat(a.updateType()).isEqualTo("minor");
+            });
+  }
+
+  @Test
+  void emitsManagedDeclarationBumpsForPlatformPomWithoutDeclaredDependencies() {
+    EffectivePomResolver resolver = mock(EffectivePomResolver.class);
+    MavenCentralService maven = mock(MavenCentralService.class);
+    List<ManagedDeclaration> declarations =
+        List.of(
+            ManagedDeclaration.property(
+                "io.cloudevents", "cloudevents-core", "1.0.0", "cloudevents.version"),
+            ManagedDeclaration.property(
+                "io.fabric8", "kubernetes-client", "1.0.0", "fabric8.version"),
+            ManagedDeclaration.property(
+                "io.github.springwolf", "springwolf-core", "1.0.0", "springwolf.version"),
+            ManagedDeclaration.property("io.nats", "jnats", "1.0.0", "jnats.version"),
+            ManagedDeclaration.property(
+                "org.apache.camel.springboot", "camel-bean-starter", "1.0.0", "camel.version"),
+            ManagedDeclaration.literal("org.apache.tomcat.embed", "tomcat-embed-core", "1.0.0"));
+    when(resolver.resolve("<platform/>"))
+        .thenReturn(
+            new EffectivePomResult(List.of(), List.of(), List.of(), declarations, List.of()));
+    when(maven.getAllVersions(any())).thenReturn(List.of("1.1.0", "1.0.0"));
+
+    PomUpgradeRecommendation rec =
+        getSuccessData(
+            buildTools(resolver, maven)
+                .recommend_pom_upgrades("<platform/>", UpgradeMode.MINOR_PATCH, null));
+
+    assertThat(rec.deterministicActions())
+        .hasSize(6)
+        .allSatisfy(
+            action -> {
+              assertThat(action.kind()).isEqualTo(UpgradeAction.KIND_MANAGED_DECL_BUMP);
+              assertThat(action.target()).isEqualTo("1.1.0");
+              assertThat(action.declaredIn()).isEqualTo("dependency_management");
+            })
+        .extracting(UpgradeAction::artifactId)
+        .containsExactly(
+            "cloudevents-core",
+            "kubernetes-client",
+            "springwolf-core",
+            "jnats",
+            "camel-bean-starter",
+            "tomcat-embed-core");
+    assertThat(rec.deterministicActions().getFirst())
+        .satisfies(
+            action -> {
+              assertThat(action.editTarget()).isEqualTo(ManagedDeclaration.EDIT_TARGET_PROPERTY);
+              assertThat(action.propertyName()).isEqualTo("cloudevents.version");
+            });
+    assertThat(rec.deterministicActions().getLast())
+        .satisfies(
+            action -> {
+              assertThat(action.editTarget())
+                  .isEqualTo(ManagedDeclaration.EDIT_TARGET_LITERAL_VERSION);
+              assertThat(action.propertyName()).isNull();
+            });
+    assertThat(rec.needsAttention()).isEmpty();
+  }
+
+  @Test
+  void emitsPluginDependencyBumpWithOwnerMetadata() {
+    EffectivePomResolver resolver = mock(EffectivePomResolver.class);
+    MavenCentralService maven = mock(MavenCentralService.class);
+    PluginDependencyDeclaration checkstyle =
+        PluginDependencyDeclaration.property(
+            "com.puppycrawl.tools",
+            "checkstyle",
+            "10.26.1",
+            "checkstyle.version",
+            "org.apache.maven.plugins",
+            "maven-checkstyle-plugin",
+            PluginDependencyDeclaration.BUILD_PLUGINS);
+    when(resolver.resolve("<build-parent/>"))
+        .thenReturn(
+            new EffectivePomResult(
+                List.of(), List.of(), List.of(), List.of(), List.of(checkstyle), List.of()));
+    when(maven.getAllVersions(any())).thenReturn(List.of("10.27.0", "10.26.1"));
+
+    PomUpgradeRecommendation rec =
+        getSuccessData(
+            buildTools(resolver, maven)
+                .recommend_pom_upgrades("<build-parent/>", UpgradeMode.MINOR_PATCH, null));
+
+    assertThat(rec.deterministicActions())
+        .singleElement()
+        .satisfies(
+            action -> {
+              assertThat(action.kind()).isEqualTo(UpgradeAction.KIND_PLUGIN_DEP_BUMP);
+              assertThat(action.groupId()).isEqualTo("com.puppycrawl.tools");
+              assertThat(action.artifactId()).isEqualTo("checkstyle");
+              assertThat(action.target()).isEqualTo("10.27.0");
+              assertThat(action.editTarget()).isEqualTo(ManagedDeclaration.EDIT_TARGET_PROPERTY);
+              assertThat(action.propertyName()).isEqualTo("checkstyle.version");
+              assertThat(action.declaredIn()).isEqualTo(PluginDependencyDeclaration.BUILD_PLUGINS);
+              assertThat(action.ownerGroupId()).isEqualTo("org.apache.maven.plugins");
+              assertThat(action.ownerArtifactId()).isEqualTo("maven-checkstyle-plugin");
             });
   }
 

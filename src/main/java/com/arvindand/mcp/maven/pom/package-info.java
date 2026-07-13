@@ -15,7 +15,11 @@
  * com.arvindand.mcp.maven.pom.Source#MANAGED}, {@link
  * com.arvindand.mcp.maven.pom.Source#EXPLICIT_OVERRIDE}), the managing BOM or parent coordinate
  * where applicable, and any losing {@link com.arvindand.mcp.maven.pom.ManagedAlternative candidate
- * versions} from competing BOMs.
+ * versions} from competing BOMs. Direct non-import root {@code <dependencyManagement>} entries with
+ * an unambiguous literal or root-owned property edit are also surfaced as {@link
+ * com.arvindand.mcp.maven.pom.ManagedDeclaration} values for upgrade automation. Dependencies
+ * declared directly under root build plugins and plugin management are surfaced as {@link
+ * com.arvindand.mcp.maven.pom.PluginDependencyDeclaration} values with their owner plugin.
  *
  * <p>The resolution shape (parent walk → properties → BOM import → depMgmt merge) follows the
  * MIT-licensed <a href="https://github.com/maxxq-org/maxxq-maven">maxxq-org/maxxq-maven</a> by Guy

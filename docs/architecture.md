@@ -49,8 +49,9 @@ AI client -> analyze_pom_dependencies(pomXml, sideloadedPoms?) -> Maven Tools MC
    (project.* placeholders scoped per-POM so an imported BOM's ${project.version}
    resolves to that BOM's version, not the importer's)
 5. Server classifies each declared dependency (EXPLICIT / MANAGED / EXPLICIT_OVERRIDE)
-6. Server surfaces multi-BOM conflicts and per-step warnings as raw data
-7. Server returns structured JSON; reasoning about what to upgrade is the caller's job
+6. Server identifies directly editable root dependency-management and build/plugin declarations
+7. Server surfaces multi-BOM conflicts and per-step warnings as raw data
+8. Server returns structured JSON; reasoning about what to upgrade is the caller's job
 ```
 
 `recommend_pom_upgrades` adds an opinion layer on top of the resolver output:
@@ -58,14 +59,19 @@ AI client -> analyze_pom_dependencies(pomXml, sideloadedPoms?) -> Maven Tools MC
 ```text
 AI client -> recommend_pom_upgrades(pomXml, mode?, sideloadedPoms?) -> Maven Tools MCP Server
 
-1-6. Same resolver pass as above (result is cached by raw pomXml for 1h)
-7. For each user-controllable BOM (direct <parent> + root <dependencyManagement>
+1-8. Same resolver pass as above (result is cached by raw pomXml for 1h)
+9. For each user-controllable BOM (direct <parent> + root <dependencyManagement>
    imports), look up the latest stable on Maven Central; emit bom_bump or route a
    major to needs_attention. Transitively-imported BOMs are silently skipped —
    nothing for the caller to edit in their own POM.
-8. For each declared dep, classify: explicit_bump for available minor/patch
+10. For each direct root dependency-management declaration with a literal version or
+   exact root-owned property, emit managed_decl_bump with edit metadata or route a
+   major to needs_attention.
+11. For each direct build or plugin-management dependency, emit plugin_dep_bump with
+   its owner plugin and edit location, or route a major to needs_attention.
+12. For each declared dep, classify: explicit_bump for available minor/patch
    upgrades, conflict / explicit_override / major_available to needs_attention
-9. Return two lists — deterministic_actions[] for mechanical agent application,
+13. Return two lists — deterministic_actions[] for mechanical agent application,
    needs_attention[] (each entry carries latestOnCentral) for human / LLM review
 ```
 

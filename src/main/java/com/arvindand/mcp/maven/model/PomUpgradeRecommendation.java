@@ -10,8 +10,8 @@ import java.util.Objects;
  *
  * <ul>
  *   <li>{@link #deterministicActions()} — applied mechanically by a non-LLM agent (e.g., the
- *       dogfood self-update workflow). Each action is a precise {@code <version>} edit the agent
- *       can make without judgment.
+ *       dogfood self-update workflow). Each action is a precise version-field or property edit the
+ *       agent can make without judgment.
  *   <li>{@link #needsAttention()} — consumed by a human-driven LLM review (Copilot major-review
  *       mode, or a user prompt in Claude / Copilot). Each entry carries enough context for the
  *       model to reason about the right call against the surrounding code.

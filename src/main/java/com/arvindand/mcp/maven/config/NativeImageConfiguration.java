@@ -27,6 +27,8 @@ import com.arvindand.mcp.maven.model.security.VulnerabilityInfo;
 import com.arvindand.mcp.maven.pom.EffectiveDependency;
 import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedAlternative;
+import com.arvindand.mcp.maven.pom.ManagedDeclaration;
+import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
 import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.service.VulnerabilityService;
 import org.jspecify.annotations.Nullable;
@@ -125,6 +127,8 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, EffectivePomResult.class);
       registerRecordClass(hints, EffectiveDependency.class);
       registerRecordClass(hints, ManagedAlternative.class);
+      registerRecordClass(hints, ManagedDeclaration.class);
+      registerRecordClass(hints, PluginDependencyDeclaration.class);
 
       // Register recommend_pom_upgrades response records.
       registerRecordClass(hints, PomUpgradeRecommendation.class);

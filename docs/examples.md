@@ -151,6 +151,8 @@ A response from `analyze_project_health` may look like:
     {"artifactId": "spring-boot-dependencies", "version": "3.5.14"}
   ],
   "rootImportedBoms": [],
+  "rootManagedDeclarations": [],
+  "rootPluginDependencyDeclarations": [],
   "warnings": []
 }
 ```
@@ -181,6 +183,30 @@ When two BOMs at the same level disagree on a coordinate, `conflicts[]` lists ev
       "current": "3.5.13",
       "target": "3.5.14",
       "updateType": "patch"
+    },
+    {
+      "kind": "managed_decl_bump",
+      "groupId": "io.fabric8",
+      "artifactId": "kubernetes-client",
+      "current": "7.3.0",
+      "target": "7.4.0",
+      "updateType": "minor",
+      "editTarget": "property",
+      "propertyName": "fabric8.version",
+      "declaredIn": "dependency_management"
+    },
+    {
+      "kind": "plugin_dep_bump",
+      "groupId": "com.puppycrawl.tools",
+      "artifactId": "checkstyle",
+      "current": "10.26.1",
+      "target": "10.27.0",
+      "updateType": "minor",
+      "editTarget": "property",
+      "propertyName": "checkstyle.version",
+      "declaredIn": "build.plugins.plugin.dependencies",
+      "ownerGroupId": "org.apache.maven.plugins",
+      "ownerArtifactId": "maven-checkstyle-plugin"
     }
   ],
   "needsAttention": [
@@ -198,7 +224,7 @@ When two BOMs at the same level disagree on a coordinate, `conflicts[]` lists ev
 }
 ```
 
-`explicit_bump` edits a declared `<version>`; `bom_bump` edits the `<version>` of a user-controllable BOM (direct `<parent>` or root `<dependencyManagement>` import). Transitively-imported BOMs are intentionally absent — there's nothing for an agent to edit in your own POM.
+`explicit_bump` edits a declared `<version>`; `bom_bump` edits a user-controllable BOM; `managed_decl_bump` edits a direct non-import dependency-management version; `plugin_dep_bump` edits a dependency under `build/plugins` or `build/pluginManagement`. Plugin actions identify the owner plugin so literal edits stay within the correct block. Inherited and compound version expressions remain absent because they have no unambiguous edit point in the input POM.
 
 `needs_attention[]` carries `latestOnCentral` on every entry so the reviewing model has full context in one round-trip and doesn't need to fan out per-coordinate `compare_dependency_versions` calls.
 

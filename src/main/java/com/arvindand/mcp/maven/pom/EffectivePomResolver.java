@@ -13,8 +13,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
+import org.apache.maven.model.Plugin;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.springframework.cache.annotation.Cacheable;
@@ -47,6 +50,7 @@ import org.springframework.stereotype.Service;
 public class EffectivePomResolver {
 
   private static final int MAX_PARENT_DEPTH = 10;
+  private static final Pattern EXACT_PROPERTY_REFERENCE = Pattern.compile("\\$\\{([^}]+)}");
 
   private final PomFetcher fetcher;
 
@@ -82,7 +86,150 @@ public class EffectivePomResolver {
     List<EffectiveDependency> deps =
         classifyDependencies(root, parents.properties(), managed, warnings);
     List<MavenCoordinate> rootBomImports = extractRootBomImports(root, parents.properties());
-    return new EffectivePomResult(deps, parents.chain(), rootBomImports, warnings);
+    List<ManagedDeclaration> rootManagedDeclarations =
+        extractRootManagedDeclarations(root, parents.properties());
+    List<PluginDependencyDeclaration> rootPluginDependencyDeclarations =
+        extractRootPluginDependencyDeclarations(root, parents.properties());
+    return new EffectivePomResult(
+        deps,
+        parents.chain(),
+        rootBomImports,
+        rootManagedDeclarations,
+        rootPluginDependencyDeclarations,
+        warnings);
+  }
+
+  /** Collects directly-editable dependencies from root build plugins and plugin management. */
+  private static List<PluginDependencyDeclaration> extractRootPluginDependencyDeclarations(
+      Model root, Map<String, String> properties) {
+    if (root.getBuild() == null) {
+      return List.of();
+    }
+    List<PluginDependencyDeclaration> declarations = new ArrayList<>();
+    declarations.addAll(
+        extractPluginDependencies(
+            root.getBuild().getPlugins(),
+            root,
+            properties,
+            PluginDependencyDeclaration.BUILD_PLUGINS));
+    if (root.getBuild().getPluginManagement() != null) {
+      declarations.addAll(
+          extractPluginDependencies(
+              root.getBuild().getPluginManagement().getPlugins(),
+              root,
+              properties,
+              PluginDependencyDeclaration.PLUGIN_MANAGEMENT));
+    }
+    return List.copyOf(declarations);
+  }
+
+  private static List<PluginDependencyDeclaration> extractPluginDependencies(
+      List<Plugin> plugins, Model root, Map<String, String> properties, String declaredIn) {
+    return plugins.stream()
+        .flatMap(
+            plugin ->
+                plugin.getDependencies().stream()
+                    .map(
+                        dependency ->
+                            toPluginDependencyDeclaration(
+                                dependency, plugin, root, properties, declaredIn))
+                    .flatMap(Optional::stream))
+        .toList();
+  }
+
+  private static Optional<PluginDependencyDeclaration> toPluginDependencyDeclaration(
+      Dependency dependency,
+      Plugin plugin,
+      Model root,
+      Map<String, String> properties,
+      String declaredIn) {
+    String groupId = PropertyInterpolator.interpolate(dependency.getGroupId(), properties);
+    String artifactId = PropertyInterpolator.interpolate(dependency.getArtifactId(), properties);
+    String version = PropertyInterpolator.interpolate(dependency.getVersion(), properties);
+    String pluginGroupId =
+        plugin.getGroupId() == null
+            ? "org.apache.maven.plugins"
+            : PropertyInterpolator.interpolate(plugin.getGroupId(), properties);
+    String pluginArtifactId = PropertyInterpolator.interpolate(plugin.getArtifactId(), properties);
+    if (hasUnresolvedValue(groupId)
+        || hasUnresolvedValue(artifactId)
+        || hasUnresolvedValue(version)
+        || hasUnresolvedValue(pluginGroupId)
+        || hasUnresolvedValue(pluginArtifactId)) {
+      return Optional.empty();
+    }
+
+    String declaredVersion = dependency.getVersion();
+    Matcher propertyReference = EXACT_PROPERTY_REFERENCE.matcher(declaredVersion);
+    if (propertyReference.matches()) {
+      String propertyName = propertyReference.group(1);
+      if (root.getProperties() != null && root.getProperties().containsKey(propertyName)) {
+        return Optional.of(
+            PluginDependencyDeclaration.property(
+                groupId,
+                artifactId,
+                version,
+                propertyName,
+                pluginGroupId,
+                pluginArtifactId,
+                declaredIn));
+      }
+      return Optional.empty();
+    }
+    if (declaredVersion.contains("${")) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        PluginDependencyDeclaration.literal(
+            groupId, artifactId, version, pluginGroupId, pluginArtifactId, declaredIn));
+  }
+
+  /**
+   * Collects directly-editable, non-import entries from the root POM's {@code
+   * <dependencyManagement>}. An exact {@code ${property}} reference is actionable only when that
+   * property is declared by the root POM itself; inherited and compound expressions have no safe,
+   * unambiguous edit target in the input file.
+   */
+  private static List<ManagedDeclaration> extractRootManagedDeclarations(
+      Model root, Map<String, String> properties) {
+    if (root.getDependencyManagement() == null) {
+      return List.of();
+    }
+    return root.getDependencyManagement().getDependencies().stream()
+        .filter(d -> !("import".equals(d.getScope()) && "pom".equals(d.getType())))
+        .map(d -> toManagedDeclaration(d, root, properties))
+        .flatMap(Optional::stream)
+        .toList();
+  }
+
+  private static Optional<ManagedDeclaration> toManagedDeclaration(
+      Dependency dependency, Model root, Map<String, String> properties) {
+    String groupId = PropertyInterpolator.interpolate(dependency.getGroupId(), properties);
+    String artifactId = PropertyInterpolator.interpolate(dependency.getArtifactId(), properties);
+    String version = PropertyInterpolator.interpolate(dependency.getVersion(), properties);
+    if (hasUnresolvedValue(groupId)
+        || hasUnresolvedValue(artifactId)
+        || hasUnresolvedValue(version)) {
+      return Optional.empty();
+    }
+
+    String declaredVersion = dependency.getVersion();
+    Matcher propertyReference = EXACT_PROPERTY_REFERENCE.matcher(declaredVersion);
+    if (propertyReference.matches()) {
+      String propertyName = propertyReference.group(1);
+      if (root.getProperties() != null && root.getProperties().containsKey(propertyName)) {
+        return Optional.of(ManagedDeclaration.property(groupId, artifactId, version, propertyName));
+      }
+      return Optional.empty();
+    }
+    if (declaredVersion.contains("${")) {
+      return Optional.empty();
+    }
+    return Optional.of(ManagedDeclaration.literal(groupId, artifactId, version));
+  }
+
+  private static boolean hasUnresolvedValue(String value) {
+    return value == null || value.isBlank() || value.contains("${");
   }
 
   /**

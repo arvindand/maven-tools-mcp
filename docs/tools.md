@@ -25,7 +25,7 @@ Maven Tools MCP exposes 11 MCP tools: 9 core Maven/dependency tools and 2 raw Co
 - `managedBy` — which BOM or parent supplied the version, when applicable
 - `conflicts[]` — losing candidates when multiple BOMs at the same level disagree (e.g., Spring Boot + Spring Cloud + Jackson BOM all managing `jackson-databind`). Surfaced as raw data so the caller can decide whether to pin the version explicitly; the resolver does not recommend an action.
 
-The tool also returns the resolved `parentChain`, a `rootImportedBoms[]` list of BOMs the root POM declares directly via `<scope>import</scope>` (the user-controllable knobs alongside `parentChain[0]`), and a `warnings[]` array listing every silent-drop site (unreachable parents, unresolvable property placeholders, depth-cap exhaustion, failed BOM fetches).
+The tool also returns the resolved `parentChain`, direct `rootImportedBoms[]`, directly editable `rootManagedDeclarations[]`, editable `rootPluginDependencyDeclarations[]` from both build plugins and plugin management, and a `warnings[]` array listing every silent-drop site. An owned declaration appears only when its version is literal or is an exact property reference owned by the input POM.
 
 For multi-module / monorepo projects, pass an optional `sideloadedPoms: string[]` of additional POM XML strings (sibling modules, unreleased parents). The resolver indexes each by its self-declared GAV and tries the bundle before falling back to Maven Central — so a child whose parent is not yet published still resolves cleanly.
 
@@ -41,7 +41,7 @@ The classification is the upgrade policy:
 
 `recommend_pom_upgrades` applies this policy and returns a split response so the right consumer reads the right part:
 
-- **`deterministic_actions[]`** — mechanical `<version>` edits a non-LLM agent applies directly. Each entry has `kind` (`explicit_bump` or `bom_bump`), `groupId`, `artifactId`, `current`, `target`, `updateType`. The agent's loop is `for action in deterministic_actions: edit_pom(action)` — no MCP follow-up calls, no Maven XML parsing in Python.
+- **`deterministic_actions[]`** — mechanical edits a non-LLM agent applies directly. Each entry has `kind` (`explicit_bump`, `bom_bump`, `managed_decl_bump`, or `plugin_dep_bump`), `groupId`, `artifactId`, `current`, `target`, and `updateType`. Owned declarations carry `editTarget`, optional `propertyName`, and `declaredIn`; plugin dependency actions also carry `ownerGroupId` and `ownerArtifactId`.
 - **`needs_attention[]`** — items that need judgment. `kind: "major_available"` for majors (with `currentMajorLatest` so the model can choose to stay same-major); `kind: "conflict"` when two BOMs disagree (with every `candidate` version + `latestOnCentral`); `kind: "explicit_override"` (with `managingCandidates` + `latestOnCentral`). Every entry carries the Maven Central latest so the LLM has full context in one round-trip — no follow-up `compare_dependency_versions` calls needed.
 
 Use `mode: MINOR_PATCH` (default) to keep majors in the review lane, or `mode: ALL` to treat majors as deterministic too (rarely the right call).
