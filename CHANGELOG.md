@@ -17,13 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.2.1] - 2026-08-19
 
-**Working JAR out of the box** — the `java -jar` path documented in `docs/setup.md` started
-cleanly and then never answered a request. stdio is now the default transport, and both
-transports are covered by wire-protocol tests that run in CI.
+**STDIO Transport Fix** — the `java -jar` path documented in `docs/setup.md` started cleanly and
+then never answered a request. stdio is now the default transport.
 
 ### Added (3.2.1)
 
-- **MCP wire-protocol conformance IT**: `McpProtocolConformanceIT` boots the server with the `http` profile on a random port and asserts what a client actually observes — the `initialize` handshake, the declared `tools` capability, and a published tool list with unique names, descriptions, and structurally valid input schemas. Complements `MavenMcpServerIT`, which exercises the services directly rather than the protocol surface. Contributed by [@senor14](https://github.com/senor14) in [#14](https://github.com/arvindand/maven-tools-mcp/pull/14).
+- **MCP wire-protocol conformance IT**: `McpProtocolConformanceIT` boots the server with the `http` profile on a random port and asserts what a client actually observes — the `initialize` handshake, the declared `tools` capability, and a published tool list with unique names, descriptions, and structurally valid input schemas. Complements `MavenMcpServerIT`, which exercises the services directly rather than the protocol surface. See [#14](https://github.com/arvindand/maven-tools-mcp/pull/14) — thanks [@senor14](https://github.com/senor14) for the contribution :)
 
 ### Changed (3.2.1)
 
@@ -33,7 +32,7 @@ transports are covered by wire-protocol tests that run in CI.
 
 ### Fixed (3.2.1)
 
-- **JAR started but never answered a single MCP request**: `spring.ai.mcp.server.stdio` was only set in `application-docker.yaml`, so every Docker path worked while the `java -jar` invocation documented in `docs/setup.md` came up with no transport at all. Combined with `web-application-type: none` there was nothing left to fail, so the server logged a clean startup and then went silent — from the client side, an indefinite hang with no error or warning. stdio is now enabled in the default profile, with an explicit `stdio: false` in the `http` profile (so the STREAMABLE transport does not come up alongside it) and in the test profile (so no stdio transport attaches to `System.in` under surefire). Reported by [@senor14](https://github.com/senor14) in [#15](https://github.com/arvindand/maven-tools-mcp/issues/15).
+- **JAR started but never answered a single MCP request**: `spring.ai.mcp.server.stdio` was only set in `application-docker.yaml`, so every Docker path worked while the `java -jar` invocation documented in `docs/setup.md` came up with no transport at all. Combined with `web-application-type: none` there was nothing left to fail, so the server logged a clean startup and then went silent — from the client side, an indefinite hang with no error or warning. stdio is now enabled in the default profile, with an explicit `stdio: false` in the `http` profile (so the STREAMABLE transport does not come up alongside it) and in the test profile (so no stdio transport attaches to `System.in` under surefire). See [#15](https://github.com/arvindand/maven-tools-mcp/issues/15) — thanks [@senor14](https://github.com/senor14) for the contribution :)
 
 ## [3.2.0] - 2026-07-13
 
