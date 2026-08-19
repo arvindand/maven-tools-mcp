@@ -209,6 +209,7 @@
                         <exclude>**/*IntegrationTest.java</exclude>
                         <exclude>**/*IT.java</exclude>
                     </excludes>
+                    <skipTests>${skipUTs}</skipTests>
                     <!-- Prevent hanging issues in CI -->
                     <forkedProcessTimeoutInSeconds>60</forkedProcessTimeoutInSeconds>
                     <forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
@@ -224,6 +225,12 @@
                         <include>**/*IntegrationTest.java</include>
                         <include>**/*IT.java</include>
                     </includes>
+                    <skipITs>${skipITs}</skipITs>
+                    <systemPropertyVariables>
+                        <!-- Lets the stdio IT launch the repackaged jar without hardcoding a version -->
+                        <project.build.directory>${project.build.directory}</project.build.directory>
+                        <project.build.finalName>${project.build.finalName}</project.build.finalName>
+                    </systemPropertyVariables>
                 </configuration>
                 <executions>
                     <execution>
