@@ -82,7 +82,9 @@ public class HttpClientConfig {
       switch (auth.type()) {
         case BASIC -> request.getHeaders().setBasicAuth(auth.username(), auth.password());
         case BEARER -> request.getHeaders().setBearerAuth(auth.token());
-        default -> {}
+        default -> {
+          // NONE: anonymous access, no authorization header to add.
+        }
       }
       return execution.execute(request, body);
     };

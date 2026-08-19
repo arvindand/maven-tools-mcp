@@ -50,6 +50,7 @@ import org.springframework.stereotype.Service;
 public class EffectivePomResolver {
 
   private static final int MAX_PARENT_DEPTH = 10;
+  private static final String SCOPE_IMPORT = "import";
   private static final Pattern EXACT_PROPERTY_REFERENCE = Pattern.compile("\\$\\{([^}]+)}");
 
   private final PomFetcher fetcher;
@@ -196,7 +197,7 @@ public class EffectivePomResolver {
       return List.of();
     }
     return root.getDependencyManagement().getDependencies().stream()
-        .filter(d -> !("import".equals(d.getScope()) && "pom".equals(d.getType())))
+        .filter(d -> !(SCOPE_IMPORT.equals(d.getScope()) && "pom".equals(d.getType())))
         .map(d -> toManagedDeclaration(d, root, properties))
         .flatMap(Optional::stream)
         .toList();
@@ -243,7 +244,7 @@ public class EffectivePomResolver {
       return List.of();
     }
     return root.getDependencyManagement().getDependencies().stream()
-        .filter(d -> "import".equals(d.getScope()) && "pom".equals(d.getType()))
+        .filter(d -> SCOPE_IMPORT.equals(d.getScope()) && "pom".equals(d.getType()))
         .map(d -> interpolateBomCoord(d, properties))
         .filter(Objects::nonNull)
         .toList();
@@ -401,7 +402,7 @@ public class EffectivePomResolver {
     String resolved = PropertyInterpolator.interpolate(declared, properties);
     // Heuristic: residual "${" means interpolation left a placeholder unresolved — no real Maven
     // version string contains it.
-    if (resolved.isBlank() || resolved.contains("${")) {
+    if (resolved == null || resolved.isBlank() || resolved.contains("${")) {
       warnings.add("Could not resolve version for " + key.display() + " (raw: " + declared + ")");
       return Optional.empty();
     }
@@ -465,7 +466,7 @@ public class EffectivePomResolver {
       Map<ManagementKey, ManagedEntry> sink,
       List<String> warnings,
       Set<String> visitedBoms) {
-    if ("import".equals(d.getScope()) && "pom".equals(d.getType())) {
+    if (SCOPE_IMPORT.equals(d.getScope()) && "pom".equals(d.getType())) {
       importBom(d, properties, sink, warnings, visitedBoms);
       return;
     }
