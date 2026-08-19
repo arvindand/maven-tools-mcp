@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (Unreleased)
 
+- **Static-analysis hardening in `EffectivePomResolver`**: the interpolated version in `classifyDeclaredDependency` is now null-guarded alongside the existing blank/placeholder check. This is not a live defect — `PropertyInterpolator.interpolate` is null-in/null-out and the sole caller already routes null and blank versions to the managed-dependency path, so the branch is unreachable — but SonarQube cannot see that across methods, so the guard states the invariant locally. Alongside it: the repeated `"import"` scope literal moved to a constant, the unused `NotFound` catch variable uses the unnamed pattern, and the intentionally empty `default` branch in the repository auth interceptor now says why it is empty.
+
 ### Fixed (Unreleased)
 
 ### Removed (Unreleased)

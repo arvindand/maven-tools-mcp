@@ -302,7 +302,7 @@ public class MavenCentralService {
     try {
       String xml = restClient.get().uri(java.net.URI.create(url)).retrieve().body(String.class);
       return Optional.ofNullable(xml);
-    } catch (HttpClientErrorException.NotFound ex) {
+    } catch (HttpClientErrorException.NotFound _) {
       // 404 is a legitimate "POM doesn't exist for this coord" — not transient,
       // don't retry, don't trip the circuit breaker.
       logger.debug("POM not found for {}", coordinate.toCoordinateString());
