@@ -123,6 +123,13 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- MCP wire-protocol conformance testing -->
+        <dependency>
+            <groupId>io.github.senor14</groupId>
+            <artifactId>mcp-java-testkit</artifactId>
+            <version>0.3.0</version>
+            <scope>test</scope>
+        </dependency>
 
     </dependencies>
     <dependencyManagement>
