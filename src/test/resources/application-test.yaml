@@ -15,6 +15,8 @@ spring:
     type: caffeine
   ai:
     mcp:
+      server:
+        stdio: false                      # Never attach a stdio transport to System.in under surefire
       client:
         enabled: false
         type: SYNC

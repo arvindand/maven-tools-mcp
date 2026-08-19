@@ -7,4 +7,4 @@ spring:
   ai:
     mcp:
       server:
-        stdio: true  # Enable stdio transport during AOT/native build for docker profile
+        stdio: true  # Matches the default; kept explicit so the AOT/native build bakes it in

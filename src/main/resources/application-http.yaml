@@ -17,6 +17,7 @@ spring:
   ai:
     mcp:
       server:
+        stdio: false                      # Streamable HTTP only; stdio is on by default
         protocol: STREAMABLE
         streamable-http:
           mcp-endpoint: /mcp

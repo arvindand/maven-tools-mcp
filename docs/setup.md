@@ -110,6 +110,8 @@ Run the JAR:
 java -jar target/maven-tools-mcp-<version>.jar
 ```
 
+The JAR speaks stdio by default, so it works with the Claude Desktop config below as-is. For the Streamable HTTP transport instead, run it with `--spring.profiles.active=http` and connect to `http://localhost:8080/mcp`.
+
 Example Claude Desktop config for the JAR:
 
 ```json
