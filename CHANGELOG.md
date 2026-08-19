@@ -9,18 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added (Unreleased)
 
-- **MCP wire-protocol conformance IT**: `McpProtocolConformanceIT` boots the server with the `http` profile on a random port and asserts what a client actually observes — the `initialize` handshake, the declared `tools` capability, and a published tool list with unique names, descriptions, and structurally valid input schemas. Complements `MavenMcpServerIT`, which exercises the services directly rather than the protocol surface. Contributed by [@senor14](https://github.com/senor14) in [#14](https://github.com/arvindand/maven-tools-mcp/pull/14).
-
 ### Changed (Unreleased)
-
-- **Protocol conformance now runs in CI**: a `protocol-conformance` job runs the wire-protocol ITs on every PR. `McpStdioConformanceIT` launches the packaged jar the way `docs/setup.md` documents and speaks JSON-RPC over its stdin/stdout — reverting the stdio fix above makes it fail. `McpProtocolConformanceIT` now asserts the nine native tool names exactly rather than only the shape of the tool list, and `McpToolsConfigTest` covers the connected-client aggregation with a stubbed `McpSyncClient` instead of deferring to a manual smoke test, so the 3.1.0 Context7 regression would now turn a test red.
-- **`skipUTs` / `skipITs` are actually wired**: both properties were declared and set per profile but never referenced by surefire or failsafe, so `-Pintegration` still ran the unit tests and the integration job's `-DskipUTs=true` did nothing.
 
 ### Fixed (Unreleased)
 
-- **JAR started but never answered a single MCP request**: `spring.ai.mcp.server.stdio` was only set in `application-docker.yaml`, so every Docker path worked while the `java -jar` invocation documented in `docs/setup.md` came up with no transport at all. Combined with `web-application-type: none` there was nothing left to fail, so the server logged a clean startup and then went silent — from the client side, an indefinite hang with no error or warning. stdio is now enabled in the default profile, with an explicit `stdio: false` in the `http` profile (so the STREAMABLE transport does not come up alongside it) and in the test profile (so no stdio transport attaches to `System.in` under surefire). Reported by [@senor14](https://github.com/senor14) in [#15](https://github.com/arvindand/maven-tools-mcp/issues/15).
-
 ### Removed (Unreleased)
+
+## [3.2.1] - 2026-08-19
+
+**Working JAR out of the box** — the `java -jar` path documented in `docs/setup.md` started
+cleanly and then never answered a request. stdio is now the default transport, and both
+transports are covered by wire-protocol tests that run in CI.
+
+### Added (3.2.1)
+
+- **MCP wire-protocol conformance IT**: `McpProtocolConformanceIT` boots the server with the `http` profile on a random port and asserts what a client actually observes — the `initialize` handshake, the declared `tools` capability, and a published tool list with unique names, descriptions, and structurally valid input schemas. Complements `MavenMcpServerIT`, which exercises the services directly rather than the protocol surface. Contributed by [@senor14](https://github.com/senor14) in [#14](https://github.com/arvindand/maven-tools-mcp/pull/14).
+
+### Changed (3.2.1)
+
+- **Protocol conformance now runs in CI**: a `protocol-conformance` job runs the wire-protocol ITs on every PR. `McpStdioConformanceIT` launches the packaged jar the way `docs/setup.md` documents and speaks JSON-RPC over its stdin/stdout — reverting the stdio fix above makes it fail. `McpProtocolConformanceIT` now asserts the nine native tool names exactly rather than only the shape of the tool list, and `McpToolsConfigTest` covers the connected-client aggregation with a stubbed `McpSyncClient` instead of deferring to a manual smoke test, so the 3.1.0 Context7 regression would now turn a test red.
+- **`skipUTs` / `skipITs` are actually wired**: both properties were declared and set per profile but never referenced by surefire or failsafe, so `-Pintegration` still ran the unit tests and the integration job's `-DskipUTs=true` did nothing.
+- **Release metadata**: aligned the project version, MCP runtime metadata, registry manifest, Docker workflow fallbacks, and Unix/Windows build helper fallbacks for 3.2.1.
+
+### Fixed (3.2.1)
+
+- **JAR started but never answered a single MCP request**: `spring.ai.mcp.server.stdio` was only set in `application-docker.yaml`, so every Docker path worked while the `java -jar` invocation documented in `docs/setup.md` came up with no transport at all. Combined with `web-application-type: none` there was nothing left to fail, so the server logged a clean startup and then went silent — from the client side, an indefinite hang with no error or warning. stdio is now enabled in the default profile, with an explicit `stdio: false` in the `http` profile (so the STREAMABLE transport does not come up alongside it) and in the test profile (so no stdio transport attaches to `System.in` under surefire). Reported by [@senor14](https://github.com/senor14) in [#15](https://github.com/arvindand/maven-tools-mcp/issues/15).
 
 ## [3.2.0] - 2026-07-13
 
