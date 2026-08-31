@@ -127,7 +127,7 @@
         <dependency>
             <groupId>io.github.senor14</groupId>
             <artifactId>mcp-java-testkit</artifactId>
-            <version>0.5.1</version>
+            <version>0.7.0</version>
             <scope>test</scope>
         </dependency>
 
