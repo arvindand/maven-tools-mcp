@@ -7,7 +7,7 @@ import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
 import com.arvindand.mcp.maven.model.DependencyInfo;
 import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
-import com.arvindand.mcp.maven.model.MavenMetadata;
+import com.arvindand.mcp.maven.model.McpError;
 import com.arvindand.mcp.maven.model.NeedsAttention;
 import com.arvindand.mcp.maven.model.PomUpgradeRecommendation;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
@@ -35,6 +35,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
+import org.springframework.aot.hint.TypeReference;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.ImportRuntimeHints;
 import tools.jackson.databind.PropertyNamingStrategies;
@@ -62,6 +63,68 @@ public class NativeImageConfiguration {
   static class MavenRecordHints implements RuntimeHintsRegistrar {
     @Override
     public void registerHints(RuntimeHints hints, @Nullable ClassLoader classLoader) {
+      // Configuration binds exception class names with Class.forName, even when no methods
+      // are invoked reflectively. Keep these types discoverable in native executables.
+      hints.reflection().registerType(io.github.resilience4j.ratelimiter.RequestNotPermitted.class);
+      hints.reflection().registerType(IllegalArgumentException.class);
+      hints.reflection().registerType(org.springframework.web.client.ResourceAccessException.class);
+      hints
+          .reflection()
+          .registerType(org.springframework.web.client.HttpServerErrorException.class);
+      // Caffeine selects factories by name for strong keys/values, weighted eviction and
+      // write expiry. The bundled reachability metadata does not include this combination.
+      for (String cacheType : new String[] {"SSMWW", "PSWMW"}) {
+        hints
+            .reflection()
+            .registerType(
+                TypeReference.of("com.github.benmanes.caffeine.cache." + cacheType),
+                MemberCategory.INVOKE_DECLARED_CONSTRUCTORS,
+                MemberCategory.ACCESS_DECLARED_FIELDS);
+      }
+      hints.resources().registerPattern("org/apache/maven/model/pom-4.0.0.xml");
+      // Maven's project.* value sources traverse these public model getters.
+      for (Class<?> modelType :
+          new Class<?>[] {
+            org.apache.maven.model.Model.class,
+            org.apache.maven.model.ModelBase.class,
+            org.apache.maven.model.Build.class,
+            org.apache.maven.model.BuildBase.class,
+            org.apache.maven.model.Profile.class,
+            org.apache.maven.model.Parent.class,
+            org.apache.maven.model.Dependency.class,
+            org.apache.maven.model.DependencyManagement.class,
+            org.apache.maven.model.Plugin.class,
+            org.apache.maven.model.PluginExecution.class,
+            org.apache.maven.model.PluginManagement.class,
+            org.apache.maven.model.Activation.class,
+            org.apache.maven.model.ActivationFile.class,
+            org.apache.maven.model.ActivationOS.class,
+            org.apache.maven.model.ActivationProperty.class,
+            org.apache.maven.model.Repository.class,
+            org.apache.maven.model.RepositoryBase.class,
+            org.apache.maven.model.RepositoryPolicy.class,
+            org.apache.maven.model.License.class,
+            org.apache.maven.model.Scm.class,
+            org.apache.maven.model.Organization.class,
+            org.apache.maven.model.DistributionManagement.class,
+            org.apache.maven.model.Relocation.class,
+            org.apache.maven.model.CiManagement.class,
+            org.apache.maven.model.IssueManagement.class,
+            org.apache.maven.model.Developer.class,
+            org.apache.maven.model.Contributor.class,
+            org.apache.maven.model.Resource.class,
+            org.apache.maven.model.FileSet.class,
+            org.apache.maven.model.Reporting.class,
+            org.apache.maven.model.ReportPlugin.class,
+            org.apache.maven.model.ReportSet.class,
+            org.apache.maven.model.Notifier.class,
+            org.apache.maven.model.MailingList.class,
+            org.apache.maven.model.Prerequisites.class,
+            org.apache.maven.model.DeploymentRepository.class
+          }) {
+        hints.reflection().registerType(modelType, MemberCategory.INVOKE_PUBLIC_METHODS);
+      }
+
       // Register all record classes with comprehensive reflection access
       registerRecordClass(hints, MavenCoordinate.class);
       registerRecordClass(hints, BulkCheckResult.class);
@@ -74,12 +137,6 @@ public class NativeImageConfiguration {
 
       // Register MavenArtifact for timestamp analysis compatibility
       registerRecordClass(hints, MavenArtifact.class);
-
-      // Register MavenMetadata and its nested records for XML deserialization (v1.4.0)
-      registerRecordClass(hints, MavenMetadata.class);
-      registerRecordClass(hints, MavenMetadata.VersioningInfo.class);
-      registerRecordClass(hints, MavenMetadata.VersionList.class);
-      registerRecordClass(hints, MavenMetadata.SnapshotInfo.class);
 
       // Register VersionComparator record for version parsing
       registerRecordClass(
@@ -122,6 +179,7 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, ToolResponse.class);
       registerRecordClass(hints, ToolResponse.Success.class);
       registerRecordClass(hints, ToolResponse.Error.class);
+      registerRecordClass(hints, McpError.class);
 
       // Register POM-aware analysis records for JSON serialization in analyze_pom_dependencies.
       registerRecordClass(hints, EffectivePomResult.class);

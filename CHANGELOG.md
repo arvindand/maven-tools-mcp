@@ -7,15 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added (Unreleased)
+## [3.2.2] - 2026-09-06
 
-### Changed (Unreleased)
+### Added (3.2.2)
 
-- **Static-analysis hardening in `EffectivePomResolver`**: the interpolated version in `classifyDeclaredDependency` is now null-guarded alongside the existing blank/placeholder check. This is not a live defect — `PropertyInterpolator.interpolate` is null-in/null-out and the sole caller already routes null and blank versions to the managed-dependency path, so the branch is unreachable — but SonarQube cannot see that across methods, so the guard states the invariant locally. Alongside it: the repeated `"import"` scope literal moved to a constant, the unused `NotFound` catch variable uses the unnamed pattern, and the intentionally empty `default` branch in the repository auth interceptor now says why it is empty.
+- Security and Maven correctness review, with regression coverage for credential isolation, CVSS vectors, recovery after upstream failures, bounded input handling, and precise POM edits.
 
-### Fixed (Unreleased)
+### Changed (3.2.2)
 
-### Removed (Unreleased)
+- Delegate effective-model construction and repository metadata parsing to Apache Maven 3.9.16 components; use Maven's license reader and retain the complete version history for release-line selection.
+- Evaluate default Maven profiles in isolation from server environment/files. Profile-only and otherwise ambiguous declarations remain visible in analysis and require manual edits.
+- Upgrade Spring Boot to 4.1.1, Spring AI to 2.0.1, and Tomcat to 11.0.25, bringing corrected Jackson and Log4j versions.
+- Build JVM images with Jib 3.5.2 under a distinct `-jvm` tag, keeping startup output compatible with MCP STDIO.
+- Upgrade MCP Java testkit to 0.7.0 and add JVM-image conformance checks to CI.
+
+### Fixed (3.2.2)
+
+- Repair native startup, weighted cache factories, nested error serialization, and cached POM recommendation calls with targeted runtime hints and regression tests.
+- Make shell build helpers work from any directory and paths containing spaces; repair Windows routing and error handling, and add its HTTP build option.
+- Quote the Mockito agent path for Maven repositories containing spaces; return `INVALID_INPUT` for invalid coordinates.
+- Isolate private repository credentials from OSV requests and reject authenticated cross-origin requests and redirects.
+- Calculate CVSS v2/v3/v4 vectors and verify newer remediation candidates against OSV; report exact severity counts and avoid caching failed or incomplete security responses.
+- Correct imported BOM property scope, direct dependency-management precedence, and coordinate interpolation through Maven Model Builder.
+- Apply configured resilience policies, avoid cached transient repository failures, and prevent local rate-limit rejections from opening upstream circuit breakers.
+- Bound response sizes, XML nesting, property expansion, model bundles, cache weight and concurrent batches; cancel timed-out work without indefinite executor shutdown waits.
+- Apply updater actions only at matching XML locations and current versions; require consistent authorization for shared-property references and reject application-error responses.
+- Require successful validation and matching release tags before Docker publication; native smoke checks now exercise MCP instead of ignoring failures.
+
+### Removed (3.2.2)
+
+- Custom metadata XML DTO/Jackson XML dependency, regex license parsing, hand-maintained effective-model merge loops, and guessed property-name edits.
 
 ## [3.2.1] - 2026-08-19
 
@@ -743,7 +764,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.0...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.2...HEAD
+[3.2.2]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.1...v3.2.2
 [3.2.0]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.2...v3.2.0
 [3.1.2]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.1...v3.1.2
 [3.1.1]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.0...v3.1.1

@@ -1,221 +1,112 @@
 @echo off
-REM Maven wrapper helper for Windows paths with spaces
-REM This script handles the path issues that can occur with mvnw.cmd in directories with spaces
-REM Falls back to system Maven if wrapper fails
+setlocal EnableExtensions
+REM Maven Tools MCP Server - Windows Build Helper
+REM @author Arvind Menon
+REM Resolve all paths from the script, including calls from the project root.
+pushd "%~dp0.." || exit /b 1
 
-REM Check for command line argument (for CI use)
-if not "%1"=="" (
-    set choice=%1
-    echo Running in non-interactive mode with option: %choice%
-    goto :process_choice
-)
-
-REM Interactive mode
-echo Maven Tools MCP Server - Windows Helper
-echo ==========================================
-
-REM Check if we're in the right directory
-if not exist "..\mvnw.cmd" (
-    echo ❌ This script must be run from the maven-tools-mcp project root directory or scripts\ subdirectory
-    echo Current directory: %CD%
-    pause
-    exit /b 1
-)
-
-echo Available commands:
+set "choice=%~1"
+if defined choice goto :process_choice
+echo Maven Tools MCP Server - Windows Build Options
 echo 1. Build JAR (skip tests)
-echo 2. Build JAR (with tests)  
-echo 3. Build Native Docker images (slow, optimized - builds 2 variants)
-echo 4. Build JVM Docker image (faster build)
+echo 2. Build JAR (with tests)
+echo 3. Build both native Docker images
+echo 4. Build JVM Docker image
 echo 5. Clean build artifacts
 echo 6. Run tests only
-echo 7. Build Native Docker image WITHOUT Context7
-echo.
-
-set /p choice="Choose option (1-7): "
+echo 7. Build native Docker image WITHOUT Context7
+echo 8. Build native Docker image with HTTP transport
+set /p choice="Choose option (1-8): "
 
 :process_choice
-if "%choice%"=="1" (
-    echo 📦 Building JAR without tests...
-    call :run_maven clean package -DskipTests
-    goto :show_result
-)
+if "%choice%"=="1" goto :jar_fast
+if "%choice%"=="2" goto :jar_tests
+if "%choice%"=="3" goto :native_both
+if "%choice%"=="4" goto :jvm
+if "%choice%"=="5" goto :clean
+if "%choice%"=="6" goto :tests
+if "%choice%"=="7" goto :native_noc7
+if "%choice%"=="8" goto :native_http
+echo Invalid option. Please choose 1-8.
+goto :error
 
-if "%choice%"=="2" (
-    echo 📦 Building JAR with tests...
-    call :run_maven clean package
-    goto :show_result
-)
+:jar_fast
+call "mvnw.cmd" clean package -DskipTests
+goto :show_result
 
-if "%choice%"=="3" (
-    echo 🐳 Building Native Docker images with buildpacks...
-    echo ⏳ This may take 20-25 minutes for native compilation (building 2 images)...
-    echo Step 1: Package application...
-    call :run_maven clean package -DskipTests
-    if errorlevel 1 goto :error
-    
-    REM Get project version
-    for /f "tokens=*" %%i in ('pushd "%~dp0.." ^& call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul ^& popd') do set PROJECT_VERSION=%%i
-    if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=3.2.1
-    
-    echo.
-    echo Step 2: Build Native Docker image WITH Context7...
-    pushd "%~dp0.."
-    set SPRING_PROFILES_ACTIVE=docker
-    call "mvnw.cmd" -Pnative spring-boot:build-image -Dspring-boot.build-image.imageName=maven-tools-mcp:%PROJECT_VERSION%
-    if errorlevel 1 popd & goto :error
-    popd
-    
-    echo.
-    echo Step 3: Build Native Docker image WITHOUT Context7...
-    pushd "%~dp0.."
-    set SPRING_PROFILES_ACTIVE=docker,no-context7
-    call "mvnw.cmd" -Pnative spring-boot:build-image -Dspring-boot.build-image.imageName=maven-tools-mcp:%PROJECT_VERSION%-noc7
-    if errorlevel 1 popd & goto :error
-    popd
-    
-    echo.
-    echo ✅ Native Docker images built successfully!
-    echo.
-    echo Two images created:
-    echo   1. maven-tools-mcp:%PROJECT_VERSION% (with Context7)
-    echo   2. maven-tools-mcp:%PROJECT_VERSION%-noc7 (without Context7)
-    echo.
-    echo 🚀 Run with Context7 enabled:
-    echo    docker run -i maven-tools-mcp:%PROJECT_VERSION%
-    echo.
-    echo 🚀 Run without Context7:
-    echo    docker run -i maven-tools-mcp:%PROJECT_VERSION%-noc7
-    goto :end
-)
+:jar_tests
+call "mvnw.cmd" clean package
+goto :show_result
 
-if "%choice%"=="4" (
-    echo 🐳 Building JVM Docker image with buildpacks...
-    echo Step 1: Package application...
-    call :run_maven clean package -DskipTests
-    if errorlevel 1 goto :error
-    echo Step 2: Build JVM Docker image...
-    pushd "%~dp0.."
-    set SPRING_PROFILES_ACTIVE=docker
-    call "mvnw.cmd" spring-boot:build-image
-    if errorlevel 1 popd & goto :error
-    popd
-    
-    REM Get project version
-    for /f "tokens=*" %%i in ('pushd "%~dp0.." ^& call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul ^& popd') do set PROJECT_VERSION=%%i
-    if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=3.2.1
-    
-    echo ✅ JVM Docker image built successfully!
-    echo.
-    echo 🚀 Run with Context7 (default):
-    echo    docker run -i maven-tools-mcp:%PROJECT_VERSION%
-    echo.
-    echo 🚀 Run without Context7 (use env vars):
-    echo    docker run -i -e SPRING_AI_MCP_CLIENT_ENABLED=false ^
-    echo      -e CONTEXT7_ENABLED=false ^
-    echo      maven-tools-mcp:%PROJECT_VERSION%
-    goto :end
-)
+:clean
+call "mvnw.cmd" clean
+goto :show_result
 
-if "%choice%"=="5" (
-    echo 🧹 Cleaning build artifacts...
-    call :run_maven clean
-    goto :show_result
-)
+:tests
+call "mvnw.cmd" test
+goto :show_result
 
-if "%choice%"=="6" (
-    echo 🧪 Running tests...
-    call :run_maven test
-    goto :show_result
-)
+:native_both
+call :prepare_image
+if errorlevel 1 goto :error
+set "SPRING_PROFILES_ACTIVE=docker"
+call "mvnw.cmd" -Pnative spring-boot:build-image -Dspring-boot.build-image.imageName=maven-tools-mcp:%PROJECT_VERSION%
+if errorlevel 1 goto :error
+set "SPRING_PROFILES_ACTIVE=docker,no-context7"
+call "mvnw.cmd" -Pnative spring-boot:build-image -Dspring-boot.build-image.imageName=maven-tools-mcp:%PROJECT_VERSION%-noc7
+if errorlevel 1 goto :error
+echo Built maven-tools-mcp:%PROJECT_VERSION% and maven-tools-mcp:%PROJECT_VERSION%-noc7
+goto :end
 
-if "%choice%"=="7" (
-    echo 🐳 Building Native Docker image WITHOUT Context7...
-    echo ⏳ This may take 10-15 minutes for native compilation...
-    echo Step 1: Package application...
-    call :run_maven clean package -DskipTests
-    if errorlevel 1 goto :error
-    
-    REM Get project version
-    for /f "tokens=*" %%i in ('pushd "%~dp0.." ^& call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul ^& popd') do set PROJECT_VERSION=%%i
-    if "%PROJECT_VERSION%"=="" set PROJECT_VERSION=3.2.1
-    
-    echo.
-    echo Step 2: Build Native Docker image with no-context7 profile...
-    pushd "%~dp0.."
-    set SPRING_PROFILES_ACTIVE=docker,no-context7
-    call "mvnw.cmd" -Pnative spring-boot:build-image -Dspring-boot.build-image.imageName=maven-tools-mcp:%PROJECT_VERSION%-noc7
-    if errorlevel 1 popd & goto :error
-    popd
-    
-    echo.
-    echo ✅ Native Docker image built successfully!
-    echo.
-    echo Image created: maven-tools-mcp:%PROJECT_VERSION%-noc7
-    echo.
-    echo 🚀 Run with:
-    echo    docker run -i maven-tools-mcp:%PROJECT_VERSION%-noc7
-    goto :end
-)
+:jvm
+call :prepare_image
+if errorlevel 1 goto :error
+set "SPRING_PROFILES_ACTIVE=docker"
+call "mvnw.cmd" jib:dockerBuild -Dimage=maven-tools-mcp:%PROJECT_VERSION%-jvm
+if errorlevel 1 goto :error
+echo Run: docker run --rm -i maven-tools-mcp:%PROJECT_VERSION%-jvm
+echo Without Context7: docker run --rm -i -e SPRING_PROFILES_ACTIVE=docker,no-context7 maven-tools-mcp:%PROJECT_VERSION%-jvm
+goto :end
 
-echo ❌ Invalid option. Please choose 1-7.
-exit /b 1
+:native_noc7
+call :prepare_image
+if errorlevel 1 goto :error
+set "SPRING_PROFILES_ACTIVE=docker,no-context7"
+call "mvnw.cmd" -Pnative spring-boot:build-image -Dspring-boot.build-image.imageName=maven-tools-mcp:%PROJECT_VERSION%-noc7
+if errorlevel 1 goto :error
+echo Run: docker run --rm -i maven-tools-mcp:%PROJECT_VERSION%-noc7
+goto :end
+
+:native_http
+call :prepare_image
+if errorlevel 1 goto :error
+set "SPRING_PROFILES_ACTIVE=http"
+call "mvnw.cmd" -Pnative spring-boot:build-image -Dspring-boot.build-image.imageName=maven-tools-mcp:%PROJECT_VERSION%-http
+if errorlevel 1 goto :error
+echo Run: docker run --rm -p 127.0.0.1:8080:8080 maven-tools-mcp:%PROJECT_VERSION%-http
+echo Connect to http://localhost:8080/mcp
+goto :end
+
+:prepare_image
+call "mvnw.cmd" clean package -DskipTests
+if errorlevel 1 exit /b 1
+set "PROJECT_VERSION="
+for /f "tokens=*" %%i in ('call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul') do set "PROJECT_VERSION=%%i"
+if not defined PROJECT_VERSION set "PROJECT_VERSION=3.2.2"
+exit /b 0
 
 :show_result
-if errorlevel 1 (
-    goto :error
-) else (
-    echo ✅ Command completed successfully!
-    
-    REM Look for JAR file (similar to build.sh)
-    for /f %%i in ('dir /b /s ..\target\*.jar 2^>nul ^| findstr /v ".original"') do set JAR_FILE=%%i
-    if defined JAR_FILE (
-        echo.
-        echo JAR file created: %JAR_FILE%
-        echo To run: java -jar %JAR_FILE%
-    )
-)
+if errorlevel 1 goto :error
+echo Command completed successfully.
+if exist "target\*.jar" dir /b "target\*.jar"
 goto :end
 
 :error
-echo ❌ Command failed. Check the output above for details.
-echo.
-echo Common solutions:
-echo - Ensure Java 25 is installed and in PATH
-echo - Check internet connection for Maven dependencies
-echo - Try running from a directory path without spaces
+echo Command failed. Check the output above for details.
+popd
 exit /b 1
 
 :end
-REM Skip pause in non-interactive mode
-if not "%1"=="" exit /b 0
-echo.
-pause
+popd
+if "%~1"=="" pause
 exit /b 0
-
-:run_maven
-REM Function to run Maven - changes to parent directory and runs wrapper
-echo Using Maven wrapper...
-pushd "%~dp0.."
-call "mvnw.cmd" %*
-set MAVEN_EXIT_CODE=%errorlevel%
-popd
-if not %MAVEN_EXIT_CODE% equ 0 goto :maven_fallback
-goto :eof
-
-:maven_fallback
-echo Maven wrapper failed, trying system Maven as fallback...
-where mvn >nul 2>&1
-if errorlevel 1 (
-    echo ❌ No Maven found. Please install Maven or check the Maven wrapper.
-    echo.
-    echo The Maven wrapper has been fixed for paths with spaces.
-    echo If you still see issues, try: ..\mvnw.cmd --version
-    exit /b 1
-)
-
-pushd "%~dp0.."
-mvn %*
-set MAVEN_EXIT_CODE=%errorlevel%
-popd
-exit /b %MAVEN_EXIT_CODE%

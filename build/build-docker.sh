@@ -1,12 +1,16 @@
 #!/bin/bash
 
 # Maven Tools MCP Server - Simplified Docker Build Script
-# Focuses on buildpacks with Docker Hub fallback
+# Build or pull the supported native and JVM image variants.
 
 set -e
+# @author Arvind Menon
+# Resolve paths relative to this script, including calls from the project root.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 # Check for command line argument (for CI use)
-if [ "$1" != "" ]; then
+if [ "${1:-}" != "" ]; then
     choice="$1"
     echo "Running in non-interactive mode with option: $choice"
 else
@@ -24,7 +28,7 @@ else
     echo "Available options:"
     echo "1. Use pre-built native image from Docker Hub (fastest, recommended)"
     echo "2. Build locally with Spring Boot buildpacks - Native Image (requires Maven + time)"
-    echo "3. Build locally with Spring Boot buildpacks - JVM Image (faster build)"
+    echo "3. Build locally with Jib - JVM Image (faster build)"
     echo ""
 
     read -p "Choose option (1-3): " choice
@@ -63,7 +67,7 @@ case $choice in
         echo "📦 Running Maven package (skipping tests for faster build)..."
         (cd .. && ./mvnw clean package -DskipTests)
 
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.2")
 
         echo ""
         echo "🐳 Building native image WITH Context7..."
@@ -87,8 +91,8 @@ case $choice in
         echo "   docker run -i maven-tools-mcp:${PROJECT_VERSION}-noc7"
         ;;
     3)
-        echo "🏗️  Building JVM Image with Spring Boot buildpacks..."
-        echo "This creates optimized, layered JVM images using Cloud Native Buildpacks"
+        echo "🏗️  Building JVM Image with Jib..."
+        echo "This creates optimized, layered JVM images using Jib"
         
         # Check if Maven wrapper is available
         if [ ! -f "../mvnw" ]; then
@@ -102,11 +106,11 @@ case $choice in
         echo "📦 Running Maven package (skipping tests for faster build)..."
         (cd .. && ./mvnw clean package -DskipTests)
 
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.2")
 
-        echo "🐳 Building JVM Docker image with buildpacks..."
-        (cd .. && SPRING_PROFILES_ACTIVE=docker ./mvnw spring-boot:build-image \
-          -Dspring-boot.build-image.imageName=maven-tools-mcp:${PROJECT_VERSION}-jvm)
+        echo "🐳 Building JVM Docker image with Jib..."
+        (cd .. && ./mvnw jib:dockerBuild \
+          -Dimage=maven-tools-mcp:${PROJECT_VERSION}-jvm)
         echo ""
         echo "✅ Built JVM image: maven-tools-mcp:${PROJECT_VERSION}-jvm"
         echo ""

@@ -9,8 +9,8 @@ import java.util.regex.Pattern;
  * Substitutes Maven-style {@code ${name}} placeholders against a property map.
  *
  * <p>Supports chained placeholders ({@code ${a}} → {@code ${b}} → {@code final}) up to a fixed
- * depth (10 passes) to guarantee termination on cyclic property definitions. Unknown placeholders
- * are left unchanged — the resolver surfaces them as warnings, not errors.
+ * depth and allocation budgets to guarantee termination on cyclic property definitions. Unknown
+ * placeholders are left unchanged — the resolver surfaces them as warnings, not errors.
  *
  * <p>This interpolator is intentionally dumb about Maven semantics — it does plain string
  * substitution. The resolver pre-seeds well-known {@code project.*} properties (so {@code
@@ -24,7 +24,6 @@ import java.util.regex.Pattern;
 final class PropertyInterpolator {
 
   private static final Pattern PLACEHOLDER = Pattern.compile("\\$\\{([^}]+)}");
-  private static final int MAX_PASSES = 10;
 
   private PropertyInterpolator() {}
 
@@ -33,36 +32,53 @@ final class PropertyInterpolator {
       return null;
     }
     Objects.requireNonNull(properties, "properties must not be null");
-    String current = input;
-    for (int pass = 0; pass < MAX_PASSES; pass++) {
-      Matcher matcher = PLACEHOLDER.matcher(current);
-      if (!matcher.find()) {
-        return current;
-      }
-      StringBuilder replaced = new StringBuilder();
-      matcher.reset();
-      boolean anySubstitution = false;
-      while (matcher.find()) {
-        String key = matcher.group(1);
-        String value = properties.get(key);
-        if (value != null) {
-          matcher.appendReplacement(replaced, Matcher.quoteReplacement(value));
-          anySubstitution = true;
-        } else {
-          matcher.appendReplacement(replaced, Matcher.quoteReplacement(matcher.group(0)));
-        }
-      }
-      matcher.appendTail(replaced);
-      String next = replaced.toString();
-      // `next.equals(current)` is defensive: catches the pathological case where a property
-      // maps to its own placeholder literal (e.g. a -> "${a}") and `anySubstitution` is true
-      // but no real progress was made. MAX_PASSES would still bound it, but exiting now is
-      // cleaner.
-      if (!anySubstitution || next.equals(current)) {
-        return next;
-      }
-      current = next;
+    return expand(input, properties, new java.util.HashSet<>(), 0, 16_384);
+  }
+
+  /** Expands with explicit cycle, depth and allocation bounds before appending each fragment. */
+  static String expand(
+      String input,
+      Map<String, String> properties,
+      java.util.Set<String> visiting,
+      int depth,
+      int limit) {
+    return expand(input, properties::get, visiting, depth, limit);
+  }
+
+  /** Applies the same allocation budget to values obtained from Maven's own value sources. */
+  static String expand(
+      String input,
+      java.util.function.UnaryOperator<String> lookup,
+      java.util.Set<String> visiting,
+      int depth,
+      int limit) {
+    if (input.length() > limit || depth > 32) {
+      throw new IllegalArgumentException(
+          "POM property expansion exceeds the permitted size or depth");
     }
-    return current;
+    Matcher matcher = PLACEHOLDER.matcher(input);
+    StringBuilder result = new StringBuilder();
+    int position = 0;
+    while (matcher.find()) {
+      String key = matcher.group(1);
+      String value = lookup.apply(key);
+      String replacement = matcher.group();
+      if (value != null && visiting.add(key)) {
+        replacement = expand(value, lookup, visiting, depth + 1, limit);
+        visiting.remove(key);
+      }
+      append(result, input.substring(position, matcher.start()), limit);
+      append(result, replacement, limit);
+      position = matcher.end();
+    }
+    append(result, input.substring(position), limit);
+    return result.toString();
+  }
+
+  private static void append(StringBuilder output, String value, int limit) {
+    if (value.length() > limit - output.length()) {
+      throw new IllegalArgumentException("POM property expansion exceeds the permitted size");
+    }
+    output.append(value);
   }
 }

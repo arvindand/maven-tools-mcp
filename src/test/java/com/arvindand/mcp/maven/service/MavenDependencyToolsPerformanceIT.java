@@ -1,12 +1,17 @@
 package com.arvindand.mcp.maven.service;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.StabilityFilter;
 import com.arvindand.mcp.maven.model.ToolResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,6 +29,8 @@ import org.springframework.test.context.ActiveProfiles;
 class MavenDependencyToolsPerformanceIT {
 
   @Autowired private MavenDependencyTools mavenDependencyTools;
+
+  @Autowired private MavenCentralService mavenCentralService;
 
   private static final String SMALL_DEPENDENCY_LIST = "org.springframework:spring-core,junit:junit";
 
@@ -122,56 +129,18 @@ class MavenDependencyToolsPerformanceIT {
 
   @Test
   void testCachingEffectiveness() {
-    // Use a unique dependency that's unlikely to be cached from other tests
-    String uniqueDependency = "com.github.ben-manes.caffeine:caffeine";
+    String dependency = "com.github.ben-manes.caffeine:caffeine";
+    MavenCoordinate coordinate =
+        MavenCoordinate.of("com.github.ben-manes.caffeine", "caffeine", null);
+    ToolResponse first = mavenDependencyTools.get_latest_version(dependency, StabilityFilter.ALL);
+    List<String> cachedVersions = mavenCentralService.getAllVersions(coordinate);
+    ToolResponse second = mavenDependencyTools.get_latest_version(dependency, StabilityFilter.ALL);
 
-    // Use nanosecond precision for more accurate timing
-    long start1 = System.nanoTime();
-    ToolResponse r1 =
-        mavenDependencyTools.get_latest_version(uniqueDependency, StabilityFilter.ALL);
-    long duration1Nanos = System.nanoTime() - start1;
-
-    // Second call should be faster (cached)
-    long start2 = System.nanoTime();
-    ToolResponse r2 =
-        mavenDependencyTools.get_latest_version(uniqueDependency, StabilityFilter.ALL);
-    long duration2Nanos = System.nanoTime() - start2;
-
-    // Convert to milliseconds for display
-    long duration1Ms = duration1Nanos / 1_000_000;
-    long duration2Ms = duration2Nanos / 1_000_000;
-
-    System.out.println("First call (no cache): " + duration1Ms + "ms (" + duration1Nanos + "ns)");
-    System.out.println("Second call (cached): " + duration2Ms + "ms (" + duration2Nanos + "ns)");
-
-    assertNotNull(r1);
-    assertNotNull(r2);
-    // Note: ToolResponse objects may not be equal due to timestamps, but they should both be
-    // successful
-
-    // More robust caching check:
-    // 1. If both calls are very fast (< 1ms each), assume caching is working efficiently
-    // 2. Otherwise, cached call should be faster or at least not significantly slower
-    if (duration1Ms == 0 && duration2Ms == 0) {
-      // Both calls completed in under 1ms - cache is working very efficiently
-      System.out.println(
-          "Cache performance: Both calls completed in under 1ms - excellent cache performance");
-      assertTrue(
-          duration2Nanos <= duration1Nanos * 2,
-          "Even with sub-millisecond timing, cached call should not be significantly slower");
-    } else {
-      // Standard timing comparison when we can measure meaningful differences
-      assertTrue(
-          duration2Ms <= duration1Ms,
-          "Cached call should be faster than or equal to uncached call");
-
-      if (duration2Ms < duration1Ms) {
-        System.out.println(
-            "Cache performance: Cached call was " + (duration1Ms - duration2Ms) + "ms faster");
-      } else {
-        System.out.println(
-            "Cache performance: Both calls took similar time, indicating efficient caching");
-      }
-    }
+    assertInstanceOf(ToolResponse.Success.class, first);
+    assertInstanceOf(ToolResponse.Success.class, second);
+    assertFalse(cachedVersions.isEmpty(), "The metadata cache must contain real versions");
+    // Full tool calls may perform other network work. Object identity verifies that the
+    // proxied metadata lookup reuses its cached result without relying on runner timing.
+    assertSame(cachedVersions, mavenCentralService.getAllVersions(coordinate));
   }
 }

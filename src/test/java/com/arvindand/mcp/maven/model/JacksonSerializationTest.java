@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.dataformat.xml.XmlMapper;
 
 /**
  * Jackson 3 serialization regression tests. After the Jackson 2 → 3 migration these lock down the
@@ -21,7 +20,6 @@ import tools.jackson.dataformat.xml.XmlMapper;
 class JacksonSerializationTest {
 
   private final JsonMapper json = new JsonMapper();
-  private final XmlMapper xml = new XmlMapper();
 
   @Test
   void snakeCaseNamingForResponseRecords() {
@@ -140,34 +138,5 @@ class JacksonSerializationTest {
     String out = json.writeValueAsString(explicit);
 
     assertThat(out).contains("\"managedBy\":null");
-  }
-
-  @Test
-  void mavenMetadataXmlParsesUnwrappedVersionList() {
-    String metadataXml =
-        """
-        <metadata>
-          <groupId>org.example</groupId>
-          <artifactId>demo</artifactId>
-          <versioning>
-            <latest>2.0.0</latest>
-            <release>2.0.0</release>
-            <versions>
-              <version>1.0.0</version>
-              <version>1.5.0</version>
-              <version>2.0.0</version>
-            </versions>
-            <lastUpdated>20260101000000</lastUpdated>
-          </versioning>
-        </metadata>
-        """;
-
-    MavenMetadata metadata = xml.readValue(metadataXml, MavenMetadata.class);
-
-    assertThat(metadata.hasValidVersioning()).isTrue();
-    assertThat(metadata.versioning().latest()).isEqualTo("2.0.0");
-    assertThat(metadata.versioning().release()).isEqualTo("2.0.0");
-    assertThat(metadata.versioning().getVersionStrings())
-        .containsExactly("1.0.0", "1.5.0", "2.0.0");
   }
 }

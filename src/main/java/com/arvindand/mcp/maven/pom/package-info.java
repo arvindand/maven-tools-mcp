@@ -21,9 +21,9 @@
  * declared directly under root build plugins and plugin management are surfaced as {@link
  * com.arvindand.mcp.maven.pom.PluginDependencyDeclaration} values with their owner plugin.
  *
- * <p>The resolution shape (parent walk → properties → BOM import → depMgmt merge) follows the
- * MIT-licensed <a href="https://github.com/maxxq-org/maxxq-maven">maxxq-org/maxxq-maven</a> by Guy
- * Chauliac.
+ * <p>Apache Maven Model Builder supplies effective-model semantics. The original custom resolver
+ * followed the MIT-licensed <a
+ * href="https://github.com/maxxq-org/maxxq-maven">maxxq-org/maxxq-maven</a> by Guy Chauliac.
  *
  * @author Arvind Menon
  * @since 3.0.0

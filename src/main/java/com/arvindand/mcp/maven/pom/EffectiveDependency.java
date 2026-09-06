@@ -20,6 +20,7 @@ import java.util.Optional;
  *     lost to {@code managedBy} (per closest-ancestor-wins / first-declared semantics). Empty when
  *     there were no competing candidates. Surfaced as raw data — the caller decides whether the
  *     winning version is the right one, or whether the dependency should be pinned explicitly.
+ * @param directlyEditable whether a unique root declaration can be edited mechanically
  * @author Arvind Menon
  * @since 3.0.0
  */
@@ -29,7 +30,19 @@ public record EffectiveDependency(
     String effectiveVersion,
     Source source,
     Optional<MavenCoordinate> managedBy,
-    List<ManagedAlternative> conflicts) {
+    List<ManagedAlternative> conflicts,
+    boolean directlyEditable) {
+
+  /** Retains the constructor used by callers that already provide editable root declarations. */
+  public EffectiveDependency(
+      String groupId,
+      String artifactId,
+      String effectiveVersion,
+      Source source,
+      Optional<MavenCoordinate> managedBy,
+      List<ManagedAlternative> conflicts) {
+    this(groupId, artifactId, effectiveVersion, source, managedBy, conflicts, true);
+  }
 
   public EffectiveDependency {
     Objects.requireNonNull(groupId, "groupId must not be null");

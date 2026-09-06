@@ -1,6 +1,7 @@
 package com.arvindand.mcp.maven.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.arvindand.mcp.maven.config.MavenCentralProperties.Auth;
 import com.arvindand.mcp.maven.config.MavenCentralProperties.Auth.AuthType;
@@ -61,7 +62,7 @@ class HttpClientConfigTest {
 
   private RestClient restClient(MavenCentralProperties properties) {
     HttpClient client = config.mavenCentralHttpClient(properties);
-    return config.mavenCentralRestClient(config.restClientBuilder(properties, client));
+    return config.mavenCentralRestClient(config.restClientBuilder(properties, client), properties);
   }
 
   private String get(MavenCentralProperties properties) {
@@ -98,5 +99,45 @@ class HttpClientConfigTest {
   void configuredTimeoutReachesHttpClient() {
     HttpClient client = config.mavenCentralHttpClient(props(null));
     assertThat(client.connectTimeout()).contains(TIMEOUT);
+  }
+
+  @Test
+  void repositoryAuthenticationDoesNotMutateTheSharedBuilder() {
+    MavenCentralProperties properties =
+        props(new Auth(AuthType.BEARER, null, null, "private-token"));
+    RestClient.Builder shared =
+        config.restClientBuilder(properties, config.mavenCentralHttpClient(properties));
+    RestClient repository = config.mavenCentralRestClient(shared, properties);
+    repository.get().uri(baseUrl).retrieve().body(String.class);
+    shared.clone().build().get().uri(baseUrl + "/api").retrieve().body(String.class);
+    assertThat(capturedAuthHeaders).containsExactly("Bearer private-token", null);
+  }
+
+  @Test
+  void authenticatedClientRejectsAnotherOriginBeforeSending() {
+    RestClient repository =
+        restClient(props(new Auth(AuthType.BEARER, null, null, "private-token")));
+    RestClient.ResponseSpec response =
+        repository.get().uri(baseUrl.replace("127.0.0.1", "localhost")).retrieve();
+    assertThatThrownBy(() -> response.body(String.class))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(capturedAuthHeaders).isEmpty();
+  }
+
+  @Test
+  void rejectsRedirectsInsteadOfForwardingRepositoryCredentials() {
+    server.createContext(
+        "/redirect",
+        exchange -> {
+          exchange.getResponseHeaders().add("Location", baseUrl + "/destination");
+          exchange.sendResponseHeaders(302, -1);
+          exchange.close();
+        });
+    RestClient repository =
+        restClient(props(new Auth(AuthType.BEARER, null, null, "private-token")));
+    assertThatThrownBy(
+            () -> repository.get().uri(baseUrl + "/redirect").retrieve().body(String.class))
+        .isInstanceOf(org.springframework.web.client.RestClientException.class);
+    assertThat(capturedAuthHeaders).isEmpty();
   }
 }

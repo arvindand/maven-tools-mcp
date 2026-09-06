@@ -22,6 +22,7 @@ class EffectivePomResolverMultiModuleTest {
           <groupId>com.example</groupId>
           <artifactId>parent</artifactId>
           <version>1.0.0-SNAPSHOT</version>
+          <packaging>pom</packaging>
           <properties>
             <jackson.version>2.19.2</jackson.version>
           </properties>
@@ -138,6 +139,8 @@ class EffectivePomResolverMultiModuleTest {
   @Test
   void resolveAllFallsBackToInjectedFetcherForPomsNotInBundle() {
     Model externalParent = new Model();
+    externalParent.setModelVersion("4.0.0");
+    externalParent.setPackaging("pom");
     externalParent.setGroupId("com.external");
     externalParent.setArtifactId("external-parent");
     externalParent.setVersion("9.9.9");

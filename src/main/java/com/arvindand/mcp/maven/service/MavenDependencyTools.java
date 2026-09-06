@@ -8,6 +8,7 @@ import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
 import com.arvindand.mcp.maven.model.DependencyInfo;
 import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
+import com.arvindand.mcp.maven.model.McpError;
 import com.arvindand.mcp.maven.model.NeedsAttention;
 import com.arvindand.mcp.maven.model.PomUpgradeRecommendation;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
@@ -45,13 +46,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
@@ -151,7 +148,8 @@ public class MavenDependencyTools {
       T result = operation.execute();
       return ToolResponse.Success.of(result);
     } catch (IllegalArgumentException e) {
-      return ToolResponse.Error.of(INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
+      return ToolResponse.Error.of(
+          McpError.invalidInput(INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage(), Map.of()));
     } catch (MavenCentralException e) {
       return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {
@@ -573,53 +571,11 @@ public class MavenDependencyTools {
 
   private <T> List<T> processBatchWithBackpressure(
       List<String> items, Function<String, T> processor) {
-    if (items == null || items.isEmpty()) {
-      return List.of();
-    }
-
-    try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-      List<CompletableFuture<T>> futures =
-          items.stream()
-              .map(
-                  item ->
-                      CompletableFuture.supplyAsync(
-                          () -> {
-                            boolean acquired = false;
-                            try {
-                              batchSemaphore.acquire();
-                              acquired = true;
-                              return processor.apply(item);
-                            } catch (InterruptedException _) {
-                              Thread.currentThread().interrupt();
-                              return null;
-                            } finally {
-                              if (acquired) {
-                                batchSemaphore.release();
-                              }
-                            }
-                          },
-                          executor))
-              .toList();
-
-      return futures.stream()
-          .map(
-              f -> {
-                try {
-                  return f.get(MavenToolsConstants.DEFAULT_BATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-                } catch (InterruptedException _) {
-                  Thread.currentThread().interrupt();
-                  logger.warn("Batch interrupted");
-                  return null;
-                } catch (java.util.concurrent.TimeoutException
-                    | java.util.concurrent.ExecutionException
-                    | RuntimeException e) {
-                  logger.warn("Batch item failed: {}", e.getMessage());
-                  return null;
-                }
-              })
-          .filter(Objects::nonNull)
-          .toList();
-    }
+    return com.arvindand.mcp.maven.util.BoundedBatch.map(
+        items,
+        processor,
+        batchSemaphore,
+        java.time.Duration.ofSeconds(MavenToolsConstants.DEFAULT_BATCH_TIMEOUT_SECONDS));
   }
 
   private ProjectHealthAnalysis.DependencyHealthAnalysis
@@ -950,6 +906,9 @@ public class MavenDependencyTools {
   }
 
   private List<String> parseDependencies(String dependencies) {
+    if (dependencies != null && dependencies.length() > 1_048_576) {
+      throw new IllegalArgumentException("Dependency input exceeds one MiB of characters");
+    }
     if (dependencies == null || dependencies.trim().isEmpty()) {
       return List.of();
     }
@@ -1643,7 +1602,19 @@ public class MavenDependencyTools {
       classifyDependencyCandidate(dep, mode, actions, attention);
     }
 
-    return new PomUpgradeRecommendation(actions, attention, resolved.warnings());
+    List<String> warnings = new ArrayList<>(resolved.warnings());
+    resolved.dependencies().stream()
+        .filter(
+            dependency -> !dependency.directlyEditable() && dependency.source() == Source.EXPLICIT)
+        .forEach(
+            dependency ->
+                warnings.add(
+                    "Dependency "
+                        + dependency.groupId()
+                        + ":"
+                        + dependency.artifactId()
+                        + " requires a manual profile, inherited-property or artifact-variant edit"));
+    return new PomUpgradeRecommendation(actions, attention, warnings);
   }
 
   /**
@@ -1677,7 +1648,8 @@ public class MavenDependencyTools {
                 latest,
                 Source.MANAGED.name(),
                 bom.toCoordinateString()));
-      } else if (!NO_UPDATE_TYPE.equals(updateType)) {
+      } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
+          .contains(updateType)) {
         actions.add(
             UpgradeAction.bomBump(
                 bom.groupId(), bom.artifactId(), bom.version(), latest, updateType));
@@ -1712,7 +1684,8 @@ public class MavenDependencyTools {
               latest,
               "MANAGED_DECLARATION",
               null));
-    } else if (!NO_UPDATE_TYPE.equals(updateType)) {
+    } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
+        .contains(updateType)) {
       actions.add(
           UpgradeAction.managedDeclarationBump(
               declaration.groupId(),
@@ -1750,7 +1723,8 @@ public class MavenDependencyTools {
               latest,
               "PLUGIN_DEPENDENCY",
               null));
-    } else if (!NO_UPDATE_TYPE.equals(updateType)) {
+    } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
+        .contains(updateType)) {
       actions.add(
           UpgradeAction.pluginDependencyBump(
               declaration.groupId(),
@@ -1812,6 +1786,11 @@ public class MavenDependencyTools {
       return;
     }
 
+    // Profile declarations and artifact variants remain visible in analysis but need manual edits.
+    if (!dep.directlyEditable()) {
+      return;
+    }
+
     // EXPLICIT path: bump candidate.
     if (latestOnCentral == null) {
       return;
@@ -1834,7 +1813,8 @@ public class MavenDependencyTools {
               latestOnCentral,
               Source.EXPLICIT.name(),
               null));
-    } else if (!NO_UPDATE_TYPE.equals(updateType)) {
+    } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
+        .contains(updateType)) {
       actions.add(
           UpgradeAction.explicitBump(
               dep.groupId(),

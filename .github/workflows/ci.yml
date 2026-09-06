@@ -113,6 +113,30 @@ jobs:
         name: conformance-test-results
         path: target/failsafe-reports/
 
+  jvm-image-conformance:
+    name: JVM Image MCP Conformance
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+
+    - name: Set up Java 25
+      uses: actions/setup-java@v5
+      with:
+        java-version: '25'
+        distribution: 'temurin'
+        cache: 'maven'
+
+    - name: Build JVM image through the documented helper
+      run: ./build/build-docker.sh 3
+
+    - name: Exercise the JVM image over STDIO
+      run: |
+        PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+        ./mvnw verify -Pintegration -Dit.test=McpStdioConformanceIT \
+          -Dmaven.tools.test.image=maven-tools-mcp:${PROJECT_VERSION}-jvm
+
   integration-tests:
     name: Integration Tests (Manual)
     runs-on: ubuntu-latest

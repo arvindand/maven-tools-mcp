@@ -63,7 +63,34 @@ public final class MavenCoordinateParser {
     String packaging = getPartOrNull(parts, 3);
     String classifier = getPartOrNull(parts, 4);
 
-    return new MavenCoordinate(groupId, artifactId, version, packaging, classifier);
+    MavenCoordinate coordinate =
+        new MavenCoordinate(groupId, artifactId, version, packaging, classifier);
+    validateRepositoryCoordinate(coordinate);
+    return coordinate;
+  }
+
+  /**
+   * Validates coordinates before they become repository URL path segments.
+   *
+   * @param coordinate coordinate supplied by a caller, POM or repository response
+   * @throws IllegalArgumentException for unresolved expressions, traversal or invalid path
+   *     characters
+   */
+  public static void validateRepositoryCoordinate(MavenCoordinate coordinate) {
+    validateSegment(coordinate.groupId(), "groupId");
+    validateSegment(coordinate.artifactId(), "artifactId");
+    if (coordinate.version() != null) validateSegment(coordinate.version(), "version");
+    if (coordinate.packaging() != null) validateSegment(coordinate.packaging(), "packaging");
+    if (coordinate.classifier() != null) validateSegment(coordinate.classifier(), "classifier");
+  }
+
+  private static void validateSegment(String value, String name) {
+    if (value == null
+        || value.length() > 256
+        || !value.matches("\\w[\\w.+-]*")
+        || value.contains("..")) {
+      throw new IllegalArgumentException("Invalid repository " + name);
+    }
   }
 
   private static String getPartOrNull(String[] parts, int index) {

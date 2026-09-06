@@ -7,13 +7,45 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   DOCKER_HUB_REPOSITORY: arvindand/maven-tools-mcp
 
 jobs:
-  build-amd64:
+  validate:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          java-version: "25"
+          distribution: temurin
+          cache: maven
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Verify Java and Python
+        run: |
+          ./mvnw clean verify -Pfull fmt:check
+          python -m pip install -e './agents/copilot-maven-tools-agent[dev]'
+          python -m pytest agents/copilot-maven-tools-agent/tests
+      - name: Verify release tag matches the project version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+          test "$GITHUB_REF_NAME" = "v$PROJECT_VERSION"
+          case "$PROJECT_VERSION" in *SNAPSHOT*) exit 1 ;; esac
+
+  build-amd64:
+    needs: validate
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -45,7 +77,7 @@ jobs:
 
       - name: Build and push AMD64 images (with and without Context7)
         run: |
-          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
 
           # Build AMD64 native image WITH Context7
           SPRING_PROFILES_ACTIVE=docker ./mvnw -Pnative spring-boot:build-image \
@@ -75,8 +107,9 @@ jobs:
             -Ddocker.publishRegistry.password="${{ secrets.DOCKER_HUB_TOKEN }}"
 
   build-arm64:
+    needs: validate
     runs-on: ubuntu-24.04-arm # Free ARM64 runners for public repos
-    if: github.event_name != 'pull_request'
+    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -108,7 +141,7 @@ jobs:
 
       - name: Build and push ARM64 images (with and without Context7)
         run: |
-          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
 
           # Build ARM64 native image WITH Context7
           SPRING_PROFILES_ACTIVE=docker ./mvnw -Pnative spring-boot:build-image \
@@ -137,7 +170,7 @@ jobs:
   create-manifest:
     runs-on: ubuntu-latest
     needs: [build-amd64, build-arm64]
-    if: github.event_name != 'pull_request'
+    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -153,7 +186,7 @@ jobs:
 
       - name: Create and push multi-architecture manifests
         run: |
-          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
 
           # Create multi-architecture manifest for version tag (WITH Context7)
           docker manifest create arvindand/maven-tools-mcp:${PROJECT_VERSION} \
@@ -192,6 +225,7 @@ jobs:
           docker manifest push arvindand/maven-tools-mcp:latest-http
 
   test-pr:
+    needs: validate
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
@@ -235,13 +269,12 @@ jobs:
 
           # Test all images
           echo "Testing image with Context7..."
-          timeout 30s docker run --rm maven-tools-mcp:pr-${{ github.event.number }} --help || true
+          ./mvnw verify -Pintegration -DskipUTs -Dit.test=McpStdioConformanceIT -Dmaven.tools.test.image=maven-tools-mcp:pr-${{ github.event.number }}
 
           echo "Testing image without Context7..."
-          timeout 30s docker run --rm maven-tools-mcp:pr-${{ github.event.number }}-noc7 --help || true
+          ./mvnw verify -Pintegration -DskipUTs -Dit.test=McpStdioConformanceIT -Dmaven.tools.test.image=maven-tools-mcp:pr-${{ github.event.number }}-noc7
 
           echo "Testing HTTP transport image..."
-          timeout 30s docker run --rm -d -p 8080:8080 --name http-test maven-tools-mcp:pr-${{ github.event.number }}-http || true
-          sleep 5
-          curl -s http://localhost:8080/actuator/health/liveness || true
-          docker stop http-test || true
+          timeout 30s docker run --rm -d -p 8080:8080 --name http-test maven-tools-mcp:pr-${{ github.event.number }}-http
+          trap 'docker stop http-test' EXIT
+          curl --fail --retry 10 --retry-all-errors --retry-delay 2 http://localhost:8080/actuator/health/liveness

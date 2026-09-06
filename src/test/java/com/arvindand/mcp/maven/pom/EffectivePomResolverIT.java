@@ -11,8 +11,8 @@ import org.springframework.test.context.ActiveProfiles;
 
 /**
  * Integration test: resolve this repo's own pom.xml against real Maven Central. Verifies the
- * spring-boot-starter-parent chain is followed and that an explicitly-declared dep (maven-model)
- * comes back as EXPLICIT with the literal version.
+ * spring-boot-starter-parent chain is followed and that an explicitly-declared dep
+ * (maven-model-builder) comes back as EXPLICIT with the literal version.
  *
  * <p>Runs only under the {@code -Pintegration} or {@code -Pfull} profiles (failsafe picks up {@code
  * *IT.java}; surefire excludes them). May take 10–30 seconds on first run due to Maven Central
@@ -39,17 +39,18 @@ class EffectivePomResolverIT {
         .isNotEmpty()
         .anyMatch(c -> c.artifactId().equals("spring-boot-starter-parent"));
 
-    // maven-model 3.9.16 is an explicit dep with a literal version — must come back as EXPLICIT.
+    // maven-model-builder 3.9.16 is an explicit dep with a literal version — must come back as
+    // EXPLICIT.
     assertThat(result.dependencies())
-        .filteredOn(d -> d.artifactId().equals("maven-model"))
+        .filteredOn(d -> d.artifactId().equals("maven-model-builder"))
         .singleElement()
         .satisfies(
             d -> {
               assertThat(d.effectiveVersion())
-                  .as("maven-model should have explicit version 3.9.16")
+                  .as("maven-model-builder should have explicit version 3.9.16")
                   .isEqualTo("3.9.16");
               assertThat(d.source())
-                  .as("maven-model should be classified as EXPLICIT")
+                  .as("maven-model-builder should be classified as EXPLICIT")
                   .isEqualTo(Source.EXPLICIT);
             });
   }

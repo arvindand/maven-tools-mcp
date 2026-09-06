@@ -140,7 +140,7 @@ class SecurityAssessmentTest {
     SecurityAssessment result = SecurityAssessment.fromVulnerabilities(List.of(unfixedVuln), null);
 
     assertThat(result.fixedInVersion()).isNull();
-    assertThat(result.recommendation()).contains("evaluate alternatives");
+    assertThat(result.recommendation()).contains("no verified fixed version");
   }
 
   @Test

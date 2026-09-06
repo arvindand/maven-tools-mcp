@@ -1,8 +1,7 @@
 package com.arvindand.mcp.maven.config;
 
-import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
-import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
-import io.github.resilience4j.retry.RetryRegistry;
+import com.arvindand.mcp.maven.util.BoundedResponseInterceptor;
+import java.net.URI;
 import java.net.http.HttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +33,7 @@ public class HttpClientConfig {
     return HttpClient.newBuilder()
         .connectTimeout(properties.timeout())
         .version(HttpClient.Version.HTTP_2)
-        .followRedirects(HttpClient.Redirect.NORMAL)
+        .followRedirects(HttpClient.Redirect.NEVER)
         .build();
   }
 
@@ -46,39 +45,31 @@ public class HttpClientConfig {
     // Preserve the previous read-timeout margin (connect timeout + 2s).
     requestFactory.setReadTimeout(properties.timeout().plusSeconds(2));
 
-    RestClient.Builder builder = RestClient.builder().requestFactory(requestFactory);
+    return RestClient.builder()
+        .requestFactory(requestFactory)
+        .requestInterceptor(new BoundedResponseInterceptor());
+  }
 
+  @Bean
+  RestClient mavenCentralRestClient(
+      RestClient.Builder restClientBuilder, MavenCentralProperties properties) {
+    RestClient.Builder repository = restClientBuilder.clone();
     if (properties.auth() != null
         && properties.auth().type() != MavenCentralProperties.Auth.AuthType.NONE) {
-      builder.requestInterceptor(repositoryAuthInterceptor(properties.auth()));
+      repository.requestInterceptor(
+          repositoryAuthInterceptor(properties.auth(), URI.create(properties.repositoryBaseUrl())));
       log.info("Repository authentication enabled (type={})", properties.auth().type().name());
     }
-
-    return builder;
+    return repository.build();
   }
 
-  @Bean
-  RestClient mavenCentralRestClient(RestClient.Builder restClientBuilder) {
-    return restClientBuilder.build();
-  }
-
-  @Bean
-  CircuitBreakerRegistry circuitBreakerRegistry() {
-    return CircuitBreakerRegistry.ofDefaults();
-  }
-
-  @Bean
-  RetryRegistry retryRegistry() {
-    return RetryRegistry.ofDefaults();
-  }
-
-  @Bean
-  RateLimiterRegistry rateLimiterRegistry() {
-    return RateLimiterRegistry.ofDefaults();
-  }
-
-  private ClientHttpRequestInterceptor repositoryAuthInterceptor(MavenCentralProperties.Auth auth) {
+  private ClientHttpRequestInterceptor repositoryAuthInterceptor(
+      MavenCentralProperties.Auth auth, URI origin) {
     return (request, body, execution) -> {
+      if (!sameOrigin(origin, request.getURI())) {
+        throw new IllegalArgumentException(
+            "Repository client cannot send credentials to another origin");
+      }
       switch (auth.type()) {
         case BASIC -> request.getHeaders().setBasicAuth(auth.username(), auth.password());
         case BEARER -> request.getHeaders().setBearerAuth(auth.token());
@@ -88,5 +79,18 @@ public class HttpClientConfig {
       }
       return execution.execute(request, body);
     };
+  }
+
+  private static boolean sameOrigin(URI expected, URI actual) {
+    return expected.getScheme().equalsIgnoreCase(actual.getScheme())
+        && expected.getHost().equalsIgnoreCase(actual.getHost())
+        && effectivePort(expected) == effectivePort(actual);
+  }
+
+  private static int effectivePort(URI uri) {
+    if (uri.getPort() >= 0) {
+      return uri.getPort();
+    }
+    return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80;
   }
 }

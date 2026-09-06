@@ -1,6 +1,7 @@
 package com.arvindand.mcp.maven.pom;
 
 import com.arvindand.mcp.maven.model.MavenCoordinate;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.List;
 import java.util.Objects;
 
@@ -51,6 +52,19 @@ public record EffectivePomResult(
     rootManagedDeclarations = List.copyOf(rootManagedDeclarations);
     rootPluginDependencyDeclarations = List.copyOf(rootPluginDependencyDeclarations);
     warnings = List.copyOf(warnings);
+  }
+
+  /**
+   * Whether resolution produced warnings that prevent caching the result.
+   *
+   * <p>Keeping this check on the result avoids reflective calls to private JDK collection classes
+   * from Spring cache expressions in native images.
+   *
+   * @return true when the result contains any warning
+   */
+  @JsonIgnore
+  public boolean hasWarnings() {
+    return !warnings.isEmpty();
   }
 
   /** Backwards-compatible constructor for callers without plugin dependency declarations. */

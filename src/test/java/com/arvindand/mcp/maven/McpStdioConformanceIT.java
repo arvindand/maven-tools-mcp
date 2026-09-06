@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.senor14.mcptestkit.client.StdioMcpTestClient;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -22,6 +23,8 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Runs against {@code target/<finalName>.jar}, whose path failsafe passes in — the jar exists by
  * the {@code integration-test} phase because {@code package} has already run.
+ *
+ * @author Arvind Menon
  */
 class McpStdioConformanceIT {
 
@@ -37,11 +40,12 @@ class McpStdioConformanceIT {
         .as("repackaged jar must exist by the integration-test phase; run via mvn verify")
         .exists();
 
-    client =
-        StdioMcpTestClient.connect(
-            new String[] {"java", "-jar", jar.toAbsolutePath().toString()},
-            Map.of(),
-            Duration.ofSeconds(60));
+    String image = System.getProperty("maven.tools.test.image");
+    String[] command =
+        image == null
+            ? new String[] {"java", "-jar", jar.toAbsolutePath().toString()}
+            : new String[] {"docker", "run", "--rm", "-i", image};
+    client = StdioMcpTestClient.connect(command, Map.of(), Duration.ofSeconds(60));
   }
 
   @AfterAll
@@ -82,5 +86,52 @@ class McpStdioConformanceIT {
         client.callTool("get_latest_version", Map.of("dependency", "com.google.guava:guava"));
     assertThat(result).as("get_latest_version response").isNotNull();
     assertThat(result.toString()).contains("guava");
+  }
+
+  @Test
+  void rejectsInvalidCoordinatesWithASerializableApplicationError() {
+    Object result = client.callTool("get_latest_version", Map.of("dependency", "g:../a"));
+    assertThat(result.toString())
+        .contains("INVALID_INPUT")
+        .contains("Invalid repository artifactId");
+  }
+
+  @Test
+  void recommendsUpgradesThroughCachedPomResolution() {
+    String pom =
+        """
+        <project><modelVersion>4.0.0</modelVersion><groupId>local</groupId><artifactId>app</artifactId>
+        <version>1</version><dependencies><dependency><groupId>junit</groupId><artifactId>junit</artifactId>
+        <version>4.12</version></dependency></dependencies></project>
+        """;
+    for (int call = 0; call < 2; call++) {
+      Object result =
+          client.callTool("recommend_pom_upgrades", Map.of("pomXml", pom, "mode", "MINOR_PATCH"));
+      assertThat(result.toString()).contains("4.13.2").contains("explicit_bump");
+    }
+  }
+
+  @Test
+  void buildsEffectiveModelOverTheWire() {
+    String bom =
+        """
+        <project><modelVersion>4.0.0</modelVersion><groupId>local</groupId><artifactId>bom</artifactId>
+        <version>1.2.3</version><packaging>pom</packaging><properties><line>${project.version}</line></properties>
+        <dependencyManagement><dependencies><dependency><groupId>local</groupId><artifactId>lib</artifactId>
+        <version>${line}</version></dependency></dependencies></dependencyManagement></project>
+        """;
+    String root =
+        """
+        <project><modelVersion>4.0.0</modelVersion><groupId>local</groupId><artifactId>app</artifactId>
+        <version>1</version><properties><line>9</line></properties>
+        <dependencyManagement><dependencies><dependency>
+        <groupId>local</groupId><artifactId>bom</artifactId><version>1.2.3</version><type>pom</type><scope>import</scope>
+        </dependency></dependencies></dependencyManagement><dependencies><dependency>
+        <groupId>local</groupId><artifactId>lib</artifactId></dependency></dependencies></project>
+        """;
+    Object result =
+        client.callTool(
+            "analyze_pom_dependencies", Map.of("pomXml", root, "sideloadedPoms", List.of(bom)));
+    assertThat(result.toString()).contains("1.2.3").contains("MANAGED");
   }
 }

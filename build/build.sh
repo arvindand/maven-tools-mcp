@@ -4,23 +4,27 @@
 # Handles common build tasks with user-friendly interface
 
 set -e
+# @author Arvind Menon
+# Resolve paths relative to this script, including calls from the project root.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 # Function to show JAR build results
 show_jar_result() {
     echo "✅ Command completed successfully!"
     
     # Look for the JAR file
-    JAR_FILE=$(find ../target -name "*.jar" -not -name "*.original" 2>/dev/null | head -1)
+    JAR_FILE=$(find "$SCRIPT_DIR/../target" -name "*.jar" -not -name "*.original" 2>/dev/null | head -1)
     
     if [ -n "$JAR_FILE" ] && [ -f "$JAR_FILE" ]; then
         echo ""
         echo "JAR file created: $JAR_FILE"
-        echo "To run: java -jar $JAR_FILE"
+        echo "To run: java -jar \"$JAR_FILE\""
     fi
 }
 
 # Check for command line argument (for CI use)
-if [ "$1" != "" ]; then
+if [ "${1:-}" != "" ]; then
     choice="$1"
     echo "Running in non-interactive mode with option: $choice"
 else
@@ -71,7 +75,7 @@ case $choice in
         (cd .. && ./mvnw clean package -DskipTests)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.2")
         
         echo ""
         echo "Step 2: Build Native Docker image WITH Context7..."
@@ -98,27 +102,27 @@ case $choice in
         exit 0
         ;;
     4)
-        echo "🐳 Building JVM Docker image with buildpacks..."
+        echo "🐳 Building JVM Docker image with Jib..."
         echo "Step 1: Package application..."
         (cd .. && ./mvnw clean package -DskipTests)
         
+        # Keep JVM tags separate from the native variants.
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.2")
         echo "Step 2: Build JVM Docker image..."
-        (cd .. && ./mvnw spring-boot:build-image)
+        (cd .. && ./mvnw jib:dockerBuild \
+          -Dimage=maven-tools-mcp:${PROJECT_VERSION}-jvm)
         
-        # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
-        
-        echo "✅ JVM Docker image built successfully: maven-tools-mcp:${PROJECT_VERSION}"
+        echo "✅ JVM Docker image built successfully: maven-tools-mcp:${PROJECT_VERSION}-jvm"
         echo ""
         echo "🚀 Run with Context7 enabled (default):"
-        echo "   docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:${PROJECT_VERSION}"
+        echo "   docker run -i -e SPRING_PROFILES_ACTIVE=docker maven-tools-mcp:${PROJECT_VERSION}-jvm"
         echo ""
         echo "🚀 Run with Context7 disabled:"
         echo "   docker run -i -e SPRING_PROFILES_ACTIVE=docker \\"
         echo "     -e SPRING_AI_MCP_CLIENT_ENABLED=false \\"
         echo "     -e SPRING_AI_MCP_CLIENT_TOOLCALLBACK_ENABLED=false \\"
         echo "     -e CONTEXT7_ENABLED=false \\"
-        echo "     maven-tools-mcp:${PROJECT_VERSION}"
+        echo "     maven-tools-mcp:${PROJECT_VERSION}-jvm"
         exit 0
         ;;
     5)
@@ -138,7 +142,7 @@ case $choice in
         (cd .. && ./mvnw clean package -DskipTests)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.2")
         
         echo ""
         echo "Step 2: Build Native Docker image with no-context7 profile..."
@@ -161,7 +165,7 @@ case $choice in
         (cd .. && ./mvnw clean package -DskipTests)
 
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.2")
 
         echo ""
         echo "Step 2: Build Native Docker image with http profile..."
@@ -174,7 +178,7 @@ case $choice in
         echo "Image created: maven-tools-mcp:${PROJECT_VERSION}-http"
         echo ""
         echo "🚀 Run with:"
-        echo "   docker run -p 8080:8080 maven-tools-mcp:${PROJECT_VERSION}-http"
+        echo "   docker run --rm -p 127.0.0.1:8080:8080 maven-tools-mcp:${PROJECT_VERSION}-http"
         echo ""
         echo "📡 Connect via HTTP:"
         echo "   curl -X POST http://localhost:8080/mcp -H 'Content-Type: application/json' -d '{...}'"

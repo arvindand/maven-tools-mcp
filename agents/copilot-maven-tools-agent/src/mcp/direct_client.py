@@ -314,7 +314,7 @@ def extract_tool_response_payload(result: dict[str, Any]) -> dict[str, Any]:
 
     structured = result.get("structuredContent")
     if isinstance(structured, dict):
-        return structured
+        return _checked_payload(structured)
 
     content = result.get("content")
     if isinstance(content, list):
@@ -328,11 +328,20 @@ def extract_tool_response_payload(result: dict[str, Any]) -> dict[str, Any]:
                 logger.debug("Ignoring non-JSON MCP text content: %s", str(text)[:200])
                 continue
             if isinstance(parsed, dict):
-                return parsed
+                return _checked_payload(parsed)
 
     if isinstance(result, dict):
         return result
     raise ValueError(f"Could not extract MCP tool payload: {result!r}")
+
+
+def _checked_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Reject application errors even when the MCP transport reports success."""
+    if payload.get("status") == "error":
+        raise RuntimeError(
+            f"MCP tool returned an application error: {payload.get('message', 'unknown error')}"
+        )
+    return payload
 
 
 def _parse_json_text(text: str) -> Any:
