@@ -68,6 +68,9 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 5
         sliding-window-size: 10
         sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - io.github.resilience4j.ratelimiter.RequestNotPermitted
+          - java.lang.IllegalArgumentException
       osv:
         register-health-indicator: true
         failure-rate-threshold: 50
@@ -77,23 +80,27 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         sliding-window-size: 10
         sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - io.github.resilience4j.ratelimiter.RequestNotPermitted
+          - java.lang.IllegalArgumentException
 
   retry:
     instances:
       maven-central:
         max-attempts: 3
         wait-duration: 1s
+        enable-exponential-backoff: true
         exponential-backoff-multiplier: 2
         retry-exceptions:
-          - java.net.ConnectException
-          - java.net.SocketTimeoutException
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
 
   ratelimiter:
     instances:
       maven-central:
         limit-for-period: 10
         limit-refresh-period: 1s
-        timeout-duration: 0s
+        timeout-duration: 10s
       osv:
         limit-for-period: 5
         limit-refresh-period: 1s

@@ -31,6 +31,7 @@ from rich.table import Table
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.analysis.dependency import DependencyAnalyzer, DependencyUpdate, ParsedDependency
+from src.analysis.pom_edits import PomEdits
 from src.copilot.sdk_client import CopilotSDKClient
 from src.mcp.direct_client import DirectMcpClient
 
@@ -56,140 +57,20 @@ class PomUpdater:
         self.original_content = pom_path.read_text()
         self.content = self.original_content
 
-    def update_property(self, prop_name: str, new_version: str) -> bool:
-        """Update an exact property value in the POM."""
-        prop_pattern = rf"(<{re.escape(prop_name)}>)([^<]+)(</{re.escape(prop_name)}>)"
-        new_content, count = re.subn(prop_pattern, rf"\g<1>{new_version}\g<3>", self.content)
-        if count > 0:
-            self.content = new_content
-            return True
-        return False
-
     def update_version(self, group_id: str, artifact_id: str, new_version: str) -> bool:
-        """
-        Update a dependency version in the POM.
-
-        Returns True if the update was made.
-        """
-        # Pattern for dependency block
-        dep_pattern = rf"""
-            (<dependency>\s*
-            <groupId>{re.escape(group_id)}</groupId>\s*
-            <artifactId>{re.escape(artifact_id)}</artifactId>\s*
-            <version>)([^<]+)(</version>)
-        """
-        regex = re.compile(dep_pattern, re.VERBOSE | re.DOTALL)
-
-        match = regex.search(self.content)
-        if match:
-            current_declared_version = match.group(2).strip()
-            prop_ref_match = re.fullmatch(r"\$\{([^}]+)\}", current_declared_version)
-            if prop_ref_match:
-                # Preserve shared property-based versioning by updating the property value instead.
-                return self.update_property(prop_ref_match.group(1), new_version)
-
-            new_content, count = regex.subn(rf"\g<1>{new_version}\g<3>", self.content)
-            if count > 0:
-                self.content = new_content
-                return True
-
-        # Also try updating properties like <jackson-bom.version>X</jackson-bom.version>
-        # Common property naming patterns
-        property_names = [
-            f"{artifact_id}.version",
-            f"{group_id.split('.')[-1]}.version",
-            f"{artifact_id}-version",
-        ]
-
-        for prop_name in property_names:
-            if self.update_property(prop_name, new_version):
-                return True
-
-        return False
+        """Update an unambiguous root declaration without guessing property names."""
+        return self.apply_action(group_id, artifact_id, new_version)
 
     def update_parent_version(self, new_version: str) -> bool:
-        """Update the parent POM version (matches any parent block)."""
-        parent_pattern = r"""
-            (<parent>\s*
-            <groupId>[^<]+</groupId>\s*
-            <artifactId>[^<]+</artifactId>\s*
-            <version>)([^<]+)(</version>)
-        """
-        regex = re.compile(parent_pattern, re.VERBOSE | re.DOTALL)
-        new_content, count = regex.subn(rf"\g<1>{new_version}\g<3>", self.content)
-
-        if count > 0:
-            self.content = new_content
-            return True
-        return False
-
-    def update_plugin_dependency_version(
-        self,
-        owner_artifact_id: str,
-        group_id: str,
-        artifact_id: str,
-        new_version: str,
-        declared_in: str,
-    ) -> bool:
-        """Update one dependency only inside the identified owner plugin block."""
-        plugin_pattern = re.compile(
-            rf"<plugin>(?:(?!</plugin>).)*?"
-            rf"<artifactId>{re.escape(owner_artifact_id)}</artifactId>"
-            rf"(?:(?!</plugin>).)*?</plugin>",
-            re.DOTALL,
+        """Update the single root parent declaration."""
+        document = PomEdits(self.content)
+        parents = [node for node in document.nodes if node.path == "project.parent"]
+        if len(parents) != 1:
+            return False
+        parent = parents[0]
+        return self.apply_action(
+            parent.value("groupId"), parent.value("artifactId"), new_version, declared_in="parent"
         )
-        dependency_pattern = re.compile(
-            rf"(<dependency>\s*"
-            rf"<groupId>{re.escape(group_id)}</groupId>\s*"
-            rf"<artifactId>{re.escape(artifact_id)}</artifactId>\s*"
-            rf"<version>)([^<]+)(</version>)",
-            re.DOTALL,
-        )
-        plugin_management_spans = [
-            match.span()
-            for match in re.finditer(
-                r"<pluginManagement>.*?</pluginManagement>", self.content, re.DOTALL
-            )
-        ]
-        expects_plugin_management = (
-            declared_in == "build.pluginManagement.plugins.plugin.dependencies"
-        )
-        for plugin_match in plugin_pattern.finditer(self.content):
-            in_plugin_management = any(
-                start <= plugin_match.start() < end
-                for start, end in plugin_management_spans
-            )
-            if in_plugin_management != expects_plugin_management:
-                continue
-            plugin_block = plugin_match.group(0)
-            updated_block, count = dependency_pattern.subn(
-                rf"\g<1>{new_version}\g<3>", plugin_block, count=1
-            )
-            if count > 0:
-                self.content = (
-                    self.content[: plugin_match.start()]
-                    + updated_block
-                    + self.content[plugin_match.end() :]
-                )
-                return True
-        return False
-
-    def update_parent_version_if_matches(
-        self, group_id: str, artifact_id: str, new_version: str
-    ) -> bool:
-        """Update the parent POM version only when groupId+artifactId match."""
-        parent_pattern = rf"""
-            (<parent>\s*
-            <groupId>{re.escape(group_id)}</groupId>\s*
-            <artifactId>{re.escape(artifact_id)}</artifactId>\s*
-            <version>)([^<]+)(</version>)
-        """
-        regex = re.compile(parent_pattern, re.VERBOSE | re.DOTALL)
-        new_content, count = regex.subn(rf"\g<1>{new_version}\g<3>", self.content)
-        if count > 0:
-            self.content = new_content
-            return True
-        return False
 
     def apply_action(
         self,
@@ -200,20 +81,26 @@ class PomUpdater:
         property_name: Optional[str] = None,
         declared_in: Optional[str] = None,
         owner_artifact_id: Optional[str] = None,
+        owner_group_id: Optional[str] = None,
+        current: Optional[str] = None,
+        kind: Optional[str] = None,
     ) -> bool:
-        """Apply a version bump using exact edit metadata when the server supplies it."""
-        if edit_target == "property":
-            return bool(property_name) and self.update_property(property_name, new_version)
-        if declared_in in {
-            "build.plugins.plugin.dependencies",
-            "build.pluginManagement.plugins.plugin.dependencies",
-        }:
-            return bool(owner_artifact_id) and self.update_plugin_dependency_version(
-                owner_artifact_id, group_id, artifact_id, new_version, declared_in
-            )
-        if self.update_version(group_id, artifact_id, new_version):
-            return True
-        return self.update_parent_version_if_matches(group_id, artifact_id, new_version)
+        """Apply one precise edit; shared properties require a complete batch."""
+        action = dict(
+            groupId=group_id,
+            artifactId=artifact_id,
+            target=new_version,
+            editTarget=edit_target,
+            propertyName=property_name,
+            declaredIn=declared_in,
+            current=current,
+            kind=kind,
+        )
+        if owner_artifact_id:
+            action["ownerArtifactId"] = owner_artifact_id
+            action["ownerGroupId"] = owner_group_id or "org.apache.maven.plugins"
+        self.content, applied, _failed = PomEdits(self.content).apply([action])
+        return bool(applied)
 
     def save(self) -> None:
         """Save the updated POM."""
@@ -507,35 +394,12 @@ def _apply_deterministic_actions(
     pom_updater: PomUpdater, actions: list[dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Apply each action via PomUpdater. Returns (applied, failed)."""
-    applied: list[dict[str, Any]] = []
-    failed: list[dict[str, Any]] = []
-    for a in actions:
-        group_id = a.get("groupId", "")
-        artifact_id = a.get("artifactId", "")
-        target = a.get("target", "")
-        if not (group_id and artifact_id and target):
-            failed.append(a)
-            continue
-        if pom_updater.apply_action(
-            group_id,
-            artifact_id,
-            target,
-            edit_target=a.get("editTarget"),
-            property_name=a.get("propertyName"),
-            declared_in=a.get("declaredIn"),
-            owner_artifact_id=a.get("ownerArtifactId"),
-        ):
-            applied.append(a)
-            console.print(
-                f"  [green]✓[/green] [{a.get('kind', '?')}] "
-                f"{group_id}:{artifact_id}: {a.get('current', '')} → {target}"
-            )
-        else:
-            failed.append(a)
-            console.print(
-                f"  [yellow]⚠[/yellow] Could not locate {group_id}:{artifact_id} in POM"
-            )
-    return applied, failed
+    # Plan the entire batch against the same snapshot, so shared properties cannot be
+    # overwritten by action order and stale current-version checks stay meaningful.
+    valid = [action for action in actions if action.get("current")]
+    invalid = [action for action in actions if not action.get("current")]
+    pom_updater.content, applied, failed = PomEdits(pom_updater.content).apply(valid)
+    return applied, failed + invalid
 
 
 async def _fetch_recommendations(
@@ -571,6 +435,10 @@ async def _run_deterministic_upgrade(
         console.print(f"[red]Error calling MCP tool: {e}[/red]")
         return 1
 
+    if response.get("status") == "error":
+        console.print("[red]MCP could not produce upgrade recommendations[/red]")
+        return 1
+
     # ToolResponse.Success wraps the payload under "data" (snake_case envelope).
     payload = response.get("data") if isinstance(response.get("data"), dict) else response
     actions = payload.get("deterministicActions") or payload.get("deterministic_actions") or []
@@ -599,6 +467,12 @@ async def _run_deterministic_upgrade(
     console.print("\n[bold]Step 2: Applying actions...[/bold]")
     pom_updater = PomUpdater(pom_path)
     applied, failed = _apply_deterministic_actions(pom_updater, actions)
+
+    if failed:
+        console.print(
+            f"[red]Could not safely apply {len(failed)} action(s); POM left unchanged[/red]"
+        )
+        return 1
 
     if not pom_updater.has_changes():
         console.print("[yellow]No changes were made to the POM[/yellow]")
@@ -729,9 +603,7 @@ async def run_upgrade(
         return 0
 
     _display_upgrade_findings(updates, [], updates, mode, mcp_response)
-    console.print(
-        f"\n[yellow]Mode '{mode}' is report-only - no changes will be made[/yellow]"
-    )
+    console.print(f"\n[yellow]Mode '{mode}' is report-only - no changes will be made[/yellow]")
     return 0
 
 

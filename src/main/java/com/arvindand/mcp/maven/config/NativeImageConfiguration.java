@@ -7,7 +7,6 @@ import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
 import com.arvindand.mcp.maven.model.DependencyInfo;
 import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
-import com.arvindand.mcp.maven.model.MavenMetadata;
 import com.arvindand.mcp.maven.model.NeedsAttention;
 import com.arvindand.mcp.maven.model.PomUpgradeRecommendation;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
@@ -62,6 +61,50 @@ public class NativeImageConfiguration {
   static class MavenRecordHints implements RuntimeHintsRegistrar {
     @Override
     public void registerHints(RuntimeHints hints, @Nullable ClassLoader classLoader) {
+      hints.resources().registerPattern("org/apache/maven/model/pom-4.0.0.xml");
+      // Maven's project.* value sources traverse these public model getters.
+      for (Class<?> modelType :
+          new Class<?>[] {
+            org.apache.maven.model.Model.class,
+            org.apache.maven.model.ModelBase.class,
+            org.apache.maven.model.Build.class,
+            org.apache.maven.model.BuildBase.class,
+            org.apache.maven.model.Profile.class,
+            org.apache.maven.model.Parent.class,
+            org.apache.maven.model.Dependency.class,
+            org.apache.maven.model.DependencyManagement.class,
+            org.apache.maven.model.Plugin.class,
+            org.apache.maven.model.PluginExecution.class,
+            org.apache.maven.model.PluginManagement.class,
+            org.apache.maven.model.Activation.class,
+            org.apache.maven.model.ActivationFile.class,
+            org.apache.maven.model.ActivationOS.class,
+            org.apache.maven.model.ActivationProperty.class,
+            org.apache.maven.model.Repository.class,
+            org.apache.maven.model.RepositoryBase.class,
+            org.apache.maven.model.RepositoryPolicy.class,
+            org.apache.maven.model.License.class,
+            org.apache.maven.model.Scm.class,
+            org.apache.maven.model.Organization.class,
+            org.apache.maven.model.DistributionManagement.class,
+            org.apache.maven.model.Relocation.class,
+            org.apache.maven.model.CiManagement.class,
+            org.apache.maven.model.IssueManagement.class,
+            org.apache.maven.model.Developer.class,
+            org.apache.maven.model.Contributor.class,
+            org.apache.maven.model.Resource.class,
+            org.apache.maven.model.FileSet.class,
+            org.apache.maven.model.Reporting.class,
+            org.apache.maven.model.ReportPlugin.class,
+            org.apache.maven.model.ReportSet.class,
+            org.apache.maven.model.Notifier.class,
+            org.apache.maven.model.MailingList.class,
+            org.apache.maven.model.Prerequisites.class,
+            org.apache.maven.model.DeploymentRepository.class
+          }) {
+        hints.reflection().registerType(modelType, MemberCategory.INVOKE_PUBLIC_METHODS);
+      }
+
       // Register all record classes with comprehensive reflection access
       registerRecordClass(hints, MavenCoordinate.class);
       registerRecordClass(hints, BulkCheckResult.class);
@@ -74,12 +117,6 @@ public class NativeImageConfiguration {
 
       // Register MavenArtifact for timestamp analysis compatibility
       registerRecordClass(hints, MavenArtifact.class);
-
-      // Register MavenMetadata and its nested records for XML deserialization (v1.4.0)
-      registerRecordClass(hints, MavenMetadata.class);
-      registerRecordClass(hints, MavenMetadata.VersioningInfo.class);
-      registerRecordClass(hints, MavenMetadata.VersionList.class);
-      registerRecordClass(hints, MavenMetadata.SnapshotInfo.class);
 
       // Register VersionComparator record for version parsing
       registerRecordClass(

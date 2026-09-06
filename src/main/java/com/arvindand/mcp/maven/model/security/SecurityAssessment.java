@@ -15,8 +15,11 @@ import tools.jackson.databind.annotation.JsonNaming;
  * @param maxSeverity highest severity among all vulnerabilities
  * @param criticalCves list of critical vulnerability IDs
  * @param highCves list of high severity vulnerability IDs
- * @param fixedInVersion minimum version that fixes all vulnerabilities
+ * @param fixedInVersion lowest checked newer candidate with no active OSV findings
  * @param recommendation actionable recommendation based on findings
+ * @param mediumCount number of medium severity findings
+ * @param lowCount number of low severity findings
+ * @param unknownSeverityCount number of findings with unavailable or invalid scores
  * @author Arvind Menon
  * @since 2.0.0
  */
@@ -29,7 +32,10 @@ public record SecurityAssessment(
     List<String> criticalCves,
     List<String> highCves,
     String fixedInVersion,
-    String recommendation) {
+    String recommendation,
+    int mediumCount,
+    int lowCount,
+    int unknownSeverityCount) {
 
   /** Security assessment status. */
   public enum Status {
@@ -49,7 +55,7 @@ public record SecurityAssessment(
 
   /** Factory for clean dependencies with no vulnerabilities. */
   public static SecurityAssessment clean() {
-    return new SecurityAssessment(Status.OK, 0, null, List.of(), List.of(), null, null);
+    return new SecurityAssessment(Status.OK, 0, null, List.of(), List.of(), null, null, 0, 0, 0);
   }
 
   /**
@@ -58,14 +64,15 @@ public record SecurityAssessment(
    * @param reason explanation of why assessment is unknown
    */
   public static SecurityAssessment unknown(String reason) {
-    return new SecurityAssessment(Status.UNKNOWN, 0, null, List.of(), List.of(), null, reason);
+    return new SecurityAssessment(
+        Status.UNKNOWN, 0, null, List.of(), List.of(), null, reason, 0, 0, 0);
   }
 
   /**
    * Build assessment from vulnerability list.
    *
    * @param vulns list of vulnerabilities found
-   * @param lowestFixedVersion minimum version that fixes all vulnerabilities
+   * @param lowestFixedVersion verified newer remediation candidate, or null
    * @return security assessment based on findings
    */
   public static SecurityAssessment fromVulnerabilities(
@@ -102,7 +109,14 @@ public record SecurityAssessment(
         criticals,
         highs,
         lowestFixedVersion,
-        recommendation);
+        recommendation,
+        count(vulns, VulnerabilityInfo.Severity.MEDIUM),
+        count(vulns, VulnerabilityInfo.Severity.LOW),
+        count(vulns, VulnerabilityInfo.Severity.UNKNOWN));
+  }
+
+  private static int count(List<VulnerabilityInfo> vulns, VulnerabilityInfo.Severity severity) {
+    return (int) vulns.stream().filter(v -> v.severity() == severity).count();
   }
 
   private static Severity mapSeverity(VulnerabilityInfo.Severity s) {
@@ -121,11 +135,11 @@ public record SecurityAssessment(
       case CRITICAL ->
           fixedVersion != null
               ? "URGENT: Update immediately to " + fixedVersion
-              : "URGENT: Critical vulnerability with no fix - evaluate alternatives";
+              : "URGENT: Critical vulnerability; no verified fixed version available";
       case HIGH ->
           fixedVersion != null
               ? "Update recommended to " + fixedVersion
-              : "High severity vulnerability - monitor for fixes";
+              : "High severity vulnerability; no verified fixed version available";
       case MEDIUM, LOW ->
           fixedVersion != null
               ? "Consider updating to " + fixedVersion

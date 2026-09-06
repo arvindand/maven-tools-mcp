@@ -84,7 +84,7 @@ def test_update_parent_version_updates_parent_block(tmp_path: Path) -> None:
         ("org.slf4j", "slf4j-api", "slf4j-api-version"),
     ],
 )
-def test_update_version_fallback_property_name_patterns(
+def test_update_version_does_not_guess_unreferenced_property_names(
     tmp_path: Path,
     group_id: str,
     artifact_id: str,
@@ -108,8 +108,8 @@ def test_update_version_fallback_property_name_patterns(
     )
 
     updater = PomUpdater(pom_path)
-    assert updater.update_version(group_id, artifact_id, "2.0.0") is True
-    assert f"<{property_tag}>2.0.0</{property_tag}>" in updater.content
+    assert updater.update_version(group_id, artifact_id, "2.0.0") is False
+    assert f"<{property_tag}>1.0.0</{property_tag}>" in updater.content
 
 
 def test_parse_mcp_response_parses_nested_dependencies() -> None:

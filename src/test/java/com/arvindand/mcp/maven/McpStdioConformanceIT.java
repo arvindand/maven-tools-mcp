@@ -37,11 +37,12 @@ class McpStdioConformanceIT {
         .as("repackaged jar must exist by the integration-test phase; run via mvn verify")
         .exists();
 
-    client =
-        StdioMcpTestClient.connect(
-            new String[] {"java", "-jar", jar.toAbsolutePath().toString()},
-            Map.of(),
-            Duration.ofSeconds(60));
+    String image = System.getProperty("maven.tools.test.image");
+    String[] command =
+        image == null
+            ? new String[] {"java", "-jar", jar.toAbsolutePath().toString()}
+            : new String[] {"docker", "run", "--rm", "-i", image};
+    client = StdioMcpTestClient.connect(command, Map.of(), Duration.ofSeconds(60));
   }
 
   @AfterAll
@@ -82,5 +83,29 @@ class McpStdioConformanceIT {
         client.callTool("get_latest_version", Map.of("dependency", "com.google.guava:guava"));
     assertThat(result).as("get_latest_version response").isNotNull();
     assertThat(result.toString()).contains("guava");
+  }
+
+  @Test
+  void buildsEffectiveModelOverTheWire() {
+    String bom =
+        """
+        <project><modelVersion>4.0.0</modelVersion><groupId>local</groupId><artifactId>bom</artifactId>
+        <version>1</version><packaging>pom</packaging><properties><line>1.2.3</line></properties>
+        <dependencyManagement><dependencies><dependency><groupId>local</groupId><artifactId>lib</artifactId>
+        <version>${line}</version></dependency></dependencies></dependencyManagement></project>
+        """;
+    String root =
+        """
+        <project><modelVersion>4.0.0</modelVersion><groupId>local</groupId><artifactId>app</artifactId>
+        <version>1</version><dependencyManagement><dependencies><dependency>
+        <groupId>local</groupId><artifactId>bom</artifactId><version>1</version><type>pom</type><scope>import</scope>
+        </dependency></dependencies></dependencyManagement><dependencies><dependency>
+        <groupId>local</groupId><artifactId>lib</artifactId></dependency></dependencies></project>
+        """;
+    Object result =
+        client.callTool(
+            "analyze_pom_dependencies",
+            Map.of("pomXml", root, "sideloadedPoms", java.util.List.of(bom)));
+    assertThat(result.toString()).contains("1.2.3").contains("MANAGED");
   }
 }

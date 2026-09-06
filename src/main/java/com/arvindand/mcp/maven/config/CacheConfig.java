@@ -20,7 +20,7 @@ import org.springframework.context.annotation.Configuration;
  * @since 1.2.0
  */
 @Configuration
-@EnableCaching
+@EnableCaching(order = org.springframework.core.Ordered.HIGHEST_PRECEDENCE)
 public class CacheConfig {
 
   @Bean
@@ -28,6 +28,7 @@ public class CacheConfig {
     CaffeineCacheManager cacheManager = new CaffeineCacheManager();
 
     // Maven Central caches - long TTL since data is stable
+    cacheManager.registerCustomCache(MAVEN_ARTIFACT_TIMESTAMPS, mavenCentralCache());
     cacheManager.registerCustomCache(MAVEN_VERSION_CHECKS, mavenCentralCache());
     cacheManager.registerCustomCache(MAVEN_ALL_VERSIONS, mavenCentralCache());
     cacheManager.registerCustomCache(MAVEN_ACCURATE_HISTORICAL_DATA, mavenCentralCache());
@@ -41,14 +42,35 @@ public class CacheConfig {
     // surfaces once both caches expire, or the input pomXml itself changes).
     cacheManager.registerCustomCache(MAVEN_EFFECTIVE_POM, effectivePomCache());
 
+    cacheManager.registerCustomCache(
+        CacheConstants.OSV_RESPONSES,
+        Caffeine.newBuilder()
+            .maximumWeight(32 * 1024 * 1024)
+            .weigher((Object key, Object value) -> cacheWeight(key, value, 8192))
+            .expireAfterWrite(Duration.ofHours(6))
+            .build());
     return cacheManager;
   }
 
   private Cache<Object, Object> mavenCentralCache() {
-    return Caffeine.newBuilder().maximumSize(2000).expireAfterWrite(Duration.ofHours(24)).build();
+    return Caffeine.newBuilder()
+        .maximumWeight(32 * 1024 * 1024)
+        .weigher((Object key, Object value) -> cacheWeight(key, value, 16_384))
+        .expireAfterWrite(Duration.ofHours(24))
+        .build();
   }
 
   private Cache<Object, Object> effectivePomCache() {
-    return Caffeine.newBuilder().maximumSize(256).expireAfterWrite(Duration.ofHours(1)).build();
+    return Caffeine.newBuilder()
+        .maximumWeight(16 * 1024 * 1024)
+        .weigher((Object key, Object value) -> cacheWeight(key, value, 65_536))
+        .expireAfterWrite(Duration.ofHours(1))
+        .build();
+  }
+
+  /** Conservative character weight, with an entry floor to bound tiny cached values too. */
+  private static int cacheWeight(Object key, Object value, int minimum) {
+    long characters = (long) key.toString().length() + value.toString().length();
+    return (int) Math.min(Integer.MAX_VALUE, Math.max(minimum, 2 * characters));
   }
 }

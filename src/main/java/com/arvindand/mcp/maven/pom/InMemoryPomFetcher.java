@@ -38,10 +38,12 @@ public final class InMemoryPomFetcher implements PomFetcher {
 
   public static InMemoryPomFetcher fromXml(List<String> pomXmls) {
     Objects.requireNonNull(pomXmls, "pomXmls must not be null");
+    PomInputLimits.checkBundle(pomXmls);
     Map<String, Model> byGav = new HashMap<>();
     for (String xml : pomXmls) {
       Objects.requireNonNull(xml, "pomXmls must not contain null elements");
       try {
+        PomInputLimits.check(xml);
         Model model = new MavenXpp3Reader().read(new StringReader(xml));
         String key = gavKey(model);
         if (key != null) {

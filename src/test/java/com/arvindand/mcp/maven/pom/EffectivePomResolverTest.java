@@ -20,7 +20,9 @@ class EffectivePomResolverTest {
   /** Helper that parses a POM XML literal into a {@link Model}. */
   static Model parse(String xml) {
     try {
-      return new MavenXpp3Reader().read(new StringReader(xml));
+      Model model = new MavenXpp3Reader().read(new StringReader(xml));
+      model.setPackaging("pom");
+      return model;
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -909,12 +911,8 @@ class EffectivePomResolverTest {
   }
 
   @Test
-  void importerCanStillOverrideBomUserDefinedProperty() {
-    // Sanity check that the project.*-only carve-out didn't break the normal "importer wins"
-    // semantics for user-defined properties: when the importer defines
-    // <jackson.version>2.20.0</...>
-    // and the BOM defines <jackson.version>2.19.0</...>, the importer's value wins. Reverse of the
-    // project.version test.
+  void importedBomPropertiesRemainScopedToTheBom() {
+    // Maven builds imports independently; importer properties cannot override BOM internals.
     Model bom =
         parse(
             """
@@ -973,7 +971,7 @@ class EffectivePomResolverTest {
 
     assertThat(result.dependencies())
         .singleElement()
-        .satisfies(d -> assertThat(d.effectiveVersion()).isEqualTo("2.20.0"));
+        .satisfies(d -> assertThat(d.effectiveVersion()).isEqualTo("2.19.0"));
   }
 
   @Test
@@ -1299,17 +1297,9 @@ class EffectivePomResolverTest {
         </project>
         """;
 
-    // Should complete without StackOverflowError; bom-a's jackson-databind entry resolves.
+    // Maven rejects import cycles and returns diagnostics rather than a misleading partial winner.
     EffectivePomResult result = new EffectivePomResolver(fetcher).resolve(pom);
-
-    assertThat(result.dependencies())
-        .singleElement()
-        .satisfies(
-            d -> {
-              assertThat(d.effectiveVersion()).isEqualTo("2.18.0");
-              assertThat(d.source()).isEqualTo(Source.MANAGED);
-              assertThat(d.managedBy())
-                  .contains(MavenCoordinate.of("com.example", "bom-a", "1.0.0"));
-            });
+    assertThat(result.dependencies()).isEmpty();
+    assertThat(result.warnings()).anyMatch(warning -> warning.contains("cycle"));
   }
 }

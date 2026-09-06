@@ -31,6 +31,34 @@ import org.springframework.test.context.ActiveProfiles;
 class EffectivePomResolverCacheTest {
 
   @Autowired private EffectivePomResolver resolver;
+  @Autowired private io.github.resilience4j.ratelimiter.RateLimiterRegistry rateLimiters;
+  @Autowired private io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry circuitBreakers;
+
+  @Test
+  void resilienceRegistriesUseApplicationConfiguration() {
+    assertThat(rateLimiters.rateLimiter("maven-central").getRateLimiterConfig().getLimitForPeriod())
+        .isEqualTo(10);
+    assertThat(rateLimiters.rateLimiter("osv").getRateLimiterConfig().getLimitForPeriod())
+        .isEqualTo(5);
+    assertThat(
+            circuitBreakers
+                .circuitBreaker("maven-central")
+                .getCircuitBreakerConfig()
+                .getSlidingWindowSize())
+        .isEqualTo(10);
+  }
+
+  @Test
+  void incompleteResolutionIsRetriedInsteadOfCached() {
+    String pom =
+        "<project><modelVersion>4.0.0</modelVersion>"
+            + "<parent><groupId>missing</groupId><artifactId>parent</artifactId><version>1</version></parent>"
+            + "<artifactId>app</artifactId></project>";
+    resolver.resolve(pom);
+    resolver.resolve(pom);
+    assertThat(countingFetcher.calls()).isEqualTo(2);
+  }
+
   @Autowired private CacheManager cacheManager;
   @Autowired private CountingPomFetcher countingFetcher;
 
@@ -104,6 +132,7 @@ class EffectivePomResolverCacheTest {
                           <groupId>com.example.cache-it</groupId>
                           <artifactId>parent</artifactId>
                           <version>1.0.0</version>
+                          <packaging>pom</packaging>
                         </project>
                         """));
       } catch (Exception ex) {

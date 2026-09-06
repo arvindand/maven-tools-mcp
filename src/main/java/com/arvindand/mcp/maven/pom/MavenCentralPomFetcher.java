@@ -37,9 +37,10 @@ public class MavenCentralPomFetcher implements PomFetcher {
       return Optional.empty();
     }
     try {
+      PomInputLimits.check(xml.get());
       Model model = new MavenXpp3Reader().read(new StringReader(xml.get()));
       return Optional.of(model);
-    } catch (XmlPullParserException | IOException ex) {
+    } catch (XmlPullParserException | IOException | IllegalArgumentException ex) {
       logger.debug("POM parse failed for {}: {}", coordinate.toCoordinateString(), ex.getMessage());
       return Optional.empty();
     }

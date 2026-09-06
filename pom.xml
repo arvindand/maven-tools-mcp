@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.0</version>
+        <version>4.1.1</version>
         <relativePath /> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.arvindand.mcp</groupId>
@@ -39,6 +39,9 @@
         <fmt-maven-plugin.version>2.29</fmt-maven-plugin.version>
         <maven-artifact.version>3.9.16</maven-artifact.version>
         <resilience4j.version>2.4.0</resilience4j.version>
+        <cvss-calculator.version>1.5.1</cvss-calculator.version>
+        <!-- Boot 4.1.1 manages 11.0.24; remove once Boot includes these security fixes. -->
+        <tomcat.version>11.0.25</tomcat.version>
         <!-- Test execution properties -->
         <skipUTs>false</skipUTs>
         <skipITs>false</skipITs>
@@ -77,25 +80,25 @@
             <version>${maven-artifact.version}</version>
         </dependency>
 
-        <!-- Maven model XML reader and data classes for POM resolution (Phase 6a).
-             We deliberately do not pull in maven-model-builder or maven-resolver -
-             we hand-roll the resolution loop in com.arvindand.mcp.maven.pom. -->
+        <!-- Apache Maven owns effective-model construction and repository metadata parsing. -->
         <dependency>
             <groupId>org.apache.maven</groupId>
-            <artifactId>maven-model</artifactId>
+            <artifactId>maven-model-builder</artifactId>
             <version>${maven-artifact.version}</version>
         </dependency>
-
-        <!-- Jackson for JSON processing -->
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-repository-metadata</artifactId>
+            <version>${maven-artifact.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>us.springett</groupId>
+            <artifactId>cvss-calculator</artifactId>
+            <version>${cvss-calculator.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-json</artifactId>
-        </dependency>
-
-        <!-- Jackson 3 XML module for maven-metadata.xml parsing -->
-        <dependency>
-            <groupId>tools.jackson.dataformat</groupId>
-            <artifactId>jackson-dataformat-xml</artifactId>
         </dependency>
 
         <!-- Resilience4j for circuit breaker, retry, rate limiter -->
@@ -210,6 +213,7 @@
                         <exclude>**/*IT.java</exclude>
                     </excludes>
                     <skipTests>${skipUTs}</skipTests>
+                    <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
                     <!-- Prevent hanging issues in CI -->
                     <forkedProcessTimeoutInSeconds>60</forkedProcessTimeoutInSeconds>
                     <forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
@@ -226,6 +230,7 @@
                         <include>**/*IT.java</include>
                     </includes>
                     <skipITs>${skipITs}</skipITs>
+                    <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
                     <systemPropertyVariables>
                         <!-- Lets the stdio IT launch the repackaged jar without hardcoding a version -->
                         <project.build.directory>${project.build.directory}</project.build.directory>

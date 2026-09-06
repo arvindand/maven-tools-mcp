@@ -84,14 +84,8 @@ public record SecuritySummary(
       critical += assessment.criticalCves().size();
       high += assessment.highCves().size();
 
-      // Count medium and low from total
-      int mediumAndLow =
-          assessment.vulnerabilityCount()
-              - assessment.criticalCves().size()
-              - assessment.highCves().size();
-      // We don't have granular data for medium vs low, so we estimate
-      medium += mediumAndLow / 2;
-      low += mediumAndLow - (mediumAndLow / 2);
+      medium += assessment.mediumCount();
+      low += assessment.lowCount();
 
       if (assessment.requiresAction() && assessment.recommendation() != null) {
         actions.add(dependency + ": " + assessment.recommendation());
