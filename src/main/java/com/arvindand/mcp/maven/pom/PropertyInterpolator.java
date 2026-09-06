@@ -48,7 +48,7 @@ final class PropertyInterpolator {
   /** Applies the same allocation budget to values obtained from Maven's own value sources. */
   static String expand(
       String input,
-      java.util.function.Function<String, String> lookup,
+      java.util.function.UnaryOperator<String> lookup,
       java.util.Set<String> visiting,
       int depth,
       int limit) {

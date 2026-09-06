@@ -45,7 +45,7 @@ public class CacheConfig {
     cacheManager.registerCustomCache(
         CacheConstants.OSV_RESPONSES,
         Caffeine.newBuilder()
-            .maximumWeight(32 * 1024 * 1024)
+            .maximumWeight(32L * 1024 * 1024)
             .weigher((Object key, Object value) -> cacheWeight(key, value, 8192))
             .expireAfterWrite(Duration.ofHours(6))
             .build());
@@ -54,7 +54,7 @@ public class CacheConfig {
 
   private Cache<Object, Object> mavenCentralCache() {
     return Caffeine.newBuilder()
-        .maximumWeight(32 * 1024 * 1024)
+        .maximumWeight(32L * 1024 * 1024)
         .weigher((Object key, Object value) -> cacheWeight(key, value, 16_384))
         .expireAfterWrite(Duration.ofHours(24))
         .build();
@@ -62,7 +62,7 @@ public class CacheConfig {
 
   private Cache<Object, Object> effectivePomCache() {
     return Caffeine.newBuilder()
-        .maximumWeight(16 * 1024 * 1024)
+        .maximumWeight(16L * 1024 * 1024)
         .weigher((Object key, Object value) -> cacheWeight(key, value, 65_536))
         .expireAfterWrite(Duration.ofHours(1))
         .build();
@@ -71,6 +71,6 @@ public class CacheConfig {
   /** Conservative character weight, with an entry floor to bound tiny cached values too. */
   private static int cacheWeight(Object key, Object value, int minimum) {
     long characters = (long) key.toString().length() + value.toString().length();
-    return (int) Math.min(Integer.MAX_VALUE, Math.max(minimum, 2 * characters));
+    return Math.clamp(2 * characters, minimum, Integer.MAX_VALUE);
   }
 }

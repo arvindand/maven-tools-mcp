@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.io.IOException;
+import java.io.InputStream;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpRequestExecution;
@@ -28,7 +29,8 @@ class BoundedResponseInterceptorTest {
     try (ClientHttpResponse bounded =
         new BoundedResponseInterceptor()
             .intercept(new MockClientHttpRequest(), new byte[0], execution)) {
-      assertThatThrownBy(() -> bounded.getBody().readAllBytes())
+      InputStream body = bounded.getBody();
+      assertThatThrownBy(body::readAllBytes)
           .isInstanceOf(IOException.class)
           .hasMessageContaining("byte limit");
     }

@@ -88,8 +88,9 @@ public class HttpClientConfig {
   }
 
   private static int effectivePort(URI uri) {
-    return uri.getPort() >= 0
-        ? uri.getPort()
-        : ("https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80);
+    if (uri.getPort() >= 0) {
+      return uri.getPort();
+    }
+    return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80;
   }
 }

@@ -1648,7 +1648,8 @@ public class MavenDependencyTools {
                 latest,
                 Source.MANAGED.name(),
                 bom.toCoordinateString()));
-      } else if (List.of("major", "minor", "patch").contains(updateType)) {
+      } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
+          .contains(updateType)) {
         actions.add(
             UpgradeAction.bomBump(
                 bom.groupId(), bom.artifactId(), bom.version(), latest, updateType));
@@ -1683,7 +1684,8 @@ public class MavenDependencyTools {
               latest,
               "MANAGED_DECLARATION",
               null));
-    } else if (List.of("major", "minor", "patch").contains(updateType)) {
+    } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
+        .contains(updateType)) {
       actions.add(
           UpgradeAction.managedDeclarationBump(
               declaration.groupId(),
@@ -1721,7 +1723,8 @@ public class MavenDependencyTools {
               latest,
               "PLUGIN_DEPENDENCY",
               null));
-    } else if (List.of("major", "minor", "patch").contains(updateType)) {
+    } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
+        .contains(updateType)) {
       actions.add(
           UpgradeAction.pluginDependencyBump(
               declaration.groupId(),
@@ -1810,7 +1813,8 @@ public class MavenDependencyTools {
               latestOnCentral,
               Source.EXPLICIT.name(),
               null));
-    } else if (List.of("major", "minor", "patch").contains(updateType)) {
+    } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
+        .contains(updateType)) {
       actions.add(
           UpgradeAction.explicitBump(
               dep.groupId(),

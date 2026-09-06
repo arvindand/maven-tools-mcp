@@ -87,7 +87,7 @@ public final class MavenCoordinateParser {
   private static void validateSegment(String value, String name) {
     if (value == null
         || value.length() > 256
-        || !value.matches("[A-Za-z0-9_][A-Za-z0-9_.+-]*")
+        || !value.matches("\\w[\\w.+-]*")
         || value.contains("..")) {
       throw new IllegalArgumentException("Invalid repository " + name);
     }

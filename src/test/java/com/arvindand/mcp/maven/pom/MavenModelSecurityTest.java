@@ -103,21 +103,21 @@ class MavenModelSecurityTest {
                 + "<properties><value>"
                 + "${project.name}".repeat(20)
                 + "</value></properties>");
-    assertThatThrownBy(() -> new EffectivePomResolver(_ -> Optional.empty()).resolve(root))
-        .isInstanceOf(IllegalArgumentException.class);
+    EffectivePomResolver resolver = new EffectivePomResolver(_ -> Optional.empty());
+    assertThatThrownBy(() -> resolver.resolve(root)).isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
   void rejectsDoctypeDeepXmlAndOversizedBundles() {
-    assertThatThrownBy(
-            () ->
-                PomInputLimits.check(
-                    "<!DOCTYPE project [<!ENTITY x SYSTEM 'file:///etc/passwd'>]>"
-                        + pom("<name>&x;</name>")))
+    String doctype =
+        "<!DOCTYPE project [<!ENTITY x SYSTEM 'file:///etc/passwd'>]>" + pom("<name>&x;</name>");
+    String deepXml = "<x>".repeat(65) + "</x>".repeat(65);
+    java.util.List<String> oversizedBundle = java.util.Collections.nCopies(65, pom(""));
+    assertThatThrownBy(() -> PomInputLimits.check(doctype))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> PomInputLimits.check("<x>".repeat(65) + "</x>".repeat(65)))
+    assertThatThrownBy(() -> PomInputLimits.check(deepXml))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> PomInputLimits.checkBundle(java.util.Collections.nCopies(65, pom(""))))
+    assertThatThrownBy(() -> PomInputLimits.checkBundle(oversizedBundle))
         .isInstanceOf(IllegalArgumentException.class);
   }
 

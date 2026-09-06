@@ -18,12 +18,15 @@ class BoundedBatchTest {
   @Test
   void timesOutEvenWhenAnOperationIgnoresInterruption() {
     CountDownLatch release = new CountDownLatch(1);
+    List<Integer> inputs = List.of(1);
+    Semaphore permits = new Semaphore(1);
+    Duration timeout = Duration.ofMillis(100);
     long start = System.nanoTime();
     try {
       assertThatThrownBy(
               () ->
                   BoundedBatch.map(
-                      List.of(1),
+                      inputs,
                       value -> {
                         boolean done = false;
                         while (!done) {
@@ -36,8 +39,8 @@ class BoundedBatchTest {
                         }
                         return value;
                       },
-                      new Semaphore(1),
-                      Duration.ofMillis(100)))
+                      permits,
+                      timeout))
           .isInstanceOf(IllegalStateException.class)
           .hasMessageContaining("deadline");
       assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(2));
@@ -48,23 +51,20 @@ class BoundedBatchTest {
 
   @Test
   void permitQueueTimeIsPartOfTheSameDeadline() {
-    assertThatThrownBy(
-            () ->
-                BoundedBatch.map(
-                    List.of(1), value -> value, new Semaphore(0), Duration.ofMillis(50)))
+    List<Integer> inputs = List.of(1);
+    Semaphore permits = new Semaphore(0);
+    Duration timeout = Duration.ofMillis(50);
+    assertThatThrownBy(() -> BoundedBatch.map(inputs, value -> value, permits, timeout))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("deadline");
   }
 
   @Test
   void rejectsOversizedInputsBeforeScheduling() {
-    assertThatThrownBy(
-            () ->
-                BoundedBatch.map(
-                    java.util.Collections.nCopies(501, 1),
-                    value -> value,
-                    new Semaphore(1),
-                    Duration.ofSeconds(1)))
+    List<Integer> inputs = java.util.Collections.nCopies(501, 1);
+    Semaphore permits = new Semaphore(1);
+    Duration timeout = Duration.ofSeconds(1);
+    assertThatThrownBy(() -> BoundedBatch.map(inputs, value -> value, permits, timeout))
         .isInstanceOf(IllegalArgumentException.class);
   }
 }

@@ -117,13 +117,9 @@ class HttpClientConfigTest {
   void authenticatedClientRejectsAnotherOriginBeforeSending() {
     RestClient repository =
         restClient(props(new Auth(AuthType.BEARER, null, null, "private-token")));
-    assertThatThrownBy(
-            () ->
-                repository
-                    .get()
-                    .uri(baseUrl.replace("127.0.0.1", "localhost"))
-                    .retrieve()
-                    .body(String.class))
+    RestClient.ResponseSpec response =
+        repository.get().uri(baseUrl.replace("127.0.0.1", "localhost")).retrieve();
+    assertThatThrownBy(() -> response.body(String.class))
         .isInstanceOf(IllegalArgumentException.class);
     assertThat(capturedAuthHeaders).isEmpty();
   }

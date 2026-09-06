@@ -64,14 +64,18 @@ public final class PomInputLimits {
       switch (reader.next()) {
         case XMLStreamConstants.DTD ->
             throw new IllegalArgumentException("POM DTDs are unsupported");
-        case XMLStreamConstants.START_ELEMENT -> {
-          if (++depth > 64 || ++elements > 20_000) {
-            throw new IllegalArgumentException("POM exceeds its XML depth or element budget");
-          }
-        }
+        case XMLStreamConstants.START_ELEMENT -> checkElementBudget(++depth, ++elements);
         case XMLStreamConstants.END_ELEMENT -> depth--;
-        default -> {}
+        default -> {
+          // Text, comments and processing instructions do not change structural budgets.
+        }
       }
+    }
+  }
+
+  private static void checkElementBudget(int depth, int elements) {
+    if (depth > 64 || elements > 20_000) {
+      throw new IllegalArgumentException("POM exceeds its XML depth or element budget");
     }
   }
 }
