@@ -8,6 +8,7 @@ import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
 import com.arvindand.mcp.maven.model.DependencyInfo;
 import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
+import com.arvindand.mcp.maven.model.McpError;
 import com.arvindand.mcp.maven.model.NeedsAttention;
 import com.arvindand.mcp.maven.model.PomUpgradeRecommendation;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
@@ -147,7 +148,8 @@ public class MavenDependencyTools {
       T result = operation.execute();
       return ToolResponse.Success.of(result);
     } catch (IllegalArgumentException e) {
-      return ToolResponse.Error.of(INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage());
+      return ToolResponse.Error.of(
+          McpError.invalidInput(INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage(), Map.of()));
     } catch (MavenCentralException e) {
       return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {

@@ -2,7 +2,7 @@
 # Use this profile when running as a standalone HTTP server instead of STDIO
 #
 # Run with: java -jar maven-tools-mcp.jar --spring.profiles.active=http
-# Or Docker: docker run -p 8080:8080 -e SPRING_PROFILES_ACTIVE=http arvindand/maven-tools-mcp:latest
+# Or Docker: docker run -p 127.0.0.1:8080:8080 arvindand/maven-tools-mcp:latest-http
 #
 # Connect from SDK with:
 #   mcp_servers:

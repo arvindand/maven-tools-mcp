@@ -42,6 +42,9 @@
         <cvss-calculator.version>1.5.1</cvss-calculator.version>
         <!-- Boot 4.1.1 manages 11.0.24; remove once Boot includes these security fixes. -->
         <tomcat.version>11.0.25</tomcat.version>
+        <!-- JVM images are the default; -Pnative enables native buildpacks and AOT together. -->
+        <maven-tools.native-image>false</maven-tools.native-image>
+        <jib.architecture>amd64</jib.architecture>
         <!-- Test execution properties -->
         <skipUTs>false</skipUTs>
         <skipITs>false</skipITs>
@@ -148,6 +151,21 @@
     </dependencyManagement>
 
     <profiles>
+        <profile>
+            <id>native</id>
+            <properties>
+                <maven-tools.native-image>true</maven-tools.native-image>
+            </properties>
+        </profile>
+        <profile>
+            <id>jvm-arm64</id>
+            <activation>
+                <os><arch>aarch64</arch></os>
+            </activation>
+            <properties>
+                <jib.architecture>arm64</jib.architecture>
+            </properties>
+        </profile>
         <!-- CI Profile: Only unit tests, no integration tests -->
         <profile>
             <id>ci</id>
@@ -188,7 +206,7 @@
                 <configuration>
                     <image>
                         <env>
-                            <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
+                            <BP_NATIVE_IMAGE>${maven-tools.native-image}</BP_NATIVE_IMAGE>
                             <BP_IMAGE_LABELS>io.modelcontextprotocol.server.name="io.github.arvindand/maven-tools-mcp"</BP_IMAGE_LABELS>
                         </env>
                     </image>
@@ -199,6 +217,37 @@
                             <url>https://index.docker.io/v1/</url>
                         </publishRegistry>
                     </docker>
+                </configuration>
+            </plugin>
+
+            <!-- Paketo JVM launch helpers log to stdout; Jib keeps MCP STDIO protocol-only. -->
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
+                <version>3.5.2</version>
+                <configuration>
+                    <from>
+                        <image>eclipse-temurin:25-jre</image>
+                        <platforms>
+                            <platform>
+                                <architecture>${jib.architecture}</architecture>
+                                <os>linux</os>
+                            </platform>
+                        </platforms>
+                    </from>
+                    <to>
+                        <image>maven-tools-mcp:${project.version}-jvm</image>
+                    </to>
+                    <container>
+                        <mainClass>com.arvindand.mcp.maven.MavenMcpServerApplication</mainClass>
+                        <user>10001:10001</user>
+                        <environment>
+                            <SPRING_PROFILES_ACTIVE>docker</SPRING_PROFILES_ACTIVE>
+                        </environment>
+                        <labels>
+                            <io.modelcontextprotocol.server.name>io.github.arvindand/maven-tools-mcp</io.modelcontextprotocol.server.name>
+                        </labels>
+                    </container>
                 </configuration>
             </plugin>
 
@@ -213,7 +262,7 @@
                         <exclude>**/*IT.java</exclude>
                     </excludes>
                     <skipTests>${skipUTs}</skipTests>
-                    <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
+                    <argLine>"-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar"</argLine>
                     <!-- Prevent hanging issues in CI -->
                     <forkedProcessTimeoutInSeconds>60</forkedProcessTimeoutInSeconds>
                     <forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
@@ -230,7 +279,7 @@
                         <include>**/*IT.java</include>
                     </includes>
                     <skipITs>${skipITs}</skipITs>
-                    <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
+                    <argLine>"-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar"</argLine>
                     <systemPropertyVariables>
                         <!-- Lets the stdio IT launch the repackaged jar without hardcoding a version -->
                         <project.build.directory>${project.build.directory}</project.build.directory>

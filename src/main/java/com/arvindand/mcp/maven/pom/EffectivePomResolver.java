@@ -65,7 +65,7 @@ public class EffectivePomResolver {
    * @return the resolved effective POM result
    * @throws IllegalArgumentException if the input is not valid POM XML
    */
-  @Cacheable(value = MAVEN_EFFECTIVE_POM, key = "#pomXml", unless = "!#result.warnings().isEmpty()")
+  @Cacheable(value = MAVEN_EFFECTIVE_POM, key = "#pomXml", unless = "#result.hasWarnings()")
   public EffectivePomResult resolve(String pomXml) {
     Model root = parsePom(pomXml);
     List<String> warnings = new ArrayList<>();

@@ -21,15 +21,15 @@ New Java classes and regression tests use the repository's `@author Arvind Menon
 
 ## Validation
 
-- `./mvnw fmt:format clean verify -Pfull`: **335 unit tests and 44 integration tests passed**, including real Maven Central resolution and MCP wire-protocol checks.
+- `./mvnw fmt:format clean verify -Pfull`: **338 unit tests and 46 integration tests passed**, including real Maven Central resolution and MCP wire-protocol checks.
 - Python `pytest`: **52 tests passed**.
-- Spring `-Pnative spring-boot:process-aot`: **passed**. Maven model getter/resource hints are registered.
+- Native STDIO, native no-Context7, native HTTP, and JVM images built and passed runtime checks on Linux ARM64. Claude Sonnet agents exercised the actual tools. See [the build validation report](2026-09-06-build-validation.md) for the matrix and additional fixes.
 - Refreshed OSV query: **114 runtime coordinates, no matching advisories** on 6 September 2026. This is a dependency-database snapshot, not proof that all possible vulnerabilities are absent.
 - Java formatting and whitespace checks passed. New Python editor/regression files pass Ruff.
 
 ## Limits and follow-ups
 
-A GraalVM native executable was not compiled locally: `native-image` is not installed. The native CI checks must still pass before release. AOT generation alone does not prove native runtime compatibility.
+GraalVM executables were compiled through Docker buildpacks and tested locally. AMD64 builds and Windows script execution remain CI/platform checks; the local validation host was ARM64 macOS.
 
 Maven 4 migration and the full Maven Resolver stack are deferred: Maven 3's model builder and repository metadata components cover the current parent/BOM use case with a smaller dependency surface. Transitive graph resolution, Maven settings/mirrors and explicit activation contexts require separate product work.
 
