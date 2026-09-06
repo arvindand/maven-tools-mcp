@@ -31,6 +31,8 @@ If you do not need raw Context7 tools, use the Context7-free image:
 
 If you want to keep Context7 enabled, pass `CONTEXT7_API_KEY` through Docker. The key is optional by default, but some environments may require it.
 
+The native `-noc7` image can still return static Context7 guidance text in some analytical responses. This text does not mean a Context7 client or tool is connected; the variant omits the raw documentation tools.
+
 ## SSL Inspection / Corporate Certificates
 
 ### Symptom
@@ -85,6 +87,24 @@ If a desktop client cannot connect:
 - verify the client config points to the right transport (`:latest` for stdio, `:latest-http` for HTTP)
 - if using HTTP, check the health endpoints first
 - if using stdio, make sure the MCP client is not wrapping the command in a shell that changes stdin/stdout behavior
+
+## Private Repository Redirects or Authentication Errors
+
+Use the final repository URL, including its repository path. Repository/API redirects are rejected, and authenticated requests cannot switch origin. Repository credentials are deliberately absent from OSV requests. Maven `settings.xml`, mirrors and repositories declared inside submitted POMs do not configure this server; use the environment properties in [setup](setup.md#private-repository-authentication).
+
+## POM Limits and Profile Warnings
+
+Split very large sideloaded bundles and remove DTD declarations. The resolver enforces document, nesting, expansion and total-model budgets; see [architecture](architecture.md#caches-and-input-limits).
+
+A warning about environment activation can refer to a fetched parent or imported BOM. For example, Spring Boot can import an Infinispan BOM containing a `community` profile even when your input has no profiles. Such warnings indicate a limited activation context, not leaked input from another request. Review unresolved or profile-dependent versions against your real Maven build before applying changes.
+
+## JVM Image Starts but the MCP Client Cannot Parse Responses
+
+Build the JVM image with `./build/build-docker.sh 3` (Jib). A direct JVM `spring-boot:build-image` can include Paketo launcher diagnostics on STDOUT before Java starts; application log settings do not suppress them. Native images use the `-Pnative` buildpack path. Every STDIO line must be a JSON-RPC message.
+
+## Docker Build Reports "username must not be null"
+
+In the 3.2.2 validation environment, Spring Boot's build-image plugin failed when Docker configuration contained an empty Docker Hub authentication entry. Inspect the selected Docker context and authentication configuration. For anonymous builds of public images, an isolated temporary `DOCKER_CONFIG` with `{"auths":{}}` and an explicit `DOCKER_HOST` was verified without changing the user's credentials. Keep the normal authenticated configuration for private pulls and publishing; see the [build validation record](reviews/2026-09-06-build-validation.md#environment-issue).
 
 ## Related Docs
 

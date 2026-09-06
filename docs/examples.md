@@ -83,16 +83,19 @@ Useful output here includes:
 
 ## Advanced Analysis Examples
 
+The age, release-pattern and health excerpts were checked against the released 3.2.2 image on 6 September 2026. Examples show the `data` field of successful responses, with other fields omitted for readability; the POM examples are illustrative. Versions and ages are snapshots, so query the tool for current repository data.
+
 ### Dependency age
 
 A response from `analyze_dependency_age` may look like:
 
 ```json
 {
-  "dependency": "org.springframework.boot:spring-boot-starter",
-  "age_classification": "current",
-  "days_since_release": 45,
-  "recommendation": "Actively maintained - consider updating if needed"
+  "dependency": "junit:junit",
+  "latest_version": "4.13.2",
+  "age_classification": "STALE",
+  "days_since_last_release": 2031,
+  "recommendation": "Review for continued maintenance and consider alternatives"
 }
 ```
 
@@ -102,10 +105,10 @@ A response from `analyze_release_patterns` may look like:
 
 ```json
 {
-  "dependency": "com.fasterxml.jackson.core:jackson-core",
-  "maintenance_level": "active",
-  "release_velocity": 1.2,
-  "next_release_prediction": "Expected in 3 weeks"
+  "dependency": "junit:junit",
+  "maintenanceLevel": "INACTIVE",
+  "releaseVelocity": 0.11831726555652937,
+  "nextReleasePrediction": "Unpredictable release schedule"
 }
 ```
 
@@ -115,12 +118,13 @@ A response from `analyze_project_health` may look like:
 
 ```json
 {
-  "overall_health": "good",
-  "average_health_score": 78,
+  "dependency_count": 1,
+  "successful_analysis": 1,
+  "failed_analysis": 0,
   "age_distribution": {
-    "fresh": 2,
-    "current": 8,
-    "aging": 3,
+    "fresh": 0,
+    "current": 0,
+    "aging": 0,
     "stale": 1
   }
 }
@@ -128,7 +132,7 @@ A response from `analyze_project_health` may look like:
 
 ### POM-aware: effective versions from raw XML
 
-`analyze_pom_dependencies` takes a whole `<project>...</project>` and returns the resolved view. For a Spring Boot 3.5 app that doesn't pin Jackson but uses it transitively, you'll see:
+`analyze_pom_dependencies` takes a whole `<project>...</project>` and returns the resolved view. For an app that explicitly declares `jackson-databind` without a version and imports its BOM, the result can look like this (a dependency present only transitively would not appear):
 
 ```json
 {
@@ -143,27 +147,27 @@ A response from `analyze_project_health` may look like:
         "artifactId": "jackson-bom",
         "version": "2.19.2"
       },
-      "conflicts": []
+      "conflicts": [],
+      "directlyEditable": false
     }
   ],
-  "parentChain": [
-    {"artifactId": "spring-boot-starter-parent", "version": "3.5.14"},
-    {"artifactId": "spring-boot-dependencies", "version": "3.5.14"}
+  "parentChain": [],
+  "rootImportedBoms": [
+    {"groupId": "com.fasterxml.jackson", "artifactId": "jackson-bom", "version": "2.19.2"}
   ],
-  "rootImportedBoms": [],
   "rootManagedDeclarations": [],
   "rootPluginDependencyDeclarations": [],
   "warnings": []
 }
 ```
 
-Read this as: "I didn't declare a Jackson version — Spring Boot's BOM transitively imports jackson-bom, which pinned me to 2.19.2." `EXPLICIT` would mean I declared the version inline; `EXPLICIT_OVERRIDE` would mean I declared a version *and* a BOM also manages it — useful for spotting deliberate pins.
+Read this as: "I declared Jackson without a version — the imported jackson-bom supplied 2.19.2." `EXPLICIT` would mean I declared the version inline; `EXPLICIT_OVERRIDE` would mean I declared a version *and* a BOM also manages it — useful for spotting deliberate pins.
 
 When two BOMs at the same level disagree on a coordinate, `conflicts[]` lists every losing candidate version so the caller can see all the alternatives and decide whether to pin.
 
 ### POM-aware: deterministic upgrade plan
 
-`recommend_pom_upgrades` builds on the analyzer and splits the result so a non-LLM agent can act on `deterministic_actions[]` while a human or LLM judges `needs_attention[]`:
+`recommend_pom_upgrades` builds on the analyzer and splits the result so a non-LLM agent can act on `deterministicActions[]` while a human or LLM judges `needsAttention[]`:
 
 ```json
 {
@@ -226,7 +230,7 @@ When two BOMs at the same level disagree on a coordinate, `conflicts[]` lists ev
 
 `explicit_bump` edits a declared `<version>`; `bom_bump` edits a user-controllable BOM; `managed_decl_bump` edits a direct non-import dependency-management version; `plugin_dep_bump` edits a dependency under `build/plugins` or `build/pluginManagement`. Plugin actions identify the owner plugin so literal edits stay within the correct block. Inherited and compound version expressions remain absent because they have no unambiguous edit point in the input POM.
 
-`needs_attention[]` carries `latestOnCentral` on every entry so the reviewing model has full context in one round-trip and doesn't need to fan out per-coordinate `compare_dependency_versions` calls.
+`needsAttention[]` uses `latestStable` for `major_available` and `latestOnCentral` for conflict/override entries. These fields give the reviewing model version context in the same response.
 
 ### POM-aware: multi-module with `sideloadedPoms`
 

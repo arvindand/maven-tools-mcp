@@ -1,6 +1,8 @@
 # Build and runtime validation — 6 September 2026
 
-Branch: `codex/security-and-maven-correctness`.
+Pre-release branch: `codex/security-and-maven-correctness` (merged and subsequently deleted).
+
+The sections below record the pre-release ARM64 snapshot validation. See [release follow-up](#release-follow-up) for final 3.2.2 verification.
 
 Follow-up to [the review adjustments](2026-09-06-adjustments.md), using the repository build scripts and independent Claude Sonnet QA agents. Image builds run on Docker Desktop, Linux ARM64, using Java 25 buildpacks for native images and Jib/Eclipse Temurin for the JVM image. The host JAR runs use Java 25.0.1.
 
@@ -14,7 +16,7 @@ Follow-up to [the review adjustments](2026-09-06-adjustments.md), using the repo
 - Weighted Caffeine caches also required native factory metadata absent from the bundled metadata set. Hints cover the selected `SSMWW` cache and `PSWMW` node factories; a regression test inspects the actual cache configuration and checks those selected types. This follows Caffeine's upstream [cache factory](https://github.com/ben-manes/caffeine/blob/v3.2.4/caffeine/src/main/java/com/github/benmanes/caffeine/cache/LocalCacheFactory.java) and [node factory](https://github.com/ben-manes/caffeine/blob/v3.2.4/caffeine/src/main/java/com/github/benmanes/caffeine/cache/NodeFactory.java) selection.
 - Registered the nested `McpError` record: native error responses previously failed JSON serialization. Invalid coordinate arguments now use the existing `INVALID_INPUT` classification. The native wire-protocol test exercises this negative path as well as successful calls.
 - Moved the POM cache eligibility check into `EffectivePomResult.hasWarnings()`. The previous SpEL expression reflected on a private JDK immutable-list implementation and failed in native mode. Native conformance now calls upgrade recommendations twice to cover this cache boundary.
-- Quoted the Mockito Java agent path for test forks whose Maven repository path contains spaces, identified by the Sonnet script review. The released-version fallback remains at `3.2.1`, as required by the repository guidance.
+- Quoted the Mockito Java agent path for test forks whose Maven repository path contains spaces, identified by the Sonnet script review. During snapshot development, the released-version fallback remained at `3.2.1`; release preparation subsequently aligned it to `3.2.2`.
 - Native conformance now exercises `${project.version}` inside an imported BOM as well as BOM property isolation. Documentation reflects the distinct image tags, runtime versus build-time profiles, and release-tag publication.
 
 ## Environment issue
@@ -67,3 +69,14 @@ Shell syntax and **27 script routing/failure cases** passed, covering root/build
 The four final image tags and packaged JAR in `target/` are retained. Task-specific test servers, containers, superseded image builds, temporary build caches and source-inspection fixtures are cleaned up. Existing user images and services are preserved. Nothing was published or pushed.
 
 GraalVM reports some upstream metadata deprecation/experimental-option warnings, but native compilation and runtime checks pass. These runtime tests complement the dependency-advisory snapshot in the original adjustment report; they are not an exhaustive audit of container OS packages.
+
+## Release follow-up
+
+[Release v3.2.2](https://github.com/arvindand/maven-tools-mcp/releases/tag/v3.2.2) was published from merge commit `b7bdc5f` after [PR #19](https://github.com/arvindand/maven-tools-mcp/pull/19). The final state includes Spring AI 2.0.1 and MCP Java testkit 0.7.0 from main. SonarCloud findings were corrected, and the timing-sensitive cache test now checks actual metadata reuse.
+
+- Final Java validation passed 338 unit and 46 integration tests; Python passed 52 tests. Formatting and SonarCloud passed.
+- [Pre-merge AMD64 native validation](https://github.com/arvindand/maven-tools-mcp/actions/runs/34055935877) built all three native variants and passed STDIO conformance plus HTTP health checks. JAR and JVM-image protocol checks also passed in CI.
+- All four final local ARM64 variants built through the helpers. The JAR passed default STDIO, no-Context7 STDIO and HTTP checks. A final Claude Sonnet run exercised the native tool surface; its profile-warning observation was traced to the imported Infinispan BOM rather than cross-request state.
+- [Release image publication](https://github.com/arvindand/maven-tools-mcp/actions/runs/34056876074) succeeded for native default, no-Context7 and HTTP on AMD64 and ARM64. All six published images subsequently passed strict runtime probes locally (AMD64 through emulation). The three `latest` variant manifests matched their 3.2.2 counterparts on both architectures.
+- [MCP Registry publication](https://github.com/arvindand/maven-tools-mcp/actions/runs/34057907905) succeeded. The final runtime dependency snapshot contained 114 Maven coordinates and no OSV advisory matches; this does not cover container OS packages.
+- Temporary servers and build caches were removed. Final images and the locally packaged JAR were retained. Windows scripts were reviewed statically but were not executed on Windows.

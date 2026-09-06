@@ -2,7 +2,7 @@
 
 [![Java](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.java.net/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.1-green.svg)](https://spring.io/projects/spring-boot)
-[![Spring AI](https://img.shields.io/badge/Spring%20AI-2.0.0-green.svg)](https://spring.io/projects/spring-ai)
+[![Spring AI](https://img.shields.io/badge/Spring%20AI-2.0.1-green.svg)](https://spring.io/projects/spring-ai)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-blue.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/arvindand/maven-tools-mcp)](https://github.com/arvindand/maven-tools-mcp/releases)
@@ -43,7 +43,7 @@ This project is most useful when a plain package search is not enough.
 
 One of the more interesting uses of this project is agent-driven dependency maintenance.
 
-The core server does not open PRs by itself, but it gives an agent enough current dependency context to make safer update decisions than a blind version-bump workflow. The `recommend_pom_upgrades` tool was built for exactly that shape: a non-LLM agent hands it a raw `pom.xml`, applies every `deterministic_actions[]` entry at its identified version field or property, and surfaces `needs_attention[]` for a human or LLM to review separately. No per-coordinate fan-out and no recommendations the agent can't actually apply — transitively-managed BOMs and managed declarations without a root-owned edit site are filtered out.
+The core server does not open PRs by itself, but it gives an agent enough current dependency context to make safer update decisions than a blind version-bump workflow. The `recommend_pom_upgrades` tool was built for exactly that shape: a non-LLM agent hands it a raw `pom.xml`, validates each `deterministicActions[]` entry against its identified version field or property before applying it, and surfaces `needsAttention[]` for a human or LLM to review separately. Transitively-managed BOMs and declarations without a root-owned edit site are filtered out. The editor reports stale or ambiguous actions instead of guessing.
 
 This repository's own weekly self-update flow is the clearest example: GitHub Actions orchestrates the run, one MCP call returns the action list, the agent applies the diffs, and the result is a reviewable PR. Major-upgrade review is the only path that asks Copilot for judgement and migration framing.
 
@@ -92,11 +92,11 @@ Create `.vscode/mcp.json` in your workspace:
 
 `CONTEXT7_API_KEY` is optional. Most setups can start without it. If your environment requires Context7 auth, or you want to avoid anonymous limits, pass it through Docker with `-e CONTEXT7_API_KEY`.
 
-For fuller setup guidance, including JAR/native usage, Docker Compose, and environment notes, see [`docs/setup.md`](docs/setup.md).
+For fuller setup guidance, including JAR and native-container usage, Docker Compose, and environment notes, see [`docs/setup.md`](docs/setup.md).
 
 ## Core Tools
 
-The server exposes 11 MCP tools.
+The default image exposes 11 MCP tools; `-noc7` exposes the 9 core tools.
 
 ### Maven intelligence tools
 
@@ -110,23 +110,23 @@ The server exposes 11 MCP tools.
 | `analyze_release_patterns` | Look at release cadence and maintenance signals |
 | `analyze_project_health` | Run a broader dependency health audit |
 | `analyze_pom_dependencies` | POM-aware: resolve effective versions from raw pom.xml, classify as `EXPLICIT` / `MANAGED` / `EXPLICIT_OVERRIDE`, surface multi-BOM conflicts |
-| `recommend_pom_upgrades` | POM-aware: returns deterministic explicit, BOM, and root dependency-management edits for an agent to apply, plus a `needs_attention` list of majors / conflicts / overrides for human or LLM review |
+| `recommend_pom_upgrades` | POM-aware: returns deterministic explicit, BOM, and root dependency-management edits for an agent to apply, plus a `needsAttention` list of majors / conflicts / overrides for human or LLM review |
 
 ### Context7 documentation tools
 
 | Tool | What It Does |
 |------|---------------|
-| `resolve-library-id` | Find a documentation library identifier |
-| `query-docs` | Fetch docs by Context7 library ID |
+| `resolve_library_id` | Find a documentation library identifier |
+| `query_docs` | Fetch docs by Context7 library ID |
 
 For parameters, examples, and tool-by-tool notes, see [`docs/tools.md`](docs/tools.md).
 
 ### POM-aware dependency analysis
 
-Two tools take a whole POM (raw XML) rather than a single coordinate. Both walk the parent chain, apply `<dependencyManagement>`, resolve `<scope>import</scope>` BOMs against Maven Central, scope `${project.version}` per-POM so an imported BOM's placeholders resolve to that BOM's version (not the importer's), and accept an optional `sideloadedPoms` bundle for monorepo siblings / unreleased parents.
+Two tools take a whole POM (raw XML) rather than a single coordinate. Both use Apache Maven Model Builder to walk the parent chain, apply `<dependencyManagement>`, resolve `<scope>import</scope>` BOMs against Maven Central, scope `${project.version}` per-POM so an imported BOM's placeholders resolve to that BOM's version (not the importer's), and accept an optional `sideloadedPoms` bundle for monorepo siblings / unreleased parents.
 
 - **`analyze_pom_dependencies`** — returns each declared dep with effective version + classification (`EXPLICIT` / `MANAGED` / `EXPLICIT_OVERRIDE`) + managing BOM coordinate + any multi-BOM `conflicts`. Use when you want raw analysis ("what does my POM actually resolve to?").
-- **`recommend_pom_upgrades`** — builds on the analyzer and returns two lists: `deterministic_actions` (mechanical edits — `explicit_bump` for declared deps, `bom_bump` for user-controllable BOMs, `managed_decl_bump` for direct root dependency-management entries, and `plugin_dep_bump` for direct build/plugin dependencies) and `needs_attention` (majors, multi-BOM conflicts, and explicit overrides). Owned-declaration actions include edit location metadata; plugin actions also identify the owner plugin so a client can edit the correct block directly.
+- **`recommend_pom_upgrades`** — builds on the analyzer and returns two lists: `deterministicActions` (mechanical edits — `explicit_bump` for declared deps, `bom_bump` for user-controllable BOMs, `managed_decl_bump` for direct root dependency-management entries, and `plugin_dep_bump` for direct build/plugin dependencies) and `needsAttention` (majors, multi-BOM conflicts, and explicit overrides). Owned-declaration actions include edit location metadata; plugin actions also identify the owner plugin so a client can edit the correct block directly.
 
 Upgrade recommendations are scoped to knobs the caller can actually edit in the input POM: the direct `<parent>`, root-level BOM imports, explicit dependencies, and direct non-import dependency-management declarations with a literal version or an exact root-owned property. Transitively-imported BOMs, inherited properties, and compound property expressions are silently skipped because they lack an unambiguous edit site in the input file.
 
@@ -152,7 +152,7 @@ For more prompt examples, see [`docs/examples.md`](docs/examples.md). There is a
 
 ## Dogfooding
 
-This repository runs a weekly self-update workflow that uses a local Python agent against its own `pom.xml` and opens a reviewable PR for safe dependency updates. The agent hands the raw POM to `recommend_pom_upgrades` and applies the returned `deterministic_actions[]` directly — no per-coordinate fan-out, no XML parsing in Python. Manual major-review runs are the only mode that routes through the GitHub Copilot SDK.
+This repository runs a weekly self-update workflow that uses a local Python agent against its own `pom.xml` and opens a reviewable PR for safe dependency updates. The agent hands the raw POM to `recommend_pom_upgrades` and applies the returned `deterministicActions[]` directly — no per-coordinate fan-out. A bounded XML editor locates exact declarations and checks current versions while preserving formatting; Maven model resolution stays on the server. Manual major-review runs are the only mode that routes through the GitHub Copilot SDK.
 
 That flow is documented in [`docs/dogfooding.md`](docs/dogfooding.md), including:
 

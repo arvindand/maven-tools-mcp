@@ -7,10 +7,11 @@ This directory contains convenient build scripts for the Maven Tools MCP Server 
 ### Linux/macOS Scripts
 
 - **`build.sh`** - Complete build helper with options for:
-  - Build JAR (skip tests) - Fast development builds
-  - Build JAR (with tests) - Full validation builds  
+  - Package JAR (option 1; see test-selection note below)
+  - Build JAR with unit tests
   - Build Native Docker image - Optimized native executable (slow build)
-  - Build JVM Docker image - Traditional JVM build (faster build)
+  - Build JVM Docker image with Jib
+  - Build native images without Context7 or with HTTP transport
   - Clean build artifacts - Reset build state
   - Run tests only - Validation without building
 
@@ -60,6 +61,10 @@ Scripts support non-interactive mode for CI/CD by passing the option number:
 .\build.cmd 1
 ```
 
+## Test Selection
+
+`./mvnw clean package -Pci` runs unit tests; `./mvnw clean verify -Pfull` runs unit and integration tests. To explicitly skip both suites, use `-DskipUTs=true -DskipITs=true`. The helpers currently pass `-DskipTests` in options labelled "skip tests", but this project configures Surefire through `skipUTs`, so those options can still run unit tests.
+
 ## Build Outputs
 
 Built JAR files are placed in: `target/maven-tools-mcp-<version>.jar`
@@ -71,8 +76,8 @@ Native image builds use GraalVM and Spring Boot 4.1's `native` profile. The help
 ### Build Commands
 
 ```bash
-# Build native Docker image
-./mvnw -Pnative spring-boot:build-image
+# Build both native STDIO variants with their required AOT profiles
+./build/build-docker.sh 2
 
 # Build JVM Docker image 
 ./build/build.sh 4
@@ -81,7 +86,8 @@ Native image builds use GraalVM and Spring Boot 4.1's `native` profile. The help
 ### CI/CD Integration
 
 - GitHub Actions validates changes and publishes images only on release tag pushes.
-- Released images are published to Docker Hub as `arvindand/maven-tools-mcp:<version>` and the corresponding `latest` variant tags.
+- Released native images are published to Docker Hub as `arvindand/maven-tools-mcp:<version>`, `<version>-noc7` and `<version>-http`, with corresponding `latest` tags and AMD64/ARM64 manifests. The JVM `-jvm` image remains a local build.
+- GitHub release publication triggers the separate MCP Registry workflow. Verify Docker publication before publishing the release draft.
 - Local build scripts do not publish images.
 
 ### Build and run every local variant

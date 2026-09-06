@@ -15,7 +15,8 @@ Perform a comprehensive dependency audit for this project using the maven-tools-
 
 2. **Health Analysis**
    - Use `analyze_project_health` with `includeSecurityScan=true` and `includeLicenseScan=true`
-   - Assess overall project health score
+   - Assess per-dependency `healthScore` values and the age distribution
+   - Label any calculated average as client-derived; the response has no `average_health_score` field
    - Identify stale or aging dependencies
 
 3. **Version Check**
@@ -35,7 +36,7 @@ Perform a comprehensive dependency audit for this project using the maven-tools-
 
 ### Executive Summary
 
-- Health score: X/100
+- Mean dependency health score: X/100 (calculated from successful dependency results)
 - Risk level: [low/medium/high/critical]
 - Total dependencies: X
 - Updates available: X

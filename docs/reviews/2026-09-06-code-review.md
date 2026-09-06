@@ -1,10 +1,10 @@
 # Code and security review — 6 September 2026
 
-> Historical review of the original code. See [implemented adjustments and validation](2026-09-06-adjustments.md) for the fixes on the review branch.
+This is the historical review of the pre-fix code. See [implemented adjustments](2026-09-06-adjustments.md) and [final release validation](2026-09-06-build-validation.md#release-follow-up) for the resolved state; findings below are retained as the audit record.
 
 The highest priorities are isolating repository credentials, correcting vulnerability severity/remediation results, bounding untrusted POM processing, and fixing Maven model semantics. Apache Maven's own model builder is a strong replacement for the custom inheritance/interpolation/BOM engine. The existing tests pass, but targeted reproductions expose failures they do not cover.
 
-This is a review artifact; application code and dependency versions have not been changed. Priorities below describe remediation urgency for this project, not CVSS ratings.
+At the time of this review, application code and dependency versions had not been changed. Priorities below describe remediation urgency for this project, not CVSS ratings.
 
 **Validation and scope**
 
@@ -19,7 +19,7 @@ This is a review artifact; application code and dependency versions have not bee
 
 **1. [P1] Private repository credentials are attached to OSV requests — reproduced**
 
-Location: [HttpClientConfig.java:51](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/config/HttpClientConfig.java:51), [VulnerabilityService.java:58](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/service/VulnerabilityService.java:58).
+Location: [HttpClientConfig.java:51](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/config/HttpClientConfig.java#L51), [VulnerabilityService.java:58](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/service/VulnerabilityService.java#L58).
 
 The shared `RestClient.Builder` receives an unconditional repository authentication interceptor. `VulnerabilityService` uses that builder for `https://api.osv.dev/v1/query`. Consequently, enabling BASIC or BEARER repository authentication discloses that credential to OSV whenever an uncached scan runs. The default anonymous configuration is unaffected.
 
@@ -29,7 +29,7 @@ Fix: create separate repository and OSV clients/builders. Scope repository authe
 
 **2. [P1] CVSS vectors become zero, suppressing high/critical alerts — reproduced**
 
-Location: [VulnerabilityService.java:210](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/service/VulnerabilityService.java:210).
+Location: [VulnerabilityService.java:210](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/service/VulnerabilityService.java#L210).
 
 OSV's severity score contains a CVSS vector. The implementation passes it to `Double.parseDouble`, catches the parse failure, and substitutes `0.0`. It also ignores CVSS v4. A standard CVSS v3.1 vector representing 9.8 produced `maxSeverity=UNKNOWN`, empty critical/high lists, and no urgent recommendation. The dependency remained `VULNERABLE`, but `requiresAction()` was false.
 
@@ -37,7 +37,7 @@ Fix: use a maintained CVSS implementation supporting the required vector version
 
 **3. [P1] “Fixed in” can recommend a downgrade or an unrelated package's version — reproduced in part**
 
-Location: [VulnerabilityService.java:261](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/service/VulnerabilityService.java:261), and the `OsvAffected` DTO near line 328.
+Location: [VulnerabilityService.java:261](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/service/VulnerabilityService.java#L261), and the `OsvAffected` DTO near line 328.
 
 The implementation selects the lexicographically greatest `fixed` event across all affected packages/ranges. A fixture with fixes `1.9.0` and `1.10.0`, queried at vulnerable `1.9.1`, returned **`1.9.0`**. The DTO discards affected-package identity, making correct package filtering impossible. Taking a maximum also does not prove that a candidate fixes every advisory: some advisories have no fix, or contain later reintroduced vulnerable intervals.
 
@@ -45,7 +45,7 @@ Fix: retain package identity and range events, compare Maven versions with the e
 
 **4. [P1] Small recursive properties can exhaust memory — bounded reproduction**
 
-Location: [PropertyInterpolator.java:37](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/pom/PropertyInterpolator.java:37), [EffectivePomResolver.java:593](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/pom/EffectivePomResolver.java:593).
+Location: [PropertyInterpolator.java:37](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/pom/PropertyInterpolator.java#L37), [EffectivePomResolver.java:593](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/pom/EffectivePomResolver.java#L593).
 
 Ten substitution passes bound iteration count, not output size. Interpolating `${a}` with `a=${a}${a}${a}${a}` produced **4,194,304 characters** from a four-character input and sixteen-character property. Higher branching grows exponentially; no destructive out-of-memory test was needed. MCP callers control these values.
 
@@ -55,7 +55,7 @@ Fix: detect recursive property dependencies, enforce expansion/output budgets be
 
 **5. [P1] Imported BOM properties incorrectly inherit overrides from the importer — reproduced**
 
-Location: [EffectivePomResolver.java:538](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/pom/EffectivePomResolver.java:538).
+Location: [EffectivePomResolver.java:538](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/pom/EffectivePomResolver.java#L538).
 
 Fixture: the root POM defines `lib.version=9`; an imported BOM defines `lib.version=1` and manages a dependency using `${lib.version}`. This tool reports **9**; Maven reports **1**. Maven builds the imported BOM's effective model before importing its management entries. A property in the importing POM is not equivalent to overriding a property inherited from a parent.
 
@@ -63,7 +63,7 @@ This behavior is explicitly described as intentional in `CLAUDE.md`, but contrad
 
 **6. [P1] An earlier BOM import wins over a direct management declaration — reproduced**
 
-Location: [EffectivePomResolver.java:457](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/pom/EffectivePomResolver.java:457), especially `processManagementEntry` and `mergeManagedEntry`.
+Location: [EffectivePomResolver.java:457](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/pom/EffectivePomResolver.java#L457), especially `processManagementEntry` and `mergeManagedEntry`.
 
 Fixture: dependency management first imports a BOM managing `review:lib:1`, then explicitly manages `review:lib:2`. This tool reports **1**, while Maven reports **2**. Processing entries in document order with first-entry-wins conflates direct management precedence with ordering between imported BOMs.
 
@@ -71,7 +71,7 @@ Fix: use Maven's management import/merge behavior. First-declared wins applies b
 
 **7. [P2] Coordinate interpolation and active profiles are missing — reproduced**
 
-Location: [EffectivePomResolver.java:354](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/pom/EffectivePomResolver.java:354).
+Location: [EffectivePomResolver.java:354](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/pom/EffectivePomResolver.java#L354).
 
 Management keys and normal dependency output use raw group/artifact/type/classifier values. A dependency using `${lib.group}` failed to match a concrete managed coordinate and was omitted; Maven resolved it. Separately, a dependency declared in an `activeByDefault` profile disappeared with **no warning**, while Maven included it.
 
@@ -79,7 +79,7 @@ Fix: interpolate the complete relevant model before keying dependencies. Supply 
 
 **8. [P2] Configured resilience limits are replaced by defaults — reproduced**
 
-Location: [HttpClientConfig.java:65](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/config/HttpClientConfig.java:65).
+Location: [HttpClientConfig.java:65](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/config/HttpClientConfig.java#L65).
 
 Explicit `ofDefaults()` registry beans bypass the configuration-backed registry creation. A booted application context reported `maven-central` rate limiting at **50 permits per 500 nanoseconds**, rather than YAML's 10 per second; the circuit window was **100**, rather than 10; the retry predicate accepted `IllegalArgumentException`, contrary to the configured exception list.
 
@@ -87,7 +87,7 @@ Fix: let Resilience4j's Boot auto-configuration construct the registries, or exp
 
 **9. [P2] Failure handling bypasses resilience and caches transient failure as data — source-confirmed**
 
-Location: [MavenCentralService.java:227](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/service/MavenCentralService.java:227), [VulnerabilityService.java:130](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/service/VulnerabilityService.java:130).
+Location: [MavenCentralService.java:227](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/service/MavenCentralService.java#L227), [VulnerabilityService.java:130](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/service/VulnerabilityService.java#L130).
 
 Metadata exceptions are converted to empty results inside the annotated method. The private `fetchRepositoryMetadata` annotations cannot intercept those internal calls. Bulk OSV scanning invokes `fetchFromOsv` directly instead of the annotated `scan` method, so its rate limiter/circuit breaker do not apply. That helper also catches failures before a circuit breaker could count them.
 
@@ -97,7 +97,7 @@ Fix: put network operations behind an interceptable boundary, preserve transport
 
 **10. [P2] A deterministic edit modifies unrelated POM sections — reproduced**
 
-Location: [upgrade.py:68](/Users/arvindand/Documents/GitHub/maven-tools-mcp/agents/copilot-maven-tools-agent/scripts/upgrade.py:68), `apply_action` near line 190.
+Location: [upgrade.py:68](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/agents/copilot-maven-tools-agent/scripts/upgrade.py#L68), `apply_action` near line 190.
 
 The updater's global regex ignores `declaredIn=dependency_management` for literal actions. A single root-management update from `1.0` to `1.1` also changed the same dependency's `0.9` version in a legacy profile to `1.1`. Property updates likewise replace every matching tag. Plugin matching ignores owner group ID, and action application never verifies the supplied `current` value.
 
@@ -107,7 +107,7 @@ Fix: identify exact XML locations from server-provided declaration metadata, val
 
 **11. [P1] Development branch pushes publish production `latest` images — source-confirmed**
 
-Location: [docker.yml:4](/Users/arvindand/Documents/GitHub/maven-tools-mcp/.github/workflows/docker.yml:4), [docker.yml:136](/Users/arvindand/Documents/GitHub/maven-tools-mcp/.github/workflows/docker.yml:136).
+Location: [docker.yml:4](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/.github/workflows/docker.yml#L4), [docker.yml:136](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/.github/workflows/docker.yml#L136).
 
 The workflow triggers on `main`, `develop`, and version tags. Image publishing and manifest jobs only exclude pull requests, and always update `latest`, `latest-noc7`, and `latest-http`. Thus a development/SNAPSHOT push can become the version users and the weekly updater pull. Publishing is not gated on the separate test workflow, and the publishing jobs build with tests skipped.
 
@@ -129,10 +129,10 @@ Fix: update the Spring Boot BOM to a verified compatible patch that supplies cor
 
 **Other actionable correctness and maintenance issues**
 
-- **[P2] Truncation precedes semantic filtering.** [MavenCentralService.java:235](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/service/MavenCentralService.java:235) limits `getAllVersions` to 100 before callers choose stable/same-major versions. With more than 100 newer versions, a valid maintained older release line disappears. Cache complete metadata and limit the response after selecting candidates.
-- **[P2] Unknown update types are considered deterministic.** The classifiers in [MavenDependencyTools.java:1655](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/service/MavenDependencyTools.java:1655) accept any update type other than `none` after excluding `major`. `unknown` therefore enters `MINOR_PATCH` actions for nonstandard versions. Explicitly allow `minor` and `patch`; route uncertainty to attention.
-- **[P2] Security totals are fabricated.** [SecuritySummary.java:88](/Users/arvindand/Documents/GitHub/maven-tools-mcp/src/main/java/com/arvindand/mcp/maven/model/security/SecuritySummary.java:88) splits remaining vulnerabilities halfway between medium and low. A single medium finding becomes low; unknown findings become medium/low too. Carry exact counts or report unknown counts.
-- **[P2] Tool-level errors become successful no-op updater runs.** [upgrade.py:573](/Users/arvindand/Documents/GitHub/maven-tools-mcp/agents/copilot-maven-tools-agent/scripts/upgrade.py:573) does not reject the application's `status=error` envelope; absent action arrays become empty lists and exit code 0. The direct client checks MCP `isError`, which does not cover a normally returned `ToolResponse.Error`. Validate both envelopes and return failure for incomplete analysis/unmatched required edits.
+- **[P2] Truncation precedes semantic filtering.** [MavenCentralService.java:235](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/service/MavenCentralService.java#L235) limits `getAllVersions` to 100 before callers choose stable/same-major versions. With more than 100 newer versions, a valid maintained older release line disappears. Cache complete metadata and limit the response after selecting candidates.
+- **[P2] Unknown update types are considered deterministic.** The classifiers in [MavenDependencyTools.java:1655](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/service/MavenDependencyTools.java#L1655) accept any update type other than `none` after excluding `major`. `unknown` therefore enters `MINOR_PATCH` actions for nonstandard versions. Explicitly allow `minor` and `patch`; route uncertainty to attention.
+- **[P2] Security totals are fabricated.** [SecuritySummary.java:88](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/src/main/java/com/arvindand/mcp/maven/model/security/SecuritySummary.java#L88) splits remaining vulnerabilities halfway between medium and low. A single medium finding becomes low; unknown findings become medium/low too. Carry exact counts or report unknown counts.
+- **[P2] Tool-level errors become successful no-op updater runs.** [upgrade.py:573](https://github.com/arvindand/maven-tools-mcp/blob/a817ca5b3324be71ee79c3960b920b4aec329978/agents/copilot-maven-tools-agent/scripts/upgrade.py#L573) does not reject the application's `status=error` envelope; absent action arrays become empty lists and exit code 0. The direct client checks MCP `isError`, which does not cover a normally returned `ToolResponse.Error`. Validate both envelopes and return failure for incomplete analysis/unmatched required edits.
 - **Coordinate validation:** the string parser checks only nonempty group/artifact fields, and POM coordinates bypass it. Reject path separators, traversal segments, query/fragment delimiters, control characters, and unresolved placeholders before URL construction. The configured base URL prevents a simple arbitrary-host substitution; no arbitrary-host SSRF was demonstrated.
 - **License parsing:** replace the order-sensitive `<license>` regex with `MavenXpp3Reader` and `Model.getLicenses()`, already available. Reuse cached POM fetches; resolve inherited licenses where promised. Test reordered fields, comments, CDATA, and inherited licenses.
 - **Release integrity:** pin privileged CI actions and publisher downloads to reviewed immutable revisions/checksums. The current publisher installation downloads and executes the latest release without verifying a checksum. Add a resolved dependency/SBOM audit to CI; the weekly upgrade recommender is not a transitive vulnerability scanner.

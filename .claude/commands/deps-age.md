@@ -19,7 +19,7 @@ Analyze the age and maintenance status of a dependency using maven-tools-mcp.
    - Maintenance level (active/moderate/slow/inactive)
    - Predicted next release timeframe
 
-3. Use `get_version_timeline` to show:
+3. Use `recentReleases` from the `analyze_release_patterns` response to show:
    - Recent version history
    - Release gaps and patterns
    - Stability trends
@@ -33,7 +33,7 @@ Analyze the age and maintenance status of a dependency using maven-tools-mcp.
 
 **Maintenance Activity:**
 
-- Release velocity: X releases per year
+- Release velocity: X releases per month
 - Maintenance level: [active/moderate/slow/inactive]
 - Next release prediction: [timeframe]
 

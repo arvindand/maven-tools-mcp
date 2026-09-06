@@ -12,6 +12,8 @@ For a shorter quick-start, see the main [`README.md`](../README.md).
 | `:latest-noc7` | STDIO | No | Networks where Context7 is blocked or unwanted |
 | `:latest-http` | HTTP | Yes | Streamable HTTP clients and sidecar workflows |
 
+Version-pinned equivalents are `:3.2.2`, `:3.2.2-noc7` and `:3.2.2-http`; all three support Linux AMD64 and ARM64. The JVM `-jvm` image is built locally through the helpers and is not published by the release workflow.
+
 `CONTEXT7_API_KEY` is optional. You can start without it. Pass it only if your environment requires Context7 authentication or you want to avoid anonymous limits.
 
 ## Claude Desktop
@@ -67,8 +69,10 @@ In Copilot Chat, enable Agent mode and make sure the server is enabled in the To
 For HTTP-based MCP clients or sidecar workflows, use the `-http` image:
 
 ```bash
-docker run -p 8080:8080 arvindand/maven-tools-mcp:latest-http
+docker run --rm -p 127.0.0.1:8080:8080 arvindand/maven-tools-mcp:latest-http
 ```
+
+Connect the MCP client to `http://127.0.0.1:8080/mcp`. This is Streamable HTTP; use an MCP client rather than a browser GET to exercise the protocol. The server does not authenticate incoming HTTP clients. For remote use, place it behind an authenticated TLS gateway and restrict direct network access.
 
 Health endpoints:
 
@@ -78,19 +82,15 @@ Health endpoints:
 Optional with Context7 API key:
 
 ```bash
-docker run -p 8080:8080 -e CONTEXT7_API_KEY arvindand/maven-tools-mcp:latest-http
+docker run --rm -p 127.0.0.1:8080:8080 -e CONTEXT7_API_KEY arvindand/maven-tools-mcp:latest-http
 ```
-
-## Native Binary Or JAR
-
-For environments where Docker is restricted, you can run the packaged application directly.
 
 ## Build From Source
 
 **Prerequisites:**
 
 - Java 25
-- Maven 3.9+
+- The checked-in Maven wrapper (`./mvnw`, or `mvnw.cmd` on Windows); a separate Maven installation is not required
 
 ```bash
 git clone https://github.com/arvindand/maven-tools-mcp.git
@@ -104,13 +104,19 @@ For a fuller test build:
 ./mvnw clean verify -Pfull
 ```
 
+The release workflow publishes native Docker images, not standalone native binaries or downloadable JAR assets. For environments without Docker, build the JAR locally. Replace `<version>` below with the project version (`3.2.2` for this release).
+
 Run the JAR:
 
 ```bash
 java -jar target/maven-tools-mcp-<version>.jar
+# Disable Context7 entirely
+java -jar target/maven-tools-mcp-<version>.jar --spring.profiles.active=no-context7
+# Streamable HTTP on localhost
+java -jar target/maven-tools-mcp-<version>.jar --spring.profiles.active=http --server.address=127.0.0.1
 ```
 
-The JAR speaks stdio by default, so it works with the Claude Desktop config below as-is. For the Streamable HTTP transport instead, run it with `--spring.profiles.active=http` and connect to `http://localhost:8080/mcp`.
+The JAR speaks STDIO by default, so it works with the Claude Desktop config below. The HTTP command above exposes the MCP endpoint at `http://127.0.0.1:8080/mcp`.
 
 Example Claude Desktop config for the JAR:
 
@@ -136,18 +142,14 @@ If you prefer Docker Compose for local testing:
       "command": "docker",
       "args": [
         "compose", "-f", "/absolute/path/to/docker-compose.yml",
-        "run", "--rm", "maven-tools-mcp"
+        "run", "--rm", "-T", "maven-tools-mcp"
       ]
     }
   }
 }
 ```
 
-For development-only background usage:
-
-```bash
-docker compose up -d
-```
+The checked-in Compose service uses STDIO. Keep it attached to the MCP client; `docker compose up -d` does not create an HTTP endpoint. For a background HTTP service, use the `latest-http` image as described above.
 
 ## Build Helpers
 
@@ -183,8 +185,7 @@ spring:
 maven:
   central:
     repository-base-url: https://repo1.maven.org/maven2
-    timeout: 10s
-    max-results: 100
+    timeout: 8s
 
 logging:
   level:
@@ -195,11 +196,11 @@ logging:
 
 You can point the server at any Maven-compatible repository (Nexus, Artifactory, GitHub Packages) by overriding the base URL and providing authentication credentials via environment variables:
 
-**Bearer auth** (JFrog Artifactory, GitHub Packages):
+**Bearer auth** (for repositories that accept bearer tokens):
 
 ```bash
 docker run -i --rm \
-  -e MAVEN_CENTRAL_REPOSITORY_BASE_URL=https://maven.pkg.github.com/your-org/your-repo \
+  -e MAVEN_CENTRAL_REPOSITORY_BASE_URL=https://artifactory.example.com/artifactory/maven-virtual \
   -e MAVEN_CENTRAL_AUTH_TYPE=bearer \
   -e MAVEN_CENTRAL_AUTH_TOKEN=your-token \
   arvindand/maven-tools-mcp:latest
@@ -216,7 +217,9 @@ docker run -i --rm \
   arvindand/maven-tools-mcp:latest
 ```
 
-This works with both JVM and native Docker images. Any repository that serves standard `maven-metadata.xml` files is supported.
+The same settings work for the JAR, local JVM image and native images. Version lookups need standard `maven-metadata.xml`; POM analysis also needs accessible parent/BOM POM files. Configure one repository or repository-manager aggregate that can serve the required artifacts.
+
+Credentials stay on the configured origin and are not sent to OSV. Redirects are rejected, so use the final HTTPS repository URL. POM-declared repositories, Maven `settings.xml` mirrors and local parent paths are not used. See [architecture limits](architecture.md#caches-and-input-limits) for response and input bounds.
 
 Context7-specific settings can also be configured through Spring properties:
 
@@ -226,7 +229,7 @@ context7:
   api-key: ${CONTEXT7_API_KEY:}
 ```
 
-If `context7.enabled` is set to `false`, the server skips the raw Context7 tools and the extra documentation-oriented guidance tied to Context7.
+For JVM/JAR runs, use the `no-context7` profile, or set both `CONTEXT7_ENABLED=false` and `SPRING_AI_MCP_CLIENT_ENABLED=false`. The first controls hints/tool exposure; the second disables the outbound MCP client. For native runs, use the separately compiled `-noc7` image.
 
 ## Related Docs
 

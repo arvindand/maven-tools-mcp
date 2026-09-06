@@ -31,11 +31,11 @@ It is a local Python subproject that:
 - uses the Copilot SDK only in major-review mode
 - leaves PR creation to GitHub Actions
 
-That split keeps the agent focused on applying server-decided edits while GitHub Actions handles branch and PR mechanics. The server is the single source of truth for resolution and identifies the owning property for managed declaration actions; the client only performs the bounded text edit.
+That split keeps the agent focused on applying server-decided edits while GitHub Actions handles branch and PR mechanics. Apache Maven on the server is the source of truth for resolution. The client uses Expat to locate XML declarations, checks each current value and owner, and applies byte-span edits without reformatting the POM. Shared-property edits require consistent authorization for all affected references; stale, ambiguous or unsupported edits are reported instead of guessed.
 
 ## Deterministic And Major Modes
 
-Routine `minor_patch` runs use a direct MCP JSON-RPC client. The workflow sends one `recommend_pom_upgrades` call with the raw POM XML, applies every entry in `deterministicActions[]`, and surfaces `needsAttention[]` for the PR description. There is no model session in that path and no per-coordinate fan-out.
+Routine `minor_patch` runs use a direct MCP JSON-RPC client. The workflow sends one `recommend_pom_upgrades` call with the raw POM XML, attempts each entry in `deterministicActions[]` subject to the exact-edit checks, and surfaces `needsAttention[]` for the PR description. There is no model session in that path and no per-coordinate fan-out.
 
 `major` mode is report-only and uses the GitHub Copilot SDK with Maven Tools MCP attached. That keeps model judgement available for breaking-change context, migration planning, and ambiguous ecosystem decisions while making sure the weekly self-update PR remains deterministic.
 
@@ -103,6 +103,7 @@ gh workflow run dependency-agent-self-update.yml -f mode=major -f dry_run=true
 - scheduled runs default to `minor_patch` mode and do not require a Copilot SDK session
 - manual `major` runs are dry-run/report-only by convention and require Copilot Requests permission
 - the workflow keeps a single persistent bot branch instead of creating a new branch every run
+- application-error payloads stop the direct MCP path rather than being interpreted as an empty upgrade plan
 - repository CI remains the source of truth for build verification
 - temporary dependency overrides should be added to the workflow ignore list when they should not be auto-updated
 

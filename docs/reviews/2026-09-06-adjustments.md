@@ -29,7 +29,7 @@ New Java classes and regression tests use the repository's `@author Arvind Menon
 
 ## Limits and follow-ups
 
-GraalVM executables were compiled through Docker buildpacks and tested locally. AMD64 builds and Windows script execution remain CI/platform checks; the local validation host was ARM64 macOS.
+GraalVM executables were compiled through Docker buildpacks and tested locally. The later release validation also built and tested AMD64 variants in CI and checked all six published images locally (AMD64 through emulation). Windows script execution remains unverified. See the [release follow-up](2026-09-06-build-validation.md#release-follow-up).
 
 Maven 4 migration and the full Maven Resolver stack are deferred: Maven 3's model builder and repository metadata components cover the current parent/BOM use case with a smaller dependency surface. Transitive graph resolution, Maven settings/mirrors and explicit activation contexts require separate product work.
 

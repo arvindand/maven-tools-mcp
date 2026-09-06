@@ -9,7 +9,7 @@ Corporate networks often use SSL inspection (MITM proxies) that intercept HTTPS 
 1. **Use the `-noc7` image variant** (simplest - no Context7 integration)
 2. **Build a custom image with your corporate certificates** (includes Context7 with custom certs)
 
-This guide covers option 2.
+This guide covers option 2 for native buildpack images. Disabling Context7 removes only calls to `mcp.context7.com`; Maven repository and optional OSV requests still need network access and trusted certificates.
 
 ## Solution: Custom Certificate Binding
 
@@ -19,7 +19,7 @@ Spring Boot's Maven plugin supports [certificate bindings](https://docs.spring.i
 
 - Docker installed and running
 - Java 25
-- Maven 3.9+
+- The project Maven wrapper (`./mvnw`)
 - Your corporate CA certificate(s) in `.crt` or `.pem` format
 
 ## Step-by-Step Instructions
@@ -61,7 +61,7 @@ certs/
 
 ### 2. Configure Maven Plugin
 
-Edit your `pom.xml` to add certificate bindings to the Spring Boot Maven plugin:
+Add the `bindings` section to the existing Spring Boot Maven plugin configuration; preserve its current environment and registry settings. `-Pnative` already sets the native-image build flag:
 
 ```xml
 <plugin>
@@ -69,9 +69,6 @@ Edit your `pom.xml` to add certificate bindings to the Spring Boot Maven plugin:
     <artifactId>spring-boot-maven-plugin</artifactId>
     <configuration>
         <image>
-            <env>
-                <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
-            </env>
             <bindings>
                 <!-- Bind your certs directory to the buildpack's certificate location -->
                 <binding>${project.basedir}/certs:/platform/bindings/ca-certificates</binding>
@@ -86,14 +83,14 @@ Edit your `pom.xml` to add certificate bindings to the Spring Boot Maven plugin:
 Build your custom native image with certificates and Context7 enabled:
 
 ```bash
-./mvnw clean package -DskipTests
+./mvnw clean package -Pci
 SPRING_PROFILES_ACTIVE=docker ./mvnw -Pnative spring-boot:build-image \
   -Dspring-boot.build-image.imageName=my-maven-tools-mcp:corporate
 ```
 
-**Build time:** 10-15 minutes for native image compilation
+**Build time:** Native compilation takes several minutes per variant and depends on CPU, memory and cached build layers.
 
-**Note:** This builds an image WITH Context7 integration. The custom certificates allow Context7 to work through your corporate SSL inspection. If you don't need Context7 at all, use the pre-built `latest-noc7` image instead (no custom build needed).
+**Note:** This builds a Context7-enabled image. Trusted certificates address certificate validation; they do not bypass a proxy that blocks a domain. If only Context7 is inaccessible, `latest-noc7` is sufficient. If the Maven repository or OSV is also TLS-inspected, those connections still require the corporate CA.
 
 ### 4. Verify Certificate Inclusion
 
@@ -131,15 +128,14 @@ Update your Claude Desktop configuration to use the custom image:
 
 ### 6. Test the Image
 
-Test your custom image:
+Run the repository's STDIO conformance checks against the custom image:
 
 ```bash
-# Quick test - should show MCP initialization
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | \
-  docker run -i --rm my-maven-tools-mcp:corporate
+./mvnw verify -Pintegration -Dit.test=McpStdioConformanceIT \
+  -Dmaven.tools.test.image=my-maven-tools-mcp:corporate
 ```
 
-You should see a JSON-RPC response without SSL errors.
+These exercise protocol framing and Maven calls. In your MCP client, also call `resolve_library_id` followed by `query_docs` to check Context7, and run a security-enabled comparison to check OSV. An `initialize` response alone does not prove that upstream TLS connections work. Unexpected launcher output on STDOUT is a protocol failure even when the process starts.
 
 ## How It Works
 
@@ -150,11 +146,14 @@ You should see a JSON-RPC response without SSL errors.
 
 ## Profiles Explained
 
-- `docker`: Disables Spring Boot banner (required for MCP protocol)
+- Maven `-Pnative`: enables Spring AOT and native buildpacks.
+- Spring `docker`: STDIO profile used while compiling the default native image.
+- Spring `docker,no-context7`: compile the native variant without Context7.
+- Spring `http`: compile the native HTTP variant.
 
 The custom certificate build uses the `docker` profile and **enables Context7 integration**. This is the whole point - your corporate certificates allow Context7 to work through SSL inspection.
 
-If you don't need Context7 at all, skip this custom build and use the pre-built `latest-noc7` image instead.
+Use the pre-built `latest-noc7` image when only Context7 is blocked. If the Maven repository or OSV needs a custom CA, build with the appropriate certificates even when Context7 is disabled.
 
 ## Troubleshooting
 
@@ -174,11 +173,11 @@ If you don't need Context7 at all, skip this custom build and use the pre-built 
 docker pull arvindand/maven-tools-mcp:latest-noc7
 ```
 
-This image has no Context7 integration and doesn't attempt any outbound connections.
+This image makes no Context7 connections. It still contacts the configured Maven repository and OSV when security scanning is requested.
 
 ### Build takes longer than expected
 
-**Normal:** Native image compilation takes 10-15 minutes. This is expected for GraalVM native images.
+**Normal:** Native compilation is CPU- and memory-intensive. Check the build logs for progress; build time varies by architecture, runner size and cache state.
 
 ### Certificate not being picked up
 
@@ -210,12 +209,17 @@ If you don't need Context7 integration, the simplest solution is to use the pre-
 This image:
 
 - ✅ Has no Context7 integration (no outbound connections to `mcp.context7.com`)
-- ✅ Works in environments with SSL inspection
-- ✅ Requires no custom build
+- ✅ Avoids Context7-specific network restrictions
+- ✅ Requires no custom build when the remaining upstream connections already have trusted certificates
 - ✅ Provides all Maven dependency analysis tools
+
+## JVM Builds
+
+The local `-jvm` image uses Jib, so these Paketo bindings do not apply to it. Configure a Java truststore for the JAR/JVM runtime or use an organization-maintained Java base image with the required trust. Validate each required upstream connection rather than assuming that disabling Context7 solves all TLS failures.
 
 ## References
 
 - [Spring Boot Maven Plugin - Build Image](https://docs.spring.io/spring-boot/maven-plugin/build-image.html)
 - [Paketo CA Certificates Buildpack](https://github.com/paketo-buildpacks/ca-certificates)
+- [GraalVM Native Image certificate management](https://www.graalvm.org/jdk25.1/reference-manual/native-image/dynamic-features/CertificateManagement/)
 - [Paketo Service Bindings Specification](https://github.com/buildpacks/spec/blob/main/extensions/bindings.md)

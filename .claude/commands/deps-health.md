@@ -19,7 +19,8 @@ If no dependencies are specified, extract them from the project's build file (`p
 
 **Health Score Overview:**
 
-- Overall project health score (0-100)
+- Per-dependency `healthScore` values (0-100); label any calculated average as client-derived
+- Do not interpret the 3.2.2 `analysis_date` value as a date: it currently contains a health label
 - Dependency age breakdown (fresh/current/aging/stale counts)
 
 **Security Findings:**

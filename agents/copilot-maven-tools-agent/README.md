@@ -12,7 +12,7 @@ This agent is part of the [maven-tools-mcp](https://github.com/arvindand/maven-t
 4. Uses the Copilot SDK only in `major` mode to surface major updates for manual review
 5. Leaves build validation to the repo's normal PR CI
 
-No Python POM parsing — the server is the single source of truth for what "the effective POM" means. PR creation is handled externally by GitHub Actions (`peter-evans/create-pull-request`).
+Apache Maven on the server resolves the effective model. The Python editor uses Expat only to locate exact XML spans and verify current values, owners and shared-property references before preserving-format edits. It rejects stale or ambiguous actions; it does not implement Maven inheritance or BOM resolution. PR creation is handled externally by GitHub Actions (`peter-evans/create-pull-request`).
 
 ## Usage
 
@@ -59,7 +59,7 @@ The weekly self-update workflow (`.github/workflows/dependency-agent-self-update
 1. Starts the Maven Tools MCP HTTP sidecar (`arvindand/maven-tools-mcp:latest-http`)
 2. Runs this agent against the root `pom.xml` with `--http --mode minor_patch`
 3. If `pom.xml` changed, creates or updates a persistent PR branch via `peter-evans/create-pull-request`
-4. CI validates the build on the PR (unit tests + package)
+4. CI validates unit/integration tests, protocol conformance and native/JVM images on the PR
 
 Manual `major` mode runs still start the same MCP sidecar, but route the analysis through the Copilot SDK. That keeps routine minor/patch updates deterministic while reserving model judgement for major-version migration context.
 
@@ -80,11 +80,13 @@ pytest
 
 ```text
 src/
-  analysis/dependency.py   - POM parsing and data models
+  analysis/dependency.py   - Report/major-mode dependency models and parsing
+  analysis/pom_edits.py    - Bounded XML span discovery and verified version edits
   mcp/direct_client.py     - Direct MCP client for deterministic tool calls
   copilot/sdk_client.py    - GitHub Copilot SDK client for major-review mode
 scripts/
   upgrade.py               - Main CLI and upgrade workflow
 tests/
-  test_analysis.py         - Unit tests for POM parsing
+  test_analysis.py         - Dependency model/parser tests
+  test_pom_edits.py        - Exact edits, stale values, shared properties and XML safety
 ```
