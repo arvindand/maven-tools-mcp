@@ -92,7 +92,7 @@ call "mvnw.cmd" clean package -DskipTests
 if errorlevel 1 exit /b 1
 set "PROJECT_VERSION="
 for /f "tokens=*" %%i in ('call "mvnw.cmd" help:evaluate -Dexpression=project.version -q -DforceStdout 2^>nul') do set "PROJECT_VERSION=%%i"
-if not defined PROJECT_VERSION set "PROJECT_VERSION=3.2.1"
+if not defined PROJECT_VERSION set "PROJECT_VERSION=3.2.2"
 exit /b 0
 
 :show_result

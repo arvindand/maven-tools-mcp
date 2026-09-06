@@ -75,7 +75,7 @@ case $choice in
         (cd .. && ./mvnw clean package -DskipTests)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.2")
         
         echo ""
         echo "Step 2: Build Native Docker image WITH Context7..."
@@ -107,7 +107,7 @@ case $choice in
         (cd .. && ./mvnw clean package -DskipTests)
         
         # Keep JVM tags separate from the native variants.
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.2")
         echo "Step 2: Build JVM Docker image..."
         (cd .. && ./mvnw jib:dockerBuild \
           -Dimage=maven-tools-mcp:${PROJECT_VERSION}-jvm)
@@ -142,7 +142,7 @@ case $choice in
         (cd .. && ./mvnw clean package -DskipTests)
         
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.2")
         
         echo ""
         echo "Step 2: Build Native Docker image with no-context7 profile..."
@@ -165,7 +165,7 @@ case $choice in
         (cd .. && ./mvnw clean package -DskipTests)
 
         # Get project version for image name
-        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.1")
+        PROJECT_VERSION=$(cd .. && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null || echo "3.2.2")
 
         echo ""
         echo "Step 2: Build Native Docker image with http profile..."
