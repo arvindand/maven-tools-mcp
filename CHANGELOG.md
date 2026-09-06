@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (Unreleased)
+
+- Align architecture, setup, tool schemas, examples, certificate guidance and agent documentation with the released 3.2.2 behavior; include final release validation and known response-field limitations.
+- Start the 3.2.3-SNAPSHOT development cycle. Published registry metadata and build fallback versions remain at 3.2.2.
+
 ## [3.2.2] - 2026-09-06
 
 ### Added (3.2.2)
