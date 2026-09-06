@@ -35,7 +35,7 @@
     </scm>
     <properties>
         <java.version>25</java.version>
-        <spring-ai.version>2.0.0</spring-ai.version>
+        <spring-ai.version>2.0.1</spring-ai.version>
         <fmt-maven-plugin.version>2.29</fmt-maven-plugin.version>
         <maven-artifact.version>3.9.16</maven-artifact.version>
         <resilience4j.version>2.4.0</resilience4j.version>
@@ -133,7 +133,7 @@
         <dependency>
             <groupId>io.github.senor14</groupId>
             <artifactId>mcp-java-testkit</artifactId>
-            <version>0.3.0</version>
+            <version>0.7.0</version>
             <scope>test</scope>
         </dependency>
 
