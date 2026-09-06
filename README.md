@@ -18,42 +18,21 @@ It is built for developers and agents that need more than a plain version lookup
 
 ## What It Helps With
 
-Use Maven Tools MCP when you want to:
+- **Version checks:** find stable releases and compare upgrades with major/minor/patch context.
+- **Dependency audits:** inspect age, release cadence, known vulnerabilities, and license data.
+- **POM analysis:** resolve declared dependency versions through parents and BOMs without building the project.
+- **Upgrade planning:** get structured edits an agent can validate and apply, with major upgrades, conflicts, and overrides flagged for review.
+- **Documentation:** look up library docs through the optional Context7 tools.
 
-- check the latest stable version of a library without leaving your editor
-- compare your current dependency set against what is available now
-- plan upgrades with major/minor/patch context
-- audit a project for stale, risky, or weakly maintained dependencies
-- give an AI assistant structured, current dependency metadata instead of making it scrape docs or web pages
-- resolve a whole `pom.xml` into per-dependency effective versions — walking the parent chain, applying `<dependencyManagement>`, importing BOMs — without actually building the project (useful in CI pre-checks, dependency-update PRs, multi-module monorepos, and any project where bumping a library means bumping a BOM instead)
-- get a deterministic, applyable upgrade plan that a non-LLM agent can execute in one round-trip, with majors / conflicts / explicit overrides separated out for human or LLM judgement
-
-This project works with any JVM build tool that relies on Maven Central. The inputs are standard Maven coordinates, so the same data applies to Maven, Gradle, SBT, and Mill projects.
-
-## Why It Matters
-
-This project is most useful when a plain package search is not enough.
-
-- it gives MCP clients structured dependency data instead of making them scrape web pages
-- it keeps upgrade checks grounded in current Maven Central metadata
-- it adds stability, age, CVE, and license signals in one place
-- it works well alongside agent workflows that need dependency facts before they edit code or open PRs
-
-## Emerging Use Case
-
-One of the more interesting uses of this project is agent-driven dependency maintenance.
-
-The core server does not open PRs by itself, but it gives an agent enough current dependency context to make safer update decisions than a blind version-bump workflow. The `recommend_pom_upgrades` tool was built for exactly that shape: a non-LLM agent hands it a raw `pom.xml`, validates each `deterministicActions[]` entry against its identified version field or property before applying it, and surfaces `needsAttention[]` for a human or LLM to review separately. Transitively-managed BOMs and declarations without a root-owned edit site are filtered out. The editor reports stale or ambiguous actions instead of guessing.
-
-This repository's own weekly self-update flow is the clearest example: GitHub Actions orchestrates the run, one MCP call returns the action list, the agent applies the diffs, and the result is a reviewable PR. Major-upgrade review is the only path that asks Copilot for judgement and migration framing.
-
-That is also why the dogfooding setup matters beyond this repository. It demonstrates, in a small and concrete way, the same shape that broader GitHub Agentic Workflows can build on: a workflow orchestrator, structured tool output for deterministic edits, an AI worker only where judgement is useful, and a human-reviewed change at the end.
+Coordinate-based tools work with Maven, Gradle, SBT, and Mill projects. The POM analysis and upgrade-planning tools take Maven `pom.xml` files.
 
 ## Quick Start
 
+**Prerequisite:** Docker installed and running. No local Java installation is required. For a Docker-free setup, see [building and running the JAR](docs/setup.md#build-from-source).
+
 ### Claude Desktop
 
-Add this to your Claude Desktop config:
+Add the `maven-tools` entry to your Claude Desktop config (see [config file locations](docs/setup.md#claude-desktop)):
 
 ```json
 {
@@ -68,7 +47,7 @@ Add this to your Claude Desktop config:
 
 ### VS Code + GitHub Copilot
 
-Create `.vscode/mcp.json` in your workspace:
+Add the following server to `.vscode/mcp.json` in your workspace:
 
 ```json
 {
@@ -94,7 +73,7 @@ Create `.vscode/mcp.json` in your workspace:
 
 For fuller setup guidance, including JAR and native-container usage, Docker Compose, and environment notes, see [`docs/setup.md`](docs/setup.md).
 
-## Core Tools
+## Available Tools
 
 The default image exposes 11 MCP tools; `-noc7` exposes the 9 core tools.
 
@@ -109,8 +88,8 @@ The default image exposes 11 MCP tools; `-noc7` exposes the 9 core tools.
 | `analyze_dependency_age` | Classify how old a dependency is |
 | `analyze_release_patterns` | Look at release cadence and maintenance signals |
 | `analyze_project_health` | Run a broader dependency health audit |
-| `analyze_pom_dependencies` | POM-aware: resolve effective versions from raw pom.xml, classify as `EXPLICIT` / `MANAGED` / `EXPLICIT_OVERRIDE`, surface multi-BOM conflicts |
-| `recommend_pom_upgrades` | POM-aware: returns deterministic explicit, BOM, and root dependency-management edits for an agent to apply, plus a `needsAttention` list of majors / conflicts / overrides for human or LLM review |
+| `analyze_pom_dependencies` | Resolve declared dependency versions, identify their source, and surface BOM conflicts |
+| `recommend_pom_upgrades` | Produce actionable POM upgrade recommendations and flag changes needing review |
 
 ### Context7 documentation tools
 
@@ -123,12 +102,14 @@ For parameters, examples, and tool-by-tool notes, see [`docs/tools.md`](docs/too
 
 ### POM-aware dependency analysis
 
-Two tools take a whole POM (raw XML) rather than a single coordinate. Both use Apache Maven Model Builder to walk the parent chain, apply `<dependencyManagement>`, resolve `<scope>import</scope>` BOMs against Maven Central, scope `${project.version}` per-POM so an imported BOM's placeholders resolve to that BOM's version (not the importer's), and accept an optional `sideloadedPoms` bundle for monorepo siblings / unreleased parents.
+Both POM tools use **Apache Maven Model Builder** for parent inheritance, properties, and dependency management, including imported BOMs. They accept raw POM XML and an optional `sideloadedPoms` bundle for unreleased parents or sibling modules.
 
-- **`analyze_pom_dependencies`** — returns each declared dep with effective version + classification (`EXPLICIT` / `MANAGED` / `EXPLICIT_OVERRIDE`) + managing BOM coordinate + any multi-BOM `conflicts`. Use when you want raw analysis ("what does my POM actually resolve to?").
-- **`recommend_pom_upgrades`** — builds on the analyzer and returns two lists: `deterministicActions` (mechanical edits — `explicit_bump` for declared deps, `bom_bump` for user-controllable BOMs, `managed_decl_bump` for direct root dependency-management entries, and `plugin_dep_bump` for direct build/plugin dependencies) and `needsAttention` (majors, multi-BOM conflicts, and explicit overrides). Owned-declaration actions include edit location metadata; plugin actions also identify the owner plugin so a client can edit the correct block directly.
+- **`analyze_pom_dependencies`** returns effective versions, classifies declarations as `EXPLICIT`, `MANAGED`, or `EXPLICIT_OVERRIDE`, and identifies managing BOMs and conflicts.
+- **`recommend_pom_upgrades`** returns `deterministicActions` for mechanical edits and `needsAttention` for major upgrades, BOM conflicts, and explicit overrides. Actions identify the version field or property to edit in the input POM.
 
-Upgrade recommendations are scoped to knobs the caller can actually edit in the input POM: the direct `<parent>`, root-level BOM imports, explicit dependencies, and direct non-import dependency-management declarations with a literal version or an exact root-owned property. Transitively-imported BOMs, inherited properties, and compound property expressions are silently skipped because they lack an unambiguous edit site in the input file.
+Recommendations cover editable parent/BOM versions, explicit dependencies, root dependency-management entries, and direct build/plugin dependencies. Declarations without an unambiguous edit location in the input POM are skipped. The server returns recommendations; the client or agent validates and applies them.
+
+Analysis covers declared dependencies, not the full transitive dependency graph. Profile activation is limited to active-by-default profiles. See [POM analysis details and limits](docs/tools.md#pom-aware-analysis).
 
 ## Example
 
@@ -136,7 +117,7 @@ A common prompt in Copilot or Claude is:
 
 > Check all latest versions of the dependencies in my `pom.xml` and call out anything risky.
 
-A good response from this server gives the client structured information such as:
+The client can combine tool results to report:
 
 - current version vs latest version
 - whether the upgrade is major, minor, or patch
@@ -144,29 +125,21 @@ A good response from this server gives the client structured information such as
 - whether the dependency looks fresh, aging, or stale
 - whether there are known CVEs or license concerns worth noticing
 
-That keeps the workflow grounded in live repository data instead of guesswork.
+For broader questions like "which library should I choose?", combine Maven metadata with Context7 documentation and client-side web search for ecosystem context.
 
-For broader questions like "which library should I choose?", the useful pattern is: let the model use Maven Tools MCP for current coordinates, version/stability signals, and upgrade context, then combine that with Context7 docs (available through the default image's exposed tools) and, when needed, client-side web search for ecosystem context that this server does not provide on its own.
-
-For more prompt examples, see [`docs/examples.md`](docs/examples.md). There is also a [`maven-tools` skill in the separate `agent-skills` repository](https://github.com/arvindand/agent-skills/tree/main/skills/maven-tools) that gives agents general guidance for using Maven Tools MCP effectively across varied use cases, while the local prompt examples and dogfooding agent define more specific paths.
+See [more prompt examples](docs/examples.md) or the [`maven-tools` agent skill](https://github.com/arvindand/agent-skills/tree/main/skills/maven-tools) for guidance on choosing and combining tools.
 
 ## Dogfooding
 
-This repository runs a weekly self-update workflow that uses a local Python agent against its own `pom.xml` and opens a reviewable PR for safe dependency updates. The agent hands the raw POM to `recommend_pom_upgrades` and applies the returned `deterministicActions[]` directly — no per-coordinate fan-out. A bounded XML editor locates exact declarations and checks current versions while preserving formatting; Maven model resolution stays on the server. Manual major-review runs are the only mode that routes through the GitHub Copilot SDK.
+This repository uses its own tools in a weekly dependency-update workflow. A Python agent sends the POM to `recommend_pom_upgrades`, validates and applies minor/patch actions, and opens a PR for review. Its XML editor checks current versions and preserves formatting. Manual major-upgrade reviews use the GitHub Copilot SDK; routine updates do not require an LLM.
 
-That flow is documented in [`docs/dogfooding.md`](docs/dogfooding.md), including:
-
-- the GitHub Actions workflow
-- the agent subproject under `agents/copilot-maven-tools-agent/`
-- direct MCP minor/patch mode vs Copilot-backed major-review mode
-- required `COPILOT_BOT_PAT` setup for PR creation and major-review runs
-- manual trigger instructions
+See [the dogfooding guide](docs/dogfooding.md) for the agent, GitHub Actions workflow, credentials, and manual triggers.
 
 ## FAQ
 
-- **Does this replace Renovate or Dependabot?** For Maven Central-based JVM projects, it can. Maven Tools MCP is the dependency intelligence layer, and the replacement behavior comes from the agent workflow built on top of it. In this repository, the weekly self-update workflow already replaces routine blind update PRs for safe minor and patch upgrades through direct MCP calls, while leaving major upgrades for Copilot-assisted manual review.
-- **Does it work offline?** Not fully. Uncached queries need network access to Maven Central.
-- **Does it work for Gradle or other JVM build tools?** Yes, as long as the project depends on libraries that are resolved through Maven Central coordinates.
+- **Does this replace Renovate or Dependabot?** The server provides dependency analysis and upgrade recommendations. File edits, testing, scheduling, and PR creation require a separate agent or workflow. The [included agent](docs/dogfooding.md) demonstrates this for Maven POM updates.
+- **Does it work offline?** Not fully. Uncached metadata queries need access to Maven Central or your configured repository. Vulnerability checks and Context7 documentation also use external services.
+- **Does it parse Gradle, SBT, or Mill build files?** No. Use their dependencies' Maven coordinates with the coordinate-based tools; whole-file analysis accepts Maven POM XML.
 
 For a few more usage notes, see the FAQ section in [`docs/examples.md`](docs/examples.md#faq).
 
