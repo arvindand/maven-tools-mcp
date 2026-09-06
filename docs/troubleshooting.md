@@ -104,7 +104,7 @@ Build the JVM image with `./build/build-docker.sh 3` (Jib). A direct JVM `spring
 
 ## Docker Build Reports "username must not be null"
 
-In the 3.2.2 validation environment, Spring Boot's build-image plugin failed when Docker configuration contained an empty Docker Hub authentication entry. Inspect the selected Docker context and authentication configuration. For anonymous builds of public images, an isolated temporary `DOCKER_CONFIG` with `{"auths":{}}` and an explicit `DOCKER_HOST` was verified without changing the user's credentials. Keep the normal authenticated configuration for private pulls and publishing; see the [build validation record](reviews/2026-09-06-build-validation.md#environment-issue).
+An empty Docker Hub authentication entry can cause this error in Spring Boot's build-image plugin. Inspect the selected Docker context and authentication configuration. For anonymous builds of public images, use an isolated temporary `DOCKER_CONFIG` with `{"auths":{}}` and an explicit `DOCKER_HOST`. Keep the normal authenticated configuration for private pulls and publishing.
 
 ## Related Docs
 
