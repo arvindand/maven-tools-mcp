@@ -92,6 +92,8 @@ docker run --rm -p 127.0.0.1:8080:8080 -e CONTEXT7_API_KEY arvindand/maven-tools
 - Java 25
 - The checked-in Maven wrapper (`./mvnw`, or `mvnw.cmd` on Windows); a separate Maven installation is not required
 
+These commands build `main` (`3.2.4-SNAPSHOT`). To build the current release instead, run `git checkout v3.2.3` after `cd maven-tools-mcp` and before the Maven build.
+
 ```bash
 git clone https://github.com/arvindand/maven-tools-mcp.git
 cd maven-tools-mcp
@@ -104,7 +106,7 @@ For a fuller test build:
 ./mvnw clean verify -Pfull
 ```
 
-The release workflow publishes native Docker images, not standalone native binaries or downloadable JAR assets. For environments without Docker, build the JAR locally. Replace `<version>` below with the project version (`3.2.3` for this release).
+The release workflow publishes native Docker images, not standalone native binaries or downloadable JAR assets. For environments without Docker, build the JAR locally. Replace `<version>` below with the project version: `3.2.4-SNAPSHOT` on `main`, or `3.2.3` at the `v3.2.3` tag.
 
 Run the JAR:
 

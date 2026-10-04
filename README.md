@@ -5,7 +5,7 @@
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-2.0.1-green.svg)](https://spring.io/projects/spring-ai)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-blue.svg)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/arvindand/maven-tools-mcp)](https://github.com/arvindand/maven-tools-mcp/releases)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/arvindand/maven-tools-mcp)](https://github.com/arvindand/maven-tools-mcp/releases/latest)
 [![Docker](https://img.shields.io/badge/Docker-Multi--Arch-blue.svg)](https://hub.docker.com/r/arvindand/maven-tools-mcp)
 [![Docker Pulls](https://img.shields.io/docker/pulls/arvindand/maven-tools-mcp)](https://hub.docker.com/r/arvindand/maven-tools-mcp)
 [![GitHub stars](https://img.shields.io/github/stars/arvindand/maven-tools-mcp?style=social)](https://github.com/arvindand/maven-tools-mcp/stargazers)
@@ -68,6 +68,8 @@ Add the following server to `.vscode/mcp.json` in your workspace:
 | `:latest` | STDIO | Yes | Default desktop MCP usage |
 | `:latest-noc7` | STDIO | No | Networks where Context7 is blocked or not wanted |
 | `:latest-http` | HTTP | Yes | Streamable HTTP clients and sidecar workflows |
+
+The current release is [v3.2.3](https://github.com/arvindand/maven-tools-mcp/releases/tag/v3.2.3). For version-pinned setups, use `:3.2.3`, `:3.2.3-noc7` or `:3.2.3-http`; each supports Linux AMD64 and ARM64.
 
 `CONTEXT7_API_KEY` is optional. Most setups can start without it. If your environment requires Context7 auth, or you want to avoid anonymous limits, pass it through Docker with `-e CONTEXT7_API_KEY`.
 
@@ -167,6 +169,8 @@ Guy Chauliac), scoped here to declared-dep resolution. See [`NOTICE`](NOTICE).
 ## Contributing
 
 If you want to build or test locally, start with [`docs/setup.md`](docs/setup.md#build-from-source) and the helper scripts in [`build/`](build/).
+
+The `main` branch is on `3.2.4-SNAPSHOT`. Check out `v3.2.3` to build the current release from source.
 
 Project history and release notes live in [`CHANGELOG.md`](CHANGELOG.md).
 
