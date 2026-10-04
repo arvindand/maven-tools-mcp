@@ -9,7 +9,6 @@ with automatic tool approval.
 
 from __future__ import annotations
 
-import asyncio
 import copy
 import json
 import logging
@@ -43,7 +42,7 @@ class CopilotSDKClient:
             "command": "docker",
             "args": ["run", "-i", "--rm", "arvindand/maven-tools-mcp:latest"],
             "tools": ["*"],
-            "timeout": 60000
+            "timeout": 60000,
         }
     }
 
@@ -53,7 +52,7 @@ class CopilotSDKClient:
             "type": "http",
             "url": "http://localhost:8080/mcp",
             "tools": ["*"],
-            "timeout": 60000
+            "timeout": 60000,
         }
     }
 
@@ -86,24 +85,25 @@ class CopilotSDKClient:
     async def start(self) -> None:
         """Start the Copilot client."""
         try:
-            from copilot import CopilotClient, PermissionHandler, SubprocessConfig
+            from copilot import CopilotClient, PermissionHandler
         except ImportError:
             raise ImportError(
                 "github-copilot-sdk not installed. Run: pip install github-copilot-sdk"
             )
 
-        # Build subprocess config for the Copilot CLI (SDK 0.2.0+ dataclass API)
+        # SDK 1.x configures the managed runtime through keyword arguments.
         token = get_github_token()
         if not token:
-            logger.warning("No GitHub token found in COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN")
+            logger.warning(
+                "No GitHub token found in COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN"
+            )
 
-        subprocess_config = SubprocessConfig(
-            cwd=self.working_dir,
+        self._client = CopilotClient(
+            working_directory=self.working_dir,
             log_level="warning",
             github_token=token,
         )
 
-        self._client = CopilotClient(subprocess_config)
         await self._client.start()
         logger.info("Copilot SDK client started")
 
@@ -123,25 +123,29 @@ class CopilotSDKClient:
         self._session = await self._client.create_session(
             on_permission_request=PermissionHandler.approve_all,
             model=self.model,
-            streaming=True,
+            streaming=False,
             mcp_servers=mcp_servers,
         )
         logger.info(f"Session created with model {self.model}")
 
     async def stop(self) -> None:
         """Stop the Copilot client."""
-        if self._session:
-            try:
-                await self._session.destroy()
-            except (RuntimeError, OSError) as e:
-                logger.debug(f"Session destroy error: {e}")
-            self._session = None
-        if self._client:
-            try:
-                await self._client.stop()
-            except (RuntimeError, OSError) as e:
-                logger.debug(f"Client stop error: {e}")
-            self._client = None
+        session, self._session = self._session, None
+        client, self._client = self._client, None
+        try:
+            if session:
+                try:
+                    await session.disconnect()
+                except Exception as error:
+                    logger.debug("Session disconnect error: %s", error)
+        finally:
+            if client:
+                try:
+                    await client.stop()
+                except Exception as error:
+                    # SDK1.x may report cleanup failures as ExceptionGroup.
+                    # Cleanup must not replace a completed review or its error.
+                    logger.debug("Client stop error: %s", error)
         logger.info("Copilot SDK client stopped")
 
     async def __aenter__(self) -> "CopilotSDKClient":
@@ -167,24 +171,19 @@ class CopilotSDKClient:
         if not self._session:
             raise RuntimeError("Session not started")
 
-        result_parts: list[str] = []
-        done = asyncio.Event()
-        error_holder: dict[str, Optional[str]] = {"error": None}
-
-        handler = _create_event_handler(result_parts, done, error_holder)
-        self._session.on(handler)
-
         try:
-            await self._session.send(prompt)
-            async with asyncio.timeout(timeout):
-                await done.wait()
-        except (TimeoutError, asyncio.TimeoutError):
-            raise RuntimeError(f"Timeout waiting for response after {timeout}s")
+            response = await self._session.send_and_wait(prompt, timeout=timeout)
+        except TimeoutError as error:
+            raise RuntimeError(f"Timeout waiting for response after {timeout}s") from error
+        except Exception as error:
+            raise RuntimeError(f"Copilot error: {error}") from error
 
-        if error_holder["error"]:
-            raise RuntimeError(f"Copilot error: {error_holder['error']}")
+        if response is None:
+            raise RuntimeError("Copilot session became idle without an assistant response")
 
-        return "".join(result_parts)
+        # send_and_wait returns the final root assistant message, excluding tool
+        # progress, streaming deltas and responses from child agents.
+        return response.data.content
 
     async def analyze_dependencies(self, pom_content: str) -> dict[str, Any]:
         """
@@ -262,45 +261,6 @@ Return ONLY the version number, nothing else."""
         if versions:
             return versions[-1]
         return response.strip()
-
-def _get_event_type(event: Any) -> str:
-    """Extract event type string from event object."""
-    return event.type.value if hasattr(event.type, "value") else str(event.type)
-
-
-def _create_event_handler(
-    result_parts: list[str],
-    done: asyncio.Event,
-    error_holder: dict[str, Optional[str]],
-) -> Any:
-    """Create an event handler for SDK session events."""
-
-    def on_event(event: Any) -> None:
-        event_type = _get_event_type(event)
-
-        if event_type == "assistant.message":
-            _handle_message_event(event, result_parts)
-        elif event_type == "assistant.message_delta":
-            _handle_delta_event(event, result_parts)
-        elif event_type == "session.idle":
-            done.set()
-        elif event_type == "error":
-            error_holder["error"] = str(event.data) if hasattr(event, "data") else "Unknown error"
-            done.set()
-
-    return on_event
-
-
-def _handle_message_event(event: Any, result_parts: list[str]) -> None:
-    """Handle assistant.message event."""
-    if hasattr(event.data, "content") and event.data.content:
-        result_parts.append(event.data.content)
-
-
-def _handle_delta_event(event: Any, result_parts: list[str]) -> None:
-    """Handle assistant.message_delta event."""
-    if hasattr(event.data, "delta_content") and event.data.delta_content:
-        result_parts.append(event.data.delta_content)
 
 
 def _extract_json_object(response: str) -> dict[str, Any]:

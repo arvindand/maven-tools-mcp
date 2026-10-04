@@ -168,15 +168,17 @@ public class MavenDependencyTools {
    * Mill).
    *
    * @param dependency the dependency coordinate (groupId:artifactId)
-   * @param stabilityFilter controls version filtering: ALL (default), STABLE_ONLY, or PREFER_STABLE
+   * @param stabilityFilter controls version filtering: ALL, STABLE_ONLY, or PREFER_STABLE (default)
    * @return JSON response with latest versions by type
    */
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
           "Single dependency. Returns newest versions by type (stable/rc/beta/alpha/milestone). Set"
-              + " stabilityFilter to ALL (default), STABLE_ONLY, or PREFER_STABLE. Use when asked:"
-              + " 'what's the latest version of X?' Works with all JVM build tools.")
+              + " stabilityFilter to ALL, STABLE_ONLY, or PREFER_STABLE (default). Use when asked:"
+              + " 'what's the latest version of X?' Results span platform variants; for an"
+              + " existing dependency use compare_dependency_versions to preserve its variant."
+              + " Works with all JVM build tools.")
   public ToolResponse get_latest_version(
       @ToolParam(
               description =
@@ -963,9 +965,7 @@ public class MavenDependencyTools {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
       String currentVersion = coordinate.version();
       String latestVersion =
-          stabilityFilter == StabilityFilter.STABLE_ONLY
-              ? getLatestStableVersion(coordinate)
-              : mavenCentralService.getLatestVersion(coordinate);
+          getLatestCompatibleVersion(coordinate, stabilityFilter == StabilityFilter.STABLE_ONLY);
 
       if (latestVersion == null) {
         return VersionComparison.DependencyComparisonResult.notFound(
@@ -1038,6 +1038,7 @@ public class MavenDependencyTools {
     return mavenCentralService.getAllVersions(coordinate).stream()
         .takeWhile(candidate -> !candidate.equals(currentVersion))
         .filter(versionComparator::isStableVersion)
+        .filter(candidate -> versionComparator.preservesReleaseVariant(currentVersion, candidate))
         .filter(candidate -> currentMajor.equals(extractMajorVersion(candidate)))
         .filter(candidate -> versionComparator.compare(currentVersion, candidate) < 0)
         .map(
@@ -1162,10 +1163,19 @@ public class MavenDependencyTools {
   }
 
   private String getLatestStableVersion(MavenCoordinate coordinate) throws MavenCentralException {
-    List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
-    List<String> stableVersions =
-        allVersions.stream().filter(versionComparator::isStableVersion).toList();
-    return stableVersions.isEmpty() ? null : stableVersions.get(0);
+    return getLatestCompatibleVersion(coordinate, true);
+  }
+
+  private String getLatestCompatibleVersion(MavenCoordinate coordinate, boolean stableOnly)
+      throws MavenCentralException {
+    return mavenCentralService.getAllVersions(coordinate).stream()
+        .filter(candidate -> !stableOnly || versionComparator.isStableVersion(candidate))
+        .filter(
+            candidate ->
+                coordinate.version() == null
+                    || versionComparator.preservesReleaseVariant(coordinate.version(), candidate))
+        .findFirst()
+        .orElse(null);
   }
 
   private ReleasePatternAnalysis analyzeReleasePattern(
@@ -1760,7 +1770,8 @@ public class MavenDependencyTools {
     }
 
     String latestOnCentral =
-        safeGetLatestStable(MavenCoordinate.of(dep.groupId(), dep.artifactId(), null));
+        safeGetLatestStable(
+            MavenCoordinate.of(dep.groupId(), dep.artifactId(), dep.effectiveVersion()));
 
     if (!dep.conflicts().isEmpty() && dep.source() != Source.EXPLICIT_OVERRIDE) {
       // MANAGED dep with multiple BOMs disagreeing — surface the conflict.
@@ -1846,6 +1857,7 @@ public class MavenDependencyTools {
     try {
       return mavenCentralService.getAllVersions(coordinate).stream()
           .filter(versionComparator::isStableVersion)
+          .filter(candidate -> versionComparator.preservesReleaseVariant(current, candidate))
           .filter(candidate -> currentMajor.equals(extractMajorVersion(candidate)))
           .filter(candidate -> versionComparator.compare(current, candidate) <= 0)
           .findFirst()

@@ -28,6 +28,13 @@ Apache Maven on the server resolves the effective model. The Python editor uses 
 pip install .
 ```
 
+The agent requires Python 3.12 or later and uses Copilot SDK 1.0.16. The SDK
+downloads and verifies its matching runtime on first managed use; an existing
+runtime can be selected with `COPILOT_CLI_PATH`. Only `--mode major` starts a
+Copilot session. Dependency checks in the other modes call MCP directly.
+Major-review mode waits for the final assistant reply rather than concatenating
+streaming events. Session cleanup disconnects the session and stops its runtime.
+
 ### Run
 
 ```bash

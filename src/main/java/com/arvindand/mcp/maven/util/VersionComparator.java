@@ -3,8 +3,10 @@ package com.arvindand.mcp.maven.util;
 import com.arvindand.mcp.maven.model.VersionInfo.VersionType;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.springframework.stereotype.Component;
 
@@ -27,6 +29,8 @@ public final class VersionComparator implements Comparator<String> {
   private static final Set<String> BETA_QUALIFIERS = Set.of(BETA, "b");
   private static final Set<String> MILESTONE_QUALIFIERS = Set.of(MILESTONE, "m");
   private static final Set<String> RC_QUALIFIERS = Set.of("rc", "cr");
+  // Guava flavors and JDBC Java-target variants are compatibility choices, not release stages.
+  private static final Pattern RELEASE_VARIANT = Pattern.compile("android|jre(?:[1-9][0-9]*)?");
 
   /**
    * Compares two version strings using Maven's ComparableVersion.
@@ -71,6 +75,9 @@ public final class VersionComparator implements Comparator<String> {
       case INVALID -> UNKNOWN;
       case EQUAL -> "none";
       case VALID -> {
+        if (!preservesReleaseVariant(currentVersion, latestVersion)) {
+          yield UNKNOWN;
+        }
         int comparison = compare(currentVersion, latestVersion);
         if (comparison >= 0) {
           yield comparison == 0 ? "none" : UNKNOWN;
@@ -90,7 +97,7 @@ public final class VersionComparator implements Comparator<String> {
   public boolean isStableVersion(String version) {
     if (version == null) return false;
 
-    return switch (classifyQualifier(extractQualifier(version))) {
+    return switch (classifyQualifier(analyzeQualifier(version).releaseQualifier())) {
       case STABLE -> true;
       case PRE_RELEASE -> false;
     };
@@ -105,10 +112,28 @@ public final class VersionComparator implements Comparator<String> {
   public VersionType getVersionType(String version) {
     if (version == null) return VersionType.STABLE;
 
-    return switch (classifyQualifier(extractQualifier(version))) {
+    String qualifier = analyzeQualifier(version).releaseQualifier();
+    return switch (classifyQualifier(qualifier)) {
       case STABLE -> VersionType.STABLE;
-      case PRE_RELEASE -> determinePreReleaseVersionType(extractQualifier(version));
+      case PRE_RELEASE -> determinePreReleaseVersionType(qualifier);
     };
+  }
+
+  /**
+   * Returns a supported platform variant ({@code android}, {@code jre}, or {@code jreN}), or null
+   * when none is recognized. Other qualifiers remain subject to conservative stability handling.
+   */
+  public String getReleaseVariant(String version) {
+    return version == null ? null : analyzeQualifier(version).variant();
+  }
+
+  /**
+   * Checks that an upgrade preserves a recognized current platform variant. An unrecognized or
+   * unsuffixed current version imposes no variant constraint.
+   */
+  public boolean preservesReleaseVariant(String currentVersion, String candidateVersion) {
+    String currentVariant = getReleaseVariant(currentVersion);
+    return currentVariant == null || currentVariant.equals(getReleaseVariant(candidateVersion));
   }
 
   /**
@@ -141,15 +166,17 @@ public final class VersionComparator implements Comparator<String> {
         qualifierSeparatorIndex != -1 ? trimmed.substring(0, qualifierSeparatorIndex) : trimmed;
     String qualifier =
         qualifierSeparatorIndex != -1
-            ? trimmed.substring(qualifierSeparatorIndex + 1).toLowerCase()
+            ? trimmed.substring(qualifierSeparatorIndex + 1).toLowerCase(Locale.ROOT)
             : "";
 
     // Parse numeric components (major.minor.patch.etc)
     String[] segments = numericPart.split("\\.");
-    int numericLength = findNumericSegmentLength(segments, qualifier.isEmpty());
-    if (numericLength < segments.length && qualifier.isEmpty()) {
-      qualifier = String.join(".", Arrays.copyOfRange(segments, numericLength, segments.length));
-      qualifier = qualifier.toLowerCase();
+    int numericLength = findNumericSegmentLength(segments);
+    if (numericLength < segments.length) {
+      String dotQualifier =
+          String.join(".", Arrays.copyOfRange(segments, numericLength, segments.length));
+      qualifier =
+          (dotQualifier + (qualifier.isEmpty() ? "" : "-" + qualifier)).toLowerCase(Locale.ROOT);
     }
     int[] numericParts = new int[numericLength];
 
@@ -164,11 +191,7 @@ public final class VersionComparator implements Comparator<String> {
     return new VersionComponents(numericParts, qualifier);
   }
 
-  private int findNumericSegmentLength(String[] segments, boolean detectDotQualifier) {
-    if (!detectDotQualifier) {
-      return segments.length;
-    }
-
+  private int findNumericSegmentLength(String[] segments) {
     for (int i = 0; i < segments.length; i++) {
       if (!isNumericSegment(segments[i])) {
         return i;
@@ -202,8 +225,41 @@ public final class VersionComparator implements Comparator<String> {
     return Math.min(hyphenIndex, underscoreIndex);
   }
 
-  private String extractQualifier(String version) {
-    return parseVersion(version).qualifier();
+  private QualifierComponents analyzeQualifier(String version) {
+    VersionComponents components = parseVersion(version);
+    return components.numericParts().length == 0
+        ? new QualifierComponents(null, components.qualifier())
+        : parseQualifier(components.qualifier());
+  }
+
+  private QualifierComponents parseQualifier(String qualifier) {
+    String[] tokens = qualifier.split("[-._]", -1);
+    String variant = null;
+    int variantIndex = -1;
+    for (int i = 0; i < tokens.length; i++) {
+      if (RELEASE_VARIANT.matcher(tokens[i]).matches()) {
+        // A compound platform selection is unsupported; do not accidentally mark it stable.
+        if (variant != null) {
+          return new QualifierComponents(null, qualifier);
+        }
+        variant = tokens[i];
+        variantIndex = i;
+      }
+    }
+    if (variant == null) {
+      return new QualifierComponents(null, qualifier);
+    }
+    String releaseQualifier = String.join("-", Arrays.copyOfRange(tokens, 0, variantIndex));
+    String afterVariant =
+        String.join("-", Arrays.copyOfRange(tokens, variantIndex + 1, tokens.length));
+    if (!afterVariant.isEmpty()) {
+      releaseQualifier += (releaseQualifier.isEmpty() ? "" : "-") + afterVariant;
+    }
+    // Empty tokens mean malformed qualifiers, rather than a bare supported variant.
+    if (tokens.length > 1 && Arrays.stream(tokens).anyMatch(String::isEmpty)) {
+      return new QualifierComponents(variant, qualifier);
+    }
+    return new QualifierComponents(variant, releaseQualifier);
   }
 
   private ValidationResult validateVersions(String current, String latest) {
@@ -220,7 +276,7 @@ public final class VersionComparator implements Comparator<String> {
     String lower = qualifier.toLowerCase();
 
     // Treat service packs as stable (e.g., 1.0.0-SP1)
-    if (lower.startsWith("sp")) {
+    if (lower.matches("sp[0-9]*")) {
       return QualifierType.STABLE;
     }
 
@@ -281,7 +337,9 @@ public final class VersionComparator implements Comparator<String> {
 
     if (sameNumericVersion) {
       // If numeric versions are the same, check qualifiers
-      return determineQualifierUpdate(current.qualifier(), latest.qualifier());
+      return determineQualifierUpdate(
+          parseQualifier(current.qualifier()).releaseQualifier(),
+          parseQualifier(latest.qualifier()).releaseQualifier());
     }
 
     // Compare numeric parts to determine update type
@@ -410,4 +468,6 @@ public final class VersionComparator implements Comparator<String> {
     STABLE,
     PRE_RELEASE
   }
+
+  private record QualifierComponents(String variant, String releaseQualifier) {}
 }

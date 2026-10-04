@@ -97,6 +97,134 @@ class RecommendPomUpgradesToolTest {
   }
 
   @Test
+  void preservesPlatformVariantInEveryPomEditKind() {
+    EffectivePomResolver resolver = mock(EffectivePomResolver.class);
+    MavenCentralService maven = mock(MavenCentralService.class);
+    when(resolver.resolve("<pom/>"))
+        .thenReturn(
+            new EffectivePomResult(
+                List.of(explicit("com.google.guava", "guava", "1.0.0-android")),
+                List.of(MavenCoordinate.of("com.example", "parent", "1.0.0-android")),
+                List.of(MavenCoordinate.of("com.example", "bom", "1.0.0-android")),
+                List.of(ManagedDeclaration.literal("com.example", "managed", "1.0.0-android")),
+                List.of(
+                    PluginDependencyDeclaration.property(
+                        "com.example",
+                        "plugin-lib",
+                        "1.0.0-android",
+                        "plugin-lib.version",
+                        "com.example",
+                        "plugin",
+                        PluginDependencyDeclaration.BUILD_PLUGINS)),
+                List.of()));
+    when(maven.getAllVersions(any()))
+        .thenReturn(
+            List.of("2.0.0-jre", "1.2.0-android-SNAPSHOT", "1.1.0-android", "1.0.0-android"));
+
+    PomUpgradeRecommendation rec =
+        getSuccessData(
+            buildTools(resolver, maven)
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null));
+
+    assertThat(rec.deterministicActions())
+        .hasSize(5)
+        .allSatisfy(
+            action -> {
+              assertThat(action.current()).isEqualTo("1.0.0-android");
+              assertThat(action.target()).isEqualTo("1.1.0-android");
+              assertThat(action.updateType()).isEqualTo("minor");
+            })
+        .extracting(UpgradeAction::kind)
+        .containsExactlyInAnyOrder(
+            UpgradeAction.KIND_BOM_BUMP,
+            UpgradeAction.KIND_BOM_BUMP,
+            UpgradeAction.KIND_MANAGED_DECL_BUMP,
+            UpgradeAction.KIND_PLUGIN_DEP_BUMP,
+            UpgradeAction.KIND_EXPLICIT_BUMP);
+    assertThat(rec.needsAttention()).isEmpty();
+  }
+
+  @Test
+  void majorUpgradeAndSameMajorFallbackPreserveJdbcJavaTarget() {
+    EffectivePomResolver resolver = mock(EffectivePomResolver.class);
+    MavenCentralService maven = mock(MavenCentralService.class);
+    when(resolver.resolve("<pom/>"))
+        .thenReturn(
+            new EffectivePomResult(
+                List.of(explicit("com.microsoft.sqlserver", "mssql-jdbc", "12.8.1.jre11")),
+                List.of(),
+                List.of(),
+                List.of()));
+    when(maven.getAllVersions(any()))
+        .thenReturn(
+            List.of(
+                "13.0.0.jre17", "13.0.0.jre11", "12.9.0.jre17", "12.8.2.jre11", "12.8.1.jre11"));
+
+    PomUpgradeRecommendation rec =
+        getSuccessData(
+            buildTools(resolver, maven)
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null));
+
+    assertThat(rec.deterministicActions()).isEmpty();
+    assertThat(rec.needsAttention())
+        .singleElement()
+        .isInstanceOfSatisfying(
+            NeedsAttention.MajorAvailable.class,
+            entry -> {
+              assertThat(entry.latestStable()).isEqualTo("13.0.0.jre11");
+              assertThat(entry.currentMajorLatest()).isEqualTo("12.8.2.jre11");
+            });
+  }
+
+  @Test
+  void hasNoActionWhenOnlyOtherFlavorHasAnUpdate() {
+    EffectivePomResolver resolver = mock(EffectivePomResolver.class);
+    MavenCentralService maven = mock(MavenCentralService.class);
+    when(resolver.resolve("<pom/>"))
+        .thenReturn(
+            new EffectivePomResult(
+                List.of(explicit("com.google.guava", "guava", "33.7.1-android")),
+                List.of(),
+                List.of(),
+                List.of()));
+    when(maven.getAllVersions(any())).thenReturn(List.of("35.0.0", "34.0.0-jre", "33.7.1-android"));
+
+    PomUpgradeRecommendation rec =
+        getSuccessData(
+            buildTools(resolver, maven).recommend_pom_upgrades("<pom/>", UpgradeMode.ALL, null));
+
+    assertThat(rec.deterministicActions()).isEmpty();
+    assertThat(rec.needsAttention()).isEmpty();
+  }
+
+  @Test
+  void unsuffixedCurrentVersionPermitsUpgradeToNewPlatformVariant() {
+    EffectivePomResolver resolver = mock(EffectivePomResolver.class);
+    MavenCentralService maven = mock(MavenCentralService.class);
+    when(resolver.resolve("<pom/>"))
+        .thenReturn(
+            new EffectivePomResult(
+                List.of(explicit("com.google.guava", "guava", "23.0")),
+                List.of(),
+                List.of(),
+                List.of()));
+    when(maven.getAllVersions(any())).thenReturn(List.of("33.7.1-jre", "33.7.1-android", "23.0"));
+
+    PomUpgradeRecommendation rec =
+        getSuccessData(
+            buildTools(resolver, maven).recommend_pom_upgrades("<pom/>", UpgradeMode.ALL, null));
+
+    assertThat(rec.deterministicActions())
+        .singleElement()
+        .satisfies(
+            action -> {
+              assertThat(action.current()).isEqualTo("23.0");
+              assertThat(action.target()).isEqualTo("33.7.1-jre");
+              assertThat(action.updateType()).isEqualTo("major");
+            });
+  }
+
+  @Test
   void emitsBomBumpForMinorPatchAvailableManagedBom() {
     EffectivePomResolver resolver = mock(EffectivePomResolver.class);
     MavenCentralService maven = mock(MavenCentralService.class);

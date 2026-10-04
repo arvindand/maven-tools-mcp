@@ -7,10 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed (Unreleased)
+## [3.2.3] - 2026-10-04
 
+### Fixed (3.2.3)
+
+- Preserve recognized release variants such as Guava `jre`/`android` and JDBC `jre11`/`jre17` when comparing versions and recommending POM upgrades. Keep snapshot, release-candidate and unknown qualifiers conservative.
+- Resolve OSV fixed boundaries to actual published, compatible Maven versions before verification. Keep vulnerability findings visible if metadata or verification fails; never invent remediation versions.
+- Correct the documented default stability filter for `get_latest_version` to `PREFER_STABLE`.
+
+### Changed (3.2.3)
+
+- Update Tomcat to 11.0.26, embedded Maven components and the build distribution to 3.10.0, and the Apache Maven wrapper to 3.3.4 with a verified distribution checksum.
+- Update the optional Python agent runtime and development dependencies, including GitHub Copilot SDK 1.0.16. Adapt client configuration, awaited response handling and session disconnection to the current SDK API.
+- Normalize SDK session errors for CLI reporting and complete client cleanup even when session disconnection fails. Cleanup exception groups do not discard completed reviews.
+- Align project, runtime, registry and build fallback versions at 3.2.3.
 - Align architecture, setup, tool schemas, examples, certificate guidance and agent documentation with the released 3.2.2 behavior and known response-field limitations.
-- Start the 3.2.3-SNAPSHOT development cycle. Published registry metadata and build fallback versions remain at 3.2.2.
 
 ## [3.2.2] - 2026-09-06
 
@@ -769,7 +780,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.2...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.3...HEAD
+[3.2.3]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.2...v3.2.3
 [3.2.2]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.1...v3.2.2
 [3.2.0]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.2...v3.2.0
 [3.1.2]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.1...v3.1.2

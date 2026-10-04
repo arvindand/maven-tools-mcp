@@ -369,6 +369,28 @@ class VersionComparatorTest {
     assertThat(parsed3.numericParts()).containsExactly(1, 7, 0);
   }
 
+  @Test
+  void parsesDotVariantBeforeExplicitPrereleaseWithoutAddingNumericComponent() {
+    VersionComparator.VersionComponents parsed =
+        versionComparator.parseVersion("12.8.1.jre11-SNAPSHOT");
+
+    assertThat(parsed.numericParts()).containsExactly(12, 8, 1);
+    assertThat(parsed.qualifier()).isEqualTo("jre11-snapshot");
+    assertThat(versionComparator.getReleaseVariant("12.8.1.jre11-SNAPSHOT")).isEqualTo("jre11");
+  }
+
+  @Test
+  void preservesVariantIndependentOfItsPositionRelativeToReleaseStage() {
+    assertThat(versionComparator.preservesReleaseVariant("33.7.1-android", "33.8.0-RC1-android"))
+        .isTrue();
+    assertThat(versionComparator.preservesReleaseVariant("33.7.1-android", "33.8.0-jre")).isFalse();
+    assertThat(versionComparator.preservesReleaseVariant("12.8.1.jre11", "12.9.0.jre17")).isFalse();
+    assertThat(versionComparator.preservesReleaseVariant("33.7.1-android", "34.0.0")).isFalse();
+    assertThat(versionComparator.preservesReleaseVariant("1.0.0-RC1", "1.0.0")).isTrue();
+    assertThat(versionComparator.preservesReleaseVariant("23.0", "33.7.1-jre")).isTrue();
+    assertThat(versionComparator.preservesReleaseVariant("23.0", "33.7.1-android")).isTrue();
+  }
+
   private static Stream<Arguments> updateTypeTestData() {
     return Stream.of(
         // Major updates
@@ -385,6 +407,11 @@ class VersionComparatorTest {
         Arguments.of("1.0.0", "1.0.1", "patch", "Patch version update"),
         Arguments.of("1.2.3", "1.2.4", "patch", "Simple patch update"),
         Arguments.of("1.0.0-rc", "1.0.1", "patch", "Patch update from RC"),
+        Arguments.of("33.7.1-android", "33.8.0-android", "minor", "Preserve Android flavor"),
+        Arguments.of("12.8.1.jre11", "12.8.2.jre11", "patch", "Preserve JDBC Java target"),
+        Arguments.of("23.0", "33.7.1-jre", "major", "Unsuffixed version permits new JRE flavor"),
+        Arguments.of("33.7.1-RC1-jre", "33.7.1-jre", "patch", "JRE release candidate to stable"),
+        Arguments.of("12.8.1.jre11-RC1", "12.8.1.jre11", "patch", "JDBC RC to stable"),
 
         // No updates / equal versions
         Arguments.of("1.0.0", "1.0.0", "none", "Same version"),
@@ -393,6 +420,8 @@ class VersionComparatorTest {
         // Unknown/downgrade scenarios
         Arguments.of("2.0.0", "1.0.0", "unknown", "Downgrade scenario"),
         Arguments.of("1.1.0", "1.0.0", "unknown", "Minor downgrade"),
+        Arguments.of("33.7.1-android", "33.8.0-jre", "unknown", "Different Guava flavor"),
+        Arguments.of("12.8.1.jre11", "12.9.0.jre17", "unknown", "Different JDBC Java target"),
         Arguments.of(null, "1.0.0", "unknown", "Null current version"),
         Arguments.of("1.0.0", null, "unknown", "Null latest version"));
   }
@@ -416,6 +445,10 @@ class VersionComparatorTest {
         Arguments.of("1.0.0-ga", true, "GA qualifier is stable"),
         Arguments.of("1.0.0-release", true, "Release qualifier is stable"),
         Arguments.of("1.0.0-sp1", true, "Service pack is stable"),
+        Arguments.of("33.7.1-jre", true, "Guava JRE flavor is stable"),
+        Arguments.of("33.7.1-android", true, "Guava Android flavor is stable"),
+        Arguments.of("12.8.1.jre11", true, "JDBC Java 11 target is stable"),
+        Arguments.of("12.8.1.jre17", true, "JDBC Java 17 target is stable"),
 
         // Pre-release versions
         Arguments.of("1.0.0-alpha", false, "Alpha version is not stable"),
@@ -426,6 +459,20 @@ class VersionComparatorTest {
         Arguments.of("1.0.0.CR1", false, "Dot-separated CR version is not stable"),
         Arguments.of("1.0.0-snapshot", false, "Snapshot version is not stable"),
         Arguments.of("1.0.0-milestone", false, "Milestone version is not stable"),
+        Arguments.of("33.7.1-jre-SNAPSHOT", false, "JRE flavor snapshot is not stable"),
+        Arguments.of("999.0.0-HEAD-android-SNAPSHOT", false, "Guava development snapshot"),
+        Arguments.of("33.7.1-RC1-android", false, "Android RC is not stable"),
+        Arguments.of("12.8.1.jre11-preview", false, "JDBC preview is not stable"),
+        Arguments.of("12.8.1.jre11-SNAPSHOT", false, "Dot variant snapshot is not stable"),
+        Arguments.of("1.0.0-jre-custom", false, "Unknown modifier stays conservative"),
+        Arguments.of("1.0.0-jre-special", false, "Unknown modifier is not a service pack"),
+        Arguments.of("1.0.0-jre-SP1-SNAPSHOT", false, "Service pack snapshot is not stable"),
+        Arguments.of("1.0.0-jrefoo", false, "Unknown JRE-like suffix stays conservative"),
+        Arguments.of("1.0.0-jre0", false, "Invalid Java target stays conservative"),
+        Arguments.of("android", false, "Variant token alone is not a stable numeric release"),
+        Arguments.of("jre11", false, "Java target alone is not a stable numeric release"),
+        Arguments.of("1.0.0-android-jre", false, "Multiple variants are unsupported"),
+        Arguments.of("1.0.0-jre-", false, "Malformed variant suffix stays conservative"),
 
         // Edge cases
         Arguments.of(null, false, "Null version is not stable"));
@@ -448,6 +495,9 @@ class VersionComparatorTest {
         Arguments.of("1.0.0-final", "stable", "Final qualifier is stable"),
         Arguments.of("1.0.0-ga", "stable", "GA qualifier is stable"),
         Arguments.of("1.0.0-release", "stable", "Release qualifier is stable"),
+        Arguments.of("33.7.1-JRE", "stable", "JRE flavor is stable, case insensitive"),
+        Arguments.of("33.7.1-android", "stable", "Android flavor is stable"),
+        Arguments.of("12.8.1.jre11", "stable", "JDBC Java target is stable"),
 
         // Alpha versions
         Arguments.of("1.0.0-alpha", "alpha", "Alpha version"),
@@ -465,6 +515,10 @@ class VersionComparatorTest {
         Arguments.of("1.0.0-cr", "rc", "CR version treated as RC"),
         Arguments.of("1.0.0-candidate", "rc", "Candidate version treated as RC"),
         Arguments.of("1.0.0.CR1", "rc", "Dot-separated CR version treated as RC"),
+        Arguments.of("33.7.1-android-RC1", "rc", "Android flavor with release candidate"),
+        Arguments.of("33.7.1-RC1-jre", "rc", "Release candidate before JRE flavor"),
+        Arguments.of("12.8.1.jre11-RC1", "rc", "JDBC target with release candidate"),
+        Arguments.of("12.8.1.jre11-beta1", "beta", "JDBC target with beta release"),
 
         // Milestone versions
         Arguments.of("1.0.0-milestone", "milestone", "Milestone version"),

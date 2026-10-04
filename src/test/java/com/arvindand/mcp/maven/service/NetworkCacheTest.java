@@ -120,7 +120,9 @@ class NetworkCacheTest {
         .expect(requestTo(url))
         .andRespond(withSuccess("{\"next_page_token\":\"more\"}", MediaType.APPLICATION_JSON));
     server.expect(requestTo(url)).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
-    VulnerabilityService service = new VulnerabilityService(context.getBean(OsvClient.class));
+    VulnerabilityService service =
+        new VulnerabilityService(
+            context.getBean(OsvClient.class), context.getBean(MavenCentralService.class));
     MavenCoordinate coordinate = MavenCoordinate.of("g", "a", "1");
     assertThat(service.scan(coordinate).status()).isEqualTo(SecurityAssessment.Status.UNKNOWN);
     assertThat(service.scan(coordinate).status()).isEqualTo(SecurityAssessment.Status.UNKNOWN);

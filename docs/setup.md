@@ -12,7 +12,7 @@ For a shorter quick-start, see the main [`README.md`](../README.md).
 | `:latest-noc7` | STDIO | No | Networks where Context7 is blocked or unwanted |
 | `:latest-http` | HTTP | Yes | Streamable HTTP clients and sidecar workflows |
 
-Version-pinned equivalents are `:3.2.2`, `:3.2.2-noc7` and `:3.2.2-http`; all three support Linux AMD64 and ARM64. The JVM `-jvm` image is built locally through the helpers and is not published by the release workflow.
+Version-pinned equivalents are `:3.2.3`, `:3.2.3-noc7` and `:3.2.3-http`; all three support Linux AMD64 and ARM64. The JVM `-jvm` image is built locally through the helpers and is not published by the release workflow.
 
 `CONTEXT7_API_KEY` is optional. You can start without it. Pass it only if your environment requires Context7 authentication or you want to avoid anonymous limits.
 
@@ -104,7 +104,7 @@ For a fuller test build:
 ./mvnw clean verify -Pfull
 ```
 
-The release workflow publishes native Docker images, not standalone native binaries or downloadable JAR assets. For environments without Docker, build the JAR locally. Replace `<version>` below with the project version (`3.2.2` for this release).
+The release workflow publishes native Docker images, not standalone native binaries or downloadable JAR assets. For environments without Docker, build the JAR locally. Replace `<version>` below with the project version (`3.2.3` for this release).
 
 Run the JAR:
 

@@ -70,6 +70,29 @@ Several tools support `stabilityFilter`:
 
 `PREFER_STABLE` is the most user-friendly default for simple lookups. `STABLE_ONLY` is best when you are preparing changes that should stay conservative.
 
+Stability and platform variants are separate concerns. The server recognizes Guava-style `-jre`
+and `-android` flavors and JDBC-style `.jreN` Java targets as stable when they have no prerelease
+modifier. A version such as `33.7.1-jre-SNAPSHOT` or `12.8.1.jre11-preview` remains a prerelease;
+unknown qualifiers are still handled conservatively.
+
+`compare_dependency_versions`, `recommend_pom_upgrades`, and verified OSV remediation
+candidates preserve the current supported variant, including same-major fallback versions.
+An Android dependency stays on Android, and
+a `.jre11` dependency stays on `.jre11`; changing platform targets requires an explicit choice.
+When the current version has no recognized variant (for example, Guava `23.0`), no variant
+constraint is imposed; the normal Maven ordering and stability policy still select newer releases.
+Review the target flavor when upgrading an older unsuffixed release.
+`get_latest_version` and `check_multiple_dependencies` have no current-version context and
+report the newest version by type across all variants using Maven version ordering. Their
+results establish release availability and stability, not suitability for a particular target.
+Use a comparison with the current version before applying an upgrade to an existing dependency.
+
+For OSV remediation, a fixed boundary in another flavor is treated as a lower bound. The server
+selects the lowest existing compatible Maven Central release at or above each boundary, then
+checks up to three candidate releases against OSV. It never constructs an assumed counterpart
+version. If repository lookup or OSV verification fails, known vulnerabilities remain visible
+and no unverified fix is proposed.
+
 Version responses are classified using the server's built-in stability types:
 
 - `stable`
