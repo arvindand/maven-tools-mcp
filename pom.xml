@@ -6,12 +6,12 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.1</version>
+        <version>4.1.2</version>
         <relativePath /> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.arvindand.mcp</groupId>
     <artifactId>maven-tools-mcp</artifactId>
-    <version>3.2.4-SNAPSHOT</version>
+    <version>3.2.4</version>
     <name>maven-tools-mcp</name>
     <description>Maven Tools MCP server with universal JVM dependency intelligence. Provides comprehensive dependency analysis for any build tool (Maven, Gradle, SBT, Mill) using Maven Central Repository. Works with Claude Desktop, GitHub Copilot, and other MCP clients.</description>
     <url>https://github.com/arvindand/maven-tools-mcp</url>
@@ -35,13 +35,11 @@
     </scm>
     <properties>
         <java.version>25</java.version>
-        <spring-ai.version>2.0.1</spring-ai.version>
+        <spring-ai.version>2.0.2</spring-ai.version>
         <fmt-maven-plugin.version>2.29</fmt-maven-plugin.version>
         <maven-artifact.version>3.10.0</maven-artifact.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <cvss-calculator.version>1.5.1</cvss-calculator.version>
-        <!-- Boot 4.1.1 manages 11.0.24; remove once Boot includes these security fixes. -->
-        <tomcat.version>11.0.26</tomcat.version>
         <!-- JVM images are the default; -Pnative enables native buildpacks and AOT together. -->
         <maven-tools.native-image>false</maven-tools.native-image>
         <jib.architecture>amd64</jib.architecture>
