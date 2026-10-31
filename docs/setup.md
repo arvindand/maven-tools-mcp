@@ -12,7 +12,7 @@ For a shorter quick-start, see the main [`README.md`](../README.md).
 | `:latest-noc7` | STDIO | No | Networks where Context7 is blocked or unwanted |
 | `:latest-http` | HTTP | Yes | Streamable HTTP clients and sidecar workflows |
 
-Version-pinned equivalents are `:3.2.3`, `:3.2.3-noc7` and `:3.2.3-http`; all three support Linux AMD64 and ARM64. The JVM `-jvm` image is built locally through the helpers and is not published by the release workflow.
+Version-pinned equivalents are `:3.2.4`, `:3.2.4-noc7` and `:3.2.4-http`; all three support Linux AMD64 and ARM64. The JVM `-jvm` image is built locally through the helpers and is not published by the release workflow.
 
 `CONTEXT7_API_KEY` is optional. You can start without it. Pass it only if your environment requires Context7 authentication or you want to avoid anonymous limits.
 
@@ -92,7 +92,7 @@ docker run --rm -p 127.0.0.1:8080:8080 -e CONTEXT7_API_KEY arvindand/maven-tools
 - Java 25
 - The checked-in Maven wrapper (`./mvnw`, or `mvnw.cmd` on Windows); a separate Maven installation is not required
 
-These commands build `main` (`3.2.4-SNAPSHOT`). To build the current release instead, run `git checkout v3.2.3` after `cd maven-tools-mcp` and before the Maven build.
+These commands build `main`, which may contain unreleased changes. To build release 3.2.4, run `git checkout v3.2.4` after `cd maven-tools-mcp` and before the Maven build.
 
 ```bash
 git clone https://github.com/arvindand/maven-tools-mcp.git
@@ -106,7 +106,7 @@ For a fuller test build:
 ./mvnw clean verify -Pfull
 ```
 
-The release workflow publishes native Docker images, not standalone native binaries or downloadable JAR assets. For environments without Docker, build the JAR locally. Replace `<version>` below with the project version: `3.2.4-SNAPSHOT` on `main`, or `3.2.3` at the `v3.2.3` tag.
+The release workflow publishes native Docker images, not standalone native binaries or downloadable JAR assets. For environments without Docker, build the JAR locally. Replace `<version>` below with the project version (`3.2.4` at the `v3.2.4` tag).
 
 Run the JAR:
 

@@ -172,7 +172,7 @@ Key points:
 
 ## Technical Snapshot
 
-- Framework: Spring Boot 4.1.1; Spring AI 2.0.1
+- Framework: Spring Boot 4.1.2; Spring AI 2.0.2
 - Java: 25 (LTS)
 - Protocol: MCP 2025-11-25
 - Maven components: `maven-model-builder`, `maven-model`, `maven-artifact` and `maven-repository-metadata` 3.9.16; the full Maven Resolver dependency-graph stack is not used

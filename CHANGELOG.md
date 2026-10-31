@@ -7,10 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed (Unreleased)
+## [3.2.4] - 2026-10-31
 
-- Start the 3.2.4-SNAPSHOT development cycle. Published registry metadata and build fallback versions remain at 3.2.3.
-- Document the current release and version-pinned Docker tags in the README; distinguish snapshot source builds from the published release.
+### Fixed (3.2.4)
+
+- Remove the outdated Tomcat 11.0.26 override and inherit Spring Boot's managed 11.0.27, including Apache's October security fixes. Exposure to individual issues depends on the enabled server features and deployment configuration.
+
+### Changed (3.2.4)
+
+- Upgrade Spring Boot from 4.1.1 to 4.1.2 and Spring AI from 2.0.1 to 2.0.2.
+- Align project, runtime, registry and build fallback versions at 3.2.4.
+- Refresh framework documentation and version-pinned Docker examples; distinguish source builds on main from released tags.
 
 ## [3.2.3] - 2026-10-04
 
