@@ -139,6 +139,7 @@ public class NativeImageConfiguration {
 
       // Register MavenArtifact for timestamp analysis compatibility
       registerRecordClass(hints, MavenArtifact.class);
+      registerRecordClass(hints, com.arvindand.mcp.maven.model.Relocation.class);
 
       // Register VersionComparator record for version parsing
       registerRecordClass(

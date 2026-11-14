@@ -17,6 +17,7 @@ This page collects the implementation notes that are useful for operators and co
 - if Context7 is unavailable, dependency analysis still works
 - if OSV.dev is unavailable or returns incomplete data, the security assessment is `UNKNOWN`; this does not mean vulnerability-free
 - network failures should surface clearly rather than silently degrading into wrong data
+- repository failures carry a machine-readable reason (`RATE_LIMITED`, `CIRCUIT_OPEN`, `UPSTREAM_ERROR`, `INVALID_RESPONSE`); HTTP 429 is retried with a bounded backoff (at most about 4s added per call) and then reported as rate limiting, never as "not found", and failures are never cached
 
 ### Fast startup and low ceremony
 
@@ -150,6 +151,7 @@ The server may need outbound HTTPS to:
 For corporate networks:
 
 - network routing and proxy requirements depend on the deployed Java/Docker environment; there is no dedicated MCP proxy setting
+- `repo1.maven.org` throttles per IP (HTTP 429); on shared egress addresses point `maven.central.repository-base-url` at a mirror or repository manager (see [troubleshooting](troubleshooting.md#http-429-from-maven-central))
 - custom CA certificates are supported via a custom image
 - `:latest-noc7` is available when Context7 is not usable
 

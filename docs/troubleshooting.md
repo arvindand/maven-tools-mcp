@@ -92,6 +92,12 @@ If a desktop client cannot connect:
 
 Use the final repository URL, including its repository path. Repository/API redirects are rejected, and authenticated requests cannot switch origin. Repository credentials are deliberately absent from OSV requests. Maven `settings.xml`, mirrors and repositories declared inside submitted POMs do not configure this server; use the environment properties in [setup](setup.md#private-repository-authentication).
 
+## HTTP 429 from Maven Central
+
+Maven Central throttles by client IP (`HTTP 429 "Your ip has exceeded rate limits"`), which commonly hits shared addresses such as CI runners, corporate NAT and cloud egress IPs. The server retries a throttled request twice with a short bounded backoff (0.5s, then 1s; a `Retry-After` of up to 2s is honoured, a longer one is not waited for). If the repository keeps answering 429, the failure is reported as `RATE_LIMITED` with a retry hint rather than as a missing artifact; a 404 still means "not found" and is never retried. Sustained failures open the `maven-central` circuit breaker for about 30 seconds so the server stops adding load; during that time calls report "Maven repository temporarily unavailable (circuit open after repeated failures)". Failures are never cached, so retrying after the hint works.
+
+To avoid shared-IP throttling, point `maven.central.repository-base-url` at a mirror or repository manager (Nexus, Artifactory, a cloud Maven Central mirror) and configure [authentication](setup.md#private-repository-authentication) if it needs it. Smaller batches also reduce the request burst.
+
 ## POM Limits and Profile Warnings
 
 Split very large sideloaded bundles and remove DTD declarations. The resolver enforces document, nesting, expansion and total-model budgets; see [architecture](architecture.md#caches-and-input-limits).

@@ -127,4 +127,42 @@ public record McpError(String code, String message, Map<String, Object> data, In
         Map.of(SUGGESTION, "Try again in a few seconds or reduce batch size"),
         5);
   }
+
+  /**
+   * Create error for HTTP 429 from the Maven repository (after bounded backoff was exhausted).
+   *
+   * @param retryAfterSeconds suggested retry delay in seconds
+   * @return McpError with RATE_LIMITED code
+   */
+  public static McpError mavenCentralRateLimited(int retryAfterSeconds) {
+    return new McpError(
+        RATE_LIMITED,
+        "Maven repository is rate limiting requests (HTTP 429). Retry in "
+            + retryAfterSeconds
+            + " seconds.",
+        Map.of(
+            "service",
+            "Maven Central",
+            SUGGESTION,
+            "Wait and retry, reduce batch size, or point maven.central.repository-base-url at a"
+                + " mirror or repository manager"),
+        retryAfterSeconds);
+  }
+
+  /**
+   * Create error for an open Maven repository circuit breaker.
+   *
+   * @param retryAfterSeconds suggested retry delay in seconds
+   * @return McpError with EXTERNAL_SERVICE_UNAVAILABLE code
+   */
+  public static McpError mavenCentralCircuitOpen(int retryAfterSeconds) {
+    return new McpError(
+        EXTERNAL_SERVICE_UNAVAILABLE,
+        "Maven repository temporarily unavailable (circuit open after repeated failures)."
+            + " Retry in "
+            + retryAfterSeconds
+            + " seconds.",
+        Map.of("service", "Maven Central", "reason", "CIRCUIT_OPEN"),
+        retryAfterSeconds);
+  }
 }
