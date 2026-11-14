@@ -60,7 +60,7 @@ AI client -> analyze_pom_dependencies(pomXml, sideloadedPoms?) -> Maven Tools MC
 `recommend_pom_upgrades` adds an opinion layer on top of the resolver output:
 
 ```text
-AI client -> recommend_pom_upgrades(pomXml, mode?, sideloadedPoms?, includeSecurityScan?) -> Maven Tools MCP Server
+AI client -> recommend_pom_upgrades(pomXml, mode?, sideloadedPoms?, includeSecurityScan?, minReleaseAgeDays?) -> Maven Tools MCP Server
 
 1-8. Same resolver pass as above (warning-free, non-sideloaded results are cached for 1h)
 9. For each user-controllable BOM (direct <parent> + root <dependencyManagement>
@@ -73,6 +73,9 @@ AI client -> recommend_pom_upgrades(pomXml, mode?, sideloadedPoms?, includeSecur
    major to needsAttention.
 11. For each direct build or plugin-management dependency, emit plugin_dep_bump with
    its owner plugin and edit location, or route a major to needsAttention.
+11b. For each root plugin (build and plugin management) with a literal or root-owned
+   property version, emit plugin_bump (one action per shared property, one per literal
+   declaration) or route a major to needsAttention with source PLUGIN.
 12. For each declared dep, classify: explicit_bump for available minor/patch
    upgrades, conflict / explicit_override / major_available to needsAttention
 13. Emit property_override entries (relation computed with VersionComparator); never
@@ -82,6 +85,11 @@ AI client -> recommend_pom_upgrades(pomXml, mode?, sideloadedPoms?, includeSecur
    current version is vulnerable (second scanBulk for just those targets), and emit
    vulnerable entries for those not fixed by an action with targetStatus OK. UNKNOWN
    assessments are counted and warned about, never treated as clean.
+   Steps 9-12 share one per-run collector. It records lookups that threw (-> incomplete: true
+   plus an aggregated warning) and coordinates with no versions (aggregated "not found"
+   warning), and applies the optional release cooldown: the action target is the newest
+   version whose publish time (MavenCentralService.fetchArtifactWithTimestamp) is old
+   enough, else no action; unknown publish times fail closed.
 15. Return deterministicActions[] for mechanical agent application, needsAttention[]
    for human / LLM review (vulnerable first, then the existing kinds, then
    property_override) and securitySummary

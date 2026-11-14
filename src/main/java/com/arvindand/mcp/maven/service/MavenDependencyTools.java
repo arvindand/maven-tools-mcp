@@ -34,6 +34,7 @@ import com.arvindand.mcp.maven.pom.EffectivePomResolver;
 import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedAlternative;
 import com.arvindand.mcp.maven.pom.ManagedDeclaration;
+import com.arvindand.mcp.maven.pom.PluginDeclaration;
 import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
 import com.arvindand.mcp.maven.pom.PropertyOverride;
 import com.arvindand.mcp.maven.pom.Source;
@@ -48,7 +49,9 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1649,8 +1652,9 @@ public class MavenDependencyTools {
               + " POMs (monorepo siblings, unreleased parents) used before falling back to Maven"
               + " Central. Use when asked: 'analyze my pom.xml', 'what versions does this POM"
               + " actually resolve to?', or for multi-module monorepos. Returns the parent chain,"
-              + " resolved dependencies, directly editable root dependency-management and"
-              + " build/plugin dependency declarations, propertyOverrides (root properties"
+              + " resolved dependencies, directly editable root dependency-management, plugin"
+              + " (rootPluginDeclarations) and plugin dependency declarations, propertyOverrides"
+              + " (root properties"
               + " shadowing an ancestor property used as a version), and warnings.")
   public ToolResponse analyze_pom_dependencies(
       @ToolParam(description = "Raw <project>...</project> XML content of the POM to analyze.")
@@ -1687,6 +1691,8 @@ public class MavenDependencyTools {
    *     parents) tried before Maven Central
    * @param includeSecurityScan whether to scan dependency versions for vulnerabilities (default
    *     true)
+   * @param minReleaseAgeDays optional release cooldown: actions only target versions published at
+   *     least this many days ago (default: none; values {@code <= 0} mean none)
    * @return JSON response wrapping {@link PomUpgradeRecommendation}
    */
   @SuppressWarnings("java:S100") // MCP tool method naming
@@ -1694,15 +1700,18 @@ public class MavenDependencyTools {
       description =
           "POM-aware upgrade recommender. Takes raw pom.xml content and returns (1)"
               + " deterministicActions — mechanical version/property edits a non-LLM agent can"
-              + " apply (explicit_bump, bom_bump, managed_decl_bump, plugin_dep_bump); actions"
+              + " apply (explicit_bump, bom_bump, managed_decl_bump, plugin_dep_bump,"
+              + " plugin_bump); actions"
               + " for vulnerable versions carry a security object with targetStatus; (2)"
               + " needsAttention — vulnerable (known CVEs, first), major_available (alongside the"
               + " same-major action when one exists), property_override (a root property pinning a"
               + " parent-managed version, e.g. snakeyaml.version),"
               + " conflict and explicit_override entries needing review, each with the Maven"
               + " Central latest; plus securitySummary. Mode MINOR_PATCH (default) keeps majors in"
-              + " needsAttention; ALL makes them deterministic. Use for 'recommend upgrades for my"
-              + " pom.xml' or automated dependency-update workflows.")
+              + " needsAttention; ALL makes them deterministic. minReleaseAgeDays skips too-new"
+              + " versions (heldBackFrom). incomplete=true: lookups failed, results partial. Use"
+              + " for 'recommend upgrades for my pom.xml' or automated dependency-update"
+              + " workflows.")
   public ToolResponse recommend_pom_upgrades(
       @ToolParam(description = "Raw <project>...</project> XML content of the POM to analyze.")
           String pomXml,
@@ -1725,7 +1734,13 @@ public class MavenDependencyTools {
                   "Scan dependency versions for known vulnerabilities (OSV) and annotate actions /"
                       + " add 'vulnerable' entries. Default true.",
               required = false)
-          @Nullable Boolean includeSecurityScan) {
+          @Nullable Boolean includeSecurityScan,
+      @ToolParam(
+              description =
+                  "Only target versions published at least this many days ago (e.g. 7)."
+                      + " Default: no cooldown.",
+              required = false)
+          @Nullable Integer minReleaseAgeDays) {
     try {
       EffectivePomResult resolved =
           (sideloadedPoms == null || sideloadedPoms.isEmpty())
@@ -1733,7 +1748,9 @@ public class MavenDependencyTools {
               : pomResolver.resolve(pomXml, sideloadedPoms);
       UpgradeMode effectiveMode = mode != null ? mode : UpgradeMode.MINOR_PATCH;
       boolean scan = includeSecurityScan == null || includeSecurityScan;
-      return ToolResponse.Success.of(buildPomUpgradeRecommendation(resolved, effectiveMode, scan));
+      return ToolResponse.Success.of(
+          buildPomUpgradeRecommendation(
+              resolved, effectiveMode, scan, new RecommendationRun(minReleaseAgeDays)));
     } catch (IllegalArgumentException e) {
       return ToolResponse.Error.of("Invalid POM input: " + e.getMessage());
     } catch (Exception e) {
@@ -1743,7 +1760,10 @@ public class MavenDependencyTools {
   }
 
   private PomUpgradeRecommendation buildPomUpgradeRecommendation(
-      EffectivePomResult resolved, UpgradeMode mode, boolean includeSecurityScan) {
+      EffectivePomResult resolved,
+      UpgradeMode mode,
+      boolean includeSecurityScan,
+      RecommendationRun run) {
     List<UpgradeAction> actions = new ArrayList<>();
     List<NeedsAttention> attention = new ArrayList<>();
 
@@ -1766,29 +1786,38 @@ public class MavenDependencyTools {
     // even when they don't directly manage any classified dep — bumping the parent is itself a
     // useful upgrade signal.
     for (MavenCoordinate bom : userControllableBoms.values()) {
-      classifyBomCandidate(bom, mode, actions, attention);
+      classifyBomCandidate(run, bom, mode, actions, attention);
     }
 
     // Direct non-import dependency-management declarations are independent user-owned knobs. They
     // remain actionable even when the platform POM has no normal <dependencies> usage of its own.
     for (ManagedDeclaration declaration : resolved.rootManagedDeclarations()) {
-      classifyManagedDeclarationCandidate(declaration, mode, actions, attention);
+      classifyManagedDeclarationCandidate(run, declaration, mode, actions, attention);
     }
 
     for (PluginDependencyDeclaration declaration : resolved.rootPluginDependencyDeclarations()) {
-      classifyPluginDependencyCandidate(declaration, mode, actions, attention);
+      classifyPluginDependencyCandidate(run, declaration, mode, actions, attention);
+    }
+
+    // Plugins' own versions. The same plugin may be declared in both <plugins> and
+    // <pluginManagement>: a shared property yields one action, separate literals one per site.
+    Set<String> seenPlugins = new HashSet<>();
+    for (PluginDeclaration declaration : resolved.rootPluginDeclarations()) {
+      if (seenPlugins.add(pluginDeclarationKey(declaration))) {
+        classifyPluginCandidate(run, declaration, mode, actions, attention);
+      }
     }
 
     // Second pass: per-dep classification. MANAGED deps whose managedBy is user-controllable are
     // covered by the BOM pass above; transitively-managed deps are silently skipped (their
     // upgrade lives behind a user-controllable knob already classified).
     for (EffectiveDependency dep : resolved.dependencies()) {
-      classifyDependencyCandidate(dep, mode, actions, attention);
+      classifyDependencyCandidate(run, dep, mode, actions, attention);
     }
 
     // Property pins are never mechanical: a pin exists for a reason.
     for (PropertyOverride override : resolved.propertyOverrides()) {
-      toPropertyOverrideAttention(override).ifPresent(attention::add);
+      toPropertyOverrideAttention(run, override).ifPresent(attention::add);
     }
 
     List<String> warnings = new ArrayList<>(resolved.warnings());
@@ -1805,16 +1834,103 @@ public class MavenDependencyTools {
                         + " requires a manual profile, inherited-property or artifact-variant edit"));
 
     if (!includeSecurityScan) {
-      return new PomUpgradeRecommendation(actions, attention, warnings);
+      warnings.addAll(run.warnings());
+      return new PomUpgradeRecommendation(
+          actions, attention, warnings, null, run.incomplete() ? Boolean.TRUE : null);
     }
-    SecurityOutcome security = applySecurityScan(resolved, actions);
+    SecurityOutcome security = applySecurityScan(run, resolved, actions);
     if (security.summary().unknown() > 0) {
       warnings.add(
           "Security scan unavailable for " + security.summary().unknown() + " dependencies");
     }
+    warnings.addAll(run.warnings());
     List<NeedsAttention> ordered = new ArrayList<>(security.vulnerable());
     ordered.addAll(attention);
-    return new PomUpgradeRecommendation(security.actions(), ordered, warnings, security.summary());
+    return new PomUpgradeRecommendation(
+        security.actions(),
+        ordered,
+        warnings,
+        security.summary(),
+        run.incomplete() ? Boolean.TRUE : null);
+  }
+
+  private static String pluginDeclarationKey(PluginDeclaration declaration) {
+    boolean property = ManagedDeclaration.EDIT_TARGET_PROPERTY.equals(declaration.editTarget());
+    return String.join(
+        "|",
+        declaration.groupId(),
+        declaration.artifactId(),
+        declaration.version(),
+        declaration.editTarget(),
+        property ? declaration.propertyName() : declaration.declaredIn());
+  }
+
+  /**
+   * Per-run collector threaded through the classification helpers: lookup failures, repository
+   * misses, release-cooldown state and the aggregated warnings derived from them. Not thread-safe;
+   * a run is classified sequentially.
+   */
+  private static final class RecommendationRun {
+    private static final int MAX_LISTED = 10;
+    private static final int MAX_TIMESTAMP_LOOKUPS = 5;
+    private static final long MILLIS_PER_DAY = 86_400_000L;
+
+    private final Integer minReleaseAgeDays;
+    private final long cutoffEpochMillis;
+    private final Set<String> lookupFailed = new LinkedHashSet<>();
+    private final Set<String> notFound = new LinkedHashSet<>();
+    private final Set<String> cooldownBlocked = new LinkedHashSet<>();
+    private final Map<String, Boolean> eligibility = new HashMap<>();
+
+    RecommendationRun(@Nullable Integer minReleaseAgeDays) {
+      this.minReleaseAgeDays =
+          minReleaseAgeDays != null && minReleaseAgeDays > 0 ? minReleaseAgeDays : null;
+      this.cutoffEpochMillis =
+          this.minReleaseAgeDays == null
+              ? 0L
+              : System.currentTimeMillis() - this.minReleaseAgeDays * MILLIS_PER_DAY;
+    }
+
+    boolean cooldownEnabled() {
+      return minReleaseAgeDays != null;
+    }
+
+    /** True only when a lookup threw; repository misses alone do not make a run incomplete. */
+    boolean incomplete() {
+      return !lookupFailed.isEmpty();
+    }
+
+    List<String> warnings() {
+      List<String> out = new ArrayList<>();
+      if (!lookupFailed.isEmpty()) {
+        out.add(
+            "Version lookup failed for "
+                + lookupFailed.size()
+                + (lookupFailed.size() == 1 ? " coordinate" : " coordinates")
+                + " (upstream error): "
+                + listed(lookupFailed));
+      }
+      if (!notFound.isEmpty()) {
+        out.add("Not found in the configured repository (skipped): " + listed(notFound));
+      }
+      if (!cooldownBlocked.isEmpty()) {
+        out.add(
+            "Release cooldown (minReleaseAgeDays="
+                + minReleaseAgeDays
+                + "): no upgrade emitted for "
+                + cooldownBlocked.size()
+                + (cooldownBlocked.size() == 1 ? " coordinate" : " coordinates")
+                + " because newer versions are too recent or have no usable publish time: "
+                + listed(cooldownBlocked));
+      }
+      return out;
+    }
+
+    private static String listed(Set<String> values) {
+      List<String> all = List.copyOf(values);
+      String head = String.join(", ", all.subList(0, Math.min(all.size(), MAX_LISTED)));
+      return all.size() > MAX_LISTED ? head + " and " + (all.size() - MAX_LISTED) + " more" : head;
+    }
   }
 
   private record SecurityOutcome(
@@ -1827,7 +1943,7 @@ public class MavenDependencyTools {
    * is vulnerable (scanning only those targets), and builds the {@code vulnerable} entries.
    */
   private SecurityOutcome applySecurityScan(
-      EffectivePomResult resolved, List<UpgradeAction> actions) {
+      RecommendationRun run, EffectivePomResult resolved, List<UpgradeAction> actions) {
     Map<String, MavenCoordinate> toScan = new LinkedHashMap<>();
     for (EffectiveDependency dep : resolved.dependencies()) {
       MavenCoordinate coordinate =
@@ -1862,6 +1978,9 @@ public class MavenDependencyTools {
     Map<String, MavenCoordinate> targets = new LinkedHashMap<>();
     for (UpgradeAction action : actions) {
       String key = actionCurrentKey(action);
+      if (!isScannedKind(action)) {
+        continue;
+      }
       if (statusOf(assessments.get(key)) == SecurityAssessment.Status.VULNERABLE) {
         MavenCoordinate target =
             MavenCoordinate.of(action.groupId(), action.artifactId(), action.target());
@@ -1874,7 +1993,7 @@ public class MavenDependencyTools {
     List<UpgradeAction> annotated = new ArrayList<>(actions.size());
     for (UpgradeAction action : actions) {
       SecurityAssessment current = assessments.get(actionCurrentKey(action));
-      if (statusOf(current) != SecurityAssessment.Status.VULNERABLE) {
+      if (!isScannedKind(action) || statusOf(current) != SecurityAssessment.Status.VULNERABLE) {
         annotated.add(action);
         continue;
       }
@@ -1891,7 +2010,7 @@ public class MavenDependencyTools {
     }
 
     List<NeedsAttention.Vulnerable> vulnerable = new ArrayList<>();
-    Set<String> seen = new java.util.HashSet<>();
+    Set<String> seen = new HashSet<>();
     for (EffectiveDependency dep : resolved.dependencies()) {
       MavenCoordinate coordinate =
           MavenCoordinate.of(dep.groupId(), dep.artifactId(), dep.effectiveVersion());
@@ -1913,7 +2032,7 @@ public class MavenDependencyTools {
               assessment.criticalCves() == null ? List.of() : assessment.criticalCves(),
               assessment.highCves() == null ? List.of() : assessment.highCves(),
               assessment.fixedInVersion(),
-              safeGetLatestStable(coordinate)));
+              latestStable(run, coordinate)));
     }
     vulnerable.sort(
         Comparator.comparingInt((NeedsAttention.Vulnerable v) -> v.maxSeverity().ordinal())
@@ -1954,6 +2073,11 @@ public class MavenDependencyTools {
     return ids;
   }
 
+  /** A plugin's own version is not a scanned project dependency. */
+  private static boolean isScannedKind(UpgradeAction action) {
+    return !UpgradeAction.KIND_PLUGIN_BUMP.equals(action.kind());
+  }
+
   private static String actionCurrentKey(UpgradeAction action) {
     return MavenCoordinate.of(action.groupId(), action.artifactId(), action.current())
         .toCoordinateString();
@@ -1974,7 +2098,8 @@ public class MavenDependencyTools {
   }
 
   /** Builds the {@code property_override} entry; null when the override lists no coordinates. */
-  private Optional<NeedsAttention> toPropertyOverrideAttention(PropertyOverride override) {
+  private Optional<NeedsAttention> toPropertyOverrideAttention(
+      RecommendationRun run, PropertyOverride override) {
     if (override.affects().isEmpty()) {
       return Optional.empty();
     }
@@ -1992,7 +2117,8 @@ public class MavenDependencyTools {
                   : NeedsAttention.PropertyOverride.EQUAL;
     }
     String latest =
-        safeGetLatestStable(
+        latestStable(
+            run,
             MavenCoordinate.of(
                 first[0], first[1], pinned != null && !pinned.contains("${") ? pinned : null));
     return Optional.of(
@@ -2011,38 +2137,36 @@ public class MavenDependencyTools {
 
   /**
    * Looks up the latest stable version of a managing BOM and either emits a {@link UpgradeAction
-   * bom_bump} action or a {@link NeedsAttention.MajorAvailable major_available} entry. Network
-   * failures and missing-version cases drop silently — those would already surface as warnings on
-   * the upstream resolution.
+   * bom_bump} action or a {@link NeedsAttention.MajorAvailable major_available} entry. Lookup
+   * failures and missing artifacts are recorded on the run and surface as aggregated warnings.
    */
   private void classifyBomCandidate(
+      RecommendationRun run,
       MavenCoordinate bom,
       UpgradeMode mode,
       List<UpgradeAction> actions,
       List<NeedsAttention> attention) {
-    try {
-      if (bom.version() == null) {
-        return;
-      }
-      classifyUpgrade(
-          bom,
-          bom.version(),
-          getLatestStableVersion(bom),
-          mode,
-          Source.MANAGED.name(),
-          bom.toCoordinateString(),
-          (target, updateType) ->
-              UpgradeAction.bomBump(
-                  bom.groupId(), bom.artifactId(), bom.version(), target, updateType),
-          actions,
-          attention);
-    } catch (MavenCentralException _) {
-      // upstream resolver already warned about unreachable parents; nothing to add here.
+    if (bom.version() == null) {
+      return;
     }
+    classifyUpgrade(
+        run,
+        bom,
+        bom.version(),
+        latestStable(run, bom),
+        mode,
+        Source.MANAGED.name(),
+        bom.toCoordinateString(),
+        (target, updateType) ->
+            UpgradeAction.bomBump(
+                bom.groupId(), bom.artifactId(), bom.version(), target, updateType),
+        actions,
+        attention);
   }
 
   /** Classifies a direct root dependency-management declaration with a known edit target. */
   private void classifyManagedDeclarationCandidate(
+      RecommendationRun run,
       ManagedDeclaration declaration,
       UpgradeMode mode,
       List<UpgradeAction> actions,
@@ -2050,9 +2174,10 @@ public class MavenDependencyTools {
     MavenCoordinate coordinate =
         MavenCoordinate.of(declaration.groupId(), declaration.artifactId(), declaration.version());
     classifyUpgrade(
+        run,
         coordinate,
         declaration.version(),
-        safeGetLatestStable(coordinate),
+        latestStable(run, coordinate),
         mode,
         "MANAGED_DECLARATION",
         null,
@@ -2071,6 +2196,7 @@ public class MavenDependencyTools {
 
   /** Classifies a direct build/plugin dependency declaration with a known edit target. */
   private void classifyPluginDependencyCandidate(
+      RecommendationRun run,
       PluginDependencyDeclaration declaration,
       UpgradeMode mode,
       List<UpgradeAction> actions,
@@ -2078,9 +2204,10 @@ public class MavenDependencyTools {
     MavenCoordinate coordinate =
         MavenCoordinate.of(declaration.groupId(), declaration.artifactId(), declaration.version());
     classifyUpgrade(
+        run,
         coordinate,
         declaration.version(),
-        safeGetLatestStable(coordinate),
+        latestStable(run, coordinate),
         mode,
         "PLUGIN_DEPENDENCY",
         null,
@@ -2100,6 +2227,37 @@ public class MavenDependencyTools {
         attention);
   }
 
+  /** Classifies a build plugin's own version declaration with a known edit target. */
+  private void classifyPluginCandidate(
+      RecommendationRun run,
+      PluginDeclaration declaration,
+      UpgradeMode mode,
+      List<UpgradeAction> actions,
+      List<NeedsAttention> attention) {
+    MavenCoordinate coordinate =
+        MavenCoordinate.of(declaration.groupId(), declaration.artifactId(), declaration.version());
+    classifyUpgrade(
+        run,
+        coordinate,
+        declaration.version(),
+        latestStable(run, coordinate),
+        mode,
+        "PLUGIN",
+        null,
+        (target, updateType) ->
+            UpgradeAction.pluginBump(
+                declaration.groupId(),
+                declaration.artifactId(),
+                declaration.version(),
+                target,
+                updateType,
+                declaration.editTarget(),
+                declaration.propertyName(),
+                declaration.declaredIn()),
+        actions,
+        attention);
+  }
+
   /**
    * Classifies a single declared dependency: surfaces conflicts and explicit overrides into {@code
    * needsAttention} regardless of upgrade availability; for EXPLICIT deps emits a {@link
@@ -2108,6 +2266,7 @@ public class MavenDependencyTools {
    * pass and do not produce per-dep actions here.
    */
   private void classifyDependencyCandidate(
+      RecommendationRun run,
       EffectiveDependency dep,
       UpgradeMode mode,
       List<UpgradeAction> actions,
@@ -2121,7 +2280,7 @@ public class MavenDependencyTools {
 
     MavenCoordinate coordinate =
         MavenCoordinate.of(dep.groupId(), dep.artifactId(), dep.effectiveVersion());
-    String latestOnCentral = safeGetLatestStable(coordinate);
+    String latestOnCentral = latestStable(run, coordinate);
 
     if (!dep.conflicts().isEmpty() && dep.source() != Source.EXPLICIT_OVERRIDE) {
       // MANAGED dep with multiple BOMs disagreeing — surface the conflict.
@@ -2153,6 +2312,7 @@ public class MavenDependencyTools {
     }
 
     classifyUpgrade(
+        run,
         coordinate,
         dep.effectiveVersion(),
         latestOnCentral,
@@ -2171,9 +2331,12 @@ public class MavenDependencyTools {
    * built by {@code actionFactory}. In {@code MINOR_PATCH} mode a major upgrade yields a {@code
    * major_available} entry and — when a newer same-major stable version exists — also the normal
    * action targeting that version, so a newer major never blocks same-major updates. {@code ALL}
-   * mode promotes the major itself to an action.
+   * mode promotes the major itself to an action. With a release cooldown the action target may be
+   * an older eligible version (see {@link #selectTarget}); {@code major_available} stays
+   * unfiltered.
    */
   private void classifyUpgrade(
+      RecommendationRun run,
       MavenCoordinate coordinate,
       String current,
       @Nullable String latest,
@@ -2187,9 +2350,10 @@ public class MavenDependencyTools {
       return;
     }
     String updateType = versionComparator.determineUpdateType(current, latest);
-    if (MAJOR_UPDATE_TYPE.equals(updateType) && mode == UpgradeMode.MINOR_PATCH) {
-      String sameMajor = findCurrentMajorLatest(coordinate, current);
-      attention.add(
+    boolean minorPatchOnly = mode == UpgradeMode.MINOR_PATCH;
+    if (MAJOR_UPDATE_TYPE.equals(updateType) && minorPatchOnly) {
+      String sameMajor = findCurrentMajorLatest(run, coordinate, current);
+      NeedsAttention.MajorAvailable major =
           new NeedsAttention.MajorAvailable(
               coordinate.groupId(),
               coordinate.artifactId(),
@@ -2197,48 +2361,166 @@ public class MavenDependencyTools {
               sameMajor != null ? sameMajor : current,
               latest,
               majorSource,
-              majorManagedBy));
+              majorManagedBy);
+      if (!attention.contains(major)) {
+        attention.add(major);
+      }
       if (sameMajor != null && versionComparator.compare(current, sameMajor) < 0) {
         String sameMajorType = versionComparator.determineUpdateType(current, sameMajor);
         if (MINOR_UPDATE_TYPE.equals(sameMajorType) || PATCH_UPDATE_TYPE.equals(sameMajorType)) {
-          actions.add(actionFactory.apply(sameMajor, sameMajorType));
+          addAction(
+              run, coordinate, current, sameMajor, sameMajorType, true, actionFactory, actions);
         }
       }
     } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
         .contains(updateType)) {
-      actions.add(actionFactory.apply(latest, updateType));
+      addAction(
+          run, coordinate, current, latest, updateType, minorPatchOnly, actionFactory, actions);
     }
   }
 
-  /** Wraps {@link #getLatestStableVersion} and swallows transient lookup failures. */
-  private String safeGetLatestStable(MavenCoordinate coord) {
-    try {
-      return getLatestStableVersion(coord);
-    } catch (MavenCentralException _) {
-      return null;
+  private void addAction(
+      RecommendationRun run,
+      MavenCoordinate coordinate,
+      String current,
+      String preferred,
+      String preferredType,
+      boolean minorPatchOnly,
+      BiFunction<String, String, UpgradeAction> actionFactory,
+      List<UpgradeAction> actions) {
+    if (!run.cooldownEnabled()) {
+      actions.add(actionFactory.apply(preferred, preferredType));
+      return;
     }
+    String target =
+        selectTarget(run, coordinate, current, preferred, preferredType, minorPatchOnly);
+    if (target == null) {
+      run.cooldownBlocked.add(
+          coordinate.groupId() + ":" + coordinate.artifactId() + ":" + preferred);
+      return;
+    }
+    if (target.equals(preferred)) {
+      actions.add(actionFactory.apply(preferred, preferredType));
+    } else {
+      actions.add(
+          actionFactory
+              .apply(target, versionComparator.determineUpdateType(current, target))
+              .withHeldBackFrom(preferred));
+    }
+  }
+
+  /**
+   * Picks the newest version that satisfies the release cooldown: {@code preferred} when it is old
+   * enough, else the newest older upgrade of the same kind (stable, same variant, still newer than
+   * {@code current}, and a minor / patch upgrade when {@code minorPatchOnly}). At most {@link
+   * RecommendationRun#MAX_TIMESTAMP_LOOKUPS} publish-time lookups are spent per call. Returns null
+   * when nothing qualifies; unknown or failed publish times never qualify.
+   */
+  @Nullable
+  private String selectTarget(
+      RecommendationRun run,
+      MavenCoordinate coordinate,
+      String current,
+      String preferred,
+      String preferredType,
+      boolean minorPatchOnly) {
+    List<String> candidates = new ArrayList<>();
+    candidates.add(preferred);
+    lookupVersions(run, coordinate).stream()
+        .filter(versionComparator::isStableVersion)
+        .filter(candidate -> versionComparator.preservesReleaseVariant(current, candidate))
+        .filter(candidate -> versionComparator.compare(current, candidate) < 0)
+        .filter(candidate -> versionComparator.compare(candidate, preferred) < 0)
+        .filter(
+            candidate -> {
+              String type = versionComparator.determineUpdateType(current, candidate);
+              return MINOR_UPDATE_TYPE.equals(type)
+                  || PATCH_UPDATE_TYPE.equals(type)
+                  || (!minorPatchOnly && MAJOR_UPDATE_TYPE.equals(type));
+            })
+        .sorted(versionComparator.reversed())
+        .limit(RecommendationRun.MAX_TIMESTAMP_LOOKUPS - 1L)
+        .forEach(candidates::add);
+    for (String candidate : candidates) {
+      if (isOldEnough(run, coordinate, candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  /** Fails closed: a failed lookup or a missing / non-positive timestamp is not eligible. */
+  private boolean isOldEnough(RecommendationRun run, MavenCoordinate coordinate, String version) {
+    String key = coordinate.groupId() + ":" + coordinate.artifactId() + ":" + version;
+    Boolean known = run.eligibility.get(key);
+    if (known != null) {
+      return known;
+    }
+    boolean eligible = false;
+    try {
+      MavenArtifact artifact = mavenCentralService.fetchArtifactWithTimestamp(coordinate, version);
+      eligible =
+          artifact != null
+              && artifact.timestamp() > 0
+              && artifact.timestamp() <= run.cutoffEpochMillis;
+    } catch (RuntimeException e) {
+      logger.debug("Publish-time lookup failed for {}: {}", key, e.getMessage());
+      run.lookupFailed.add(coordinate.groupId() + ":" + coordinate.artifactId());
+    }
+    run.eligibility.put(key, eligible);
+    return eligible;
+  }
+
+  /**
+   * Fetches all versions of a coordinate, newest first. A throw is recorded as an upstream failure
+   * and an empty answer as "not found in the configured repository"; both return an empty list.
+   */
+  private List<String> lookupVersions(RecommendationRun run, MavenCoordinate coordinate) {
+    String key = coordinate.groupId() + ":" + coordinate.artifactId();
+    try {
+      List<String> versions = mavenCentralService.getAllVersions(coordinate);
+      if (versions == null || versions.isEmpty()) {
+        run.notFound.add(key);
+        return List.of();
+      }
+      return versions;
+    } catch (RuntimeException e) {
+      logger.debug("Version lookup failed for {}: {}", key, e.getMessage());
+      run.lookupFailed.add(key);
+      return List.of();
+    }
+  }
+
+  /** Latest stable version preserving {@code coordinate}'s release variant, or null. */
+  @Nullable
+  private String latestStable(RecommendationRun run, MavenCoordinate coordinate) {
+    return lookupVersions(run, coordinate).stream()
+        .filter(versionComparator::isStableVersion)
+        .filter(
+            candidate ->
+                coordinate.version() == null
+                    || versionComparator.preservesReleaseVariant(coordinate.version(), candidate))
+        .findFirst()
+        .orElse(null);
   }
 
   /**
    * Finds the latest stable version sharing the same major as {@code current}, or null if no newer
    * same-major stable version exists.
    */
-  private String findCurrentMajorLatest(MavenCoordinate coordinate, String current) {
+  private String findCurrentMajorLatest(
+      RecommendationRun run, MavenCoordinate coordinate, String current) {
     Integer currentMajor = extractMajorVersion(current);
     if (currentMajor == null) {
       return null;
     }
-    try {
-      return mavenCentralService.getAllVersions(coordinate).stream()
-          .filter(versionComparator::isStableVersion)
-          .filter(candidate -> versionComparator.preservesReleaseVariant(current, candidate))
-          .filter(candidate -> currentMajor.equals(extractMajorVersion(candidate)))
-          .filter(candidate -> versionComparator.compare(current, candidate) <= 0)
-          .findFirst()
-          .orElse(null);
-    } catch (MavenCentralException _) {
-      return null;
-    }
+    return lookupVersions(run, coordinate).stream()
+        .filter(versionComparator::isStableVersion)
+        .filter(candidate -> versionComparator.preservesReleaseVariant(current, candidate))
+        .filter(candidate -> currentMajor.equals(extractMajorVersion(candidate)))
+        .filter(candidate -> versionComparator.compare(current, candidate) <= 0)
+        .findFirst()
+        .orElse(null);
   }
 
   private static List<NeedsAttention.Candidate> toCandidates(

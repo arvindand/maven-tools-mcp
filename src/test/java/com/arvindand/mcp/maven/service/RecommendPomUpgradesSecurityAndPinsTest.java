@@ -429,7 +429,7 @@ class RecommendPomUpgradesSecurityAndPinsTest {
   // ---- helpers ----
 
   private PomUpgradeRecommendation recommend(UpgradeMode mode, boolean scan) {
-    return getSuccessData(tools.recommend_pom_upgrades("<pom/>", mode, null, scan));
+    return getSuccessData(tools.recommend_pom_upgrades("<pom/>", mode, null, scan, null));
   }
 
   private static EffectivePomResult result(EffectiveDependency... deps) {

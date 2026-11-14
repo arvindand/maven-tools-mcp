@@ -26,6 +26,8 @@ import java.util.Objects;
  * @param warnings non-fatal issues surfaced during POM resolution
  * @param securitySummary counts of the vulnerability scan over the declared dependencies; null when
  *     the scan was disabled
+ * @param incomplete {@code true} only when at least one version lookup failed upstream, so empty
+ *     results mean "could not check" rather than "nothing to do"; absent otherwise
  * @author Arvind Menon
  * @since 3.0.0
  */
@@ -34,14 +36,24 @@ public record PomUpgradeRecommendation(
     List<UpgradeAction> deterministicActions,
     List<NeedsAttention> needsAttention,
     List<String> warnings,
-    PomSecuritySummary securitySummary) {
+    PomSecuritySummary securitySummary,
+    Boolean incomplete) {
+
+  /** Convenience constructor for complete responses. */
+  public PomUpgradeRecommendation(
+      List<UpgradeAction> deterministicActions,
+      List<NeedsAttention> needsAttention,
+      List<String> warnings,
+      PomSecuritySummary securitySummary) {
+    this(deterministicActions, needsAttention, warnings, securitySummary, null);
+  }
 
   /** Convenience constructor for responses without a security scan. */
   public PomUpgradeRecommendation(
       List<UpgradeAction> deterministicActions,
       List<NeedsAttention> needsAttention,
       List<String> warnings) {
-    this(deterministicActions, needsAttention, warnings, null);
+    this(deterministicActions, needsAttention, warnings, null, null);
   }
 
   public PomUpgradeRecommendation {

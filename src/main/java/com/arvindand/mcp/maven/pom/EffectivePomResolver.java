@@ -101,6 +101,7 @@ public class EffectivePomResolver {
         extractRootBomImports(root, properties),
         extractRootManagedDeclarations(root, properties),
         extractRootPluginDependencyDeclarations(root, properties),
+        extractRootPluginDeclarations(root, properties),
         detectPropertyOverrides(built, root, properties),
         warnings);
   }
@@ -325,6 +326,72 @@ public class EffectivePomResolver {
               PluginDependencyDeclaration.PLUGIN_MANAGEMENT));
     }
     return List.copyOf(declarations);
+  }
+
+  /**
+   * Collects directly-editable plugin versions from the root POM's {@code <build><plugins>} and
+   * {@code <build><pluginManagement><plugins>}. Profiles and reporting plugins are not included.
+   * Plugins without a {@code <version>}, with an inherited-property or compound-expression version,
+   * or with a version range / symbolic version have no safe edit target and are skipped.
+   */
+  private static List<PluginDeclaration> extractRootPluginDeclarations(
+      Model root, Map<String, String> properties) {
+    if (root.getBuild() == null) {
+      return List.of();
+    }
+    List<PluginDeclaration> declarations = new ArrayList<>();
+    for (Plugin plugin : root.getBuild().getPlugins()) {
+      toPluginDeclaration(plugin, root, properties, PluginDeclaration.BUILD_PLUGINS)
+          .ifPresent(declarations::add);
+    }
+    if (root.getBuild().getPluginManagement() != null) {
+      for (Plugin plugin : root.getBuild().getPluginManagement().getPlugins()) {
+        toPluginDeclaration(plugin, root, properties, PluginDeclaration.PLUGIN_MANAGEMENT)
+            .ifPresent(declarations::add);
+      }
+    }
+    return List.copyOf(declarations);
+  }
+
+  private static Optional<PluginDeclaration> toPluginDeclaration(
+      Plugin plugin, Model root, Map<String, String> properties, String declaredIn) {
+    String declaredVersion = plugin.getVersion();
+    if (declaredVersion == null || declaredVersion.isBlank()) {
+      return Optional.empty();
+    }
+    declaredVersion = declaredVersion.trim();
+    String groupId =
+        plugin.getGroupId() == null
+            ? PluginDeclaration.DEFAULT_GROUP_ID
+            : PropertyInterpolator.interpolate(plugin.getGroupId(), properties);
+    String artifactId = PropertyInterpolator.interpolate(plugin.getArtifactId(), properties);
+    String version = PropertyInterpolator.interpolate(declaredVersion, properties);
+    if (hasUnresolvedValue(groupId)
+        || hasUnresolvedValue(artifactId)
+        || hasUnresolvedValue(version)
+        || isSymbolicOrRangeVersion(version)) {
+      return Optional.empty();
+    }
+    Matcher propertyReference = EXACT_PROPERTY_REFERENCE.matcher(declaredVersion);
+    if (propertyReference.matches()) {
+      String propertyName = propertyReference.group(1);
+      if (root.getProperties() != null && root.getProperties().containsKey(propertyName)) {
+        return Optional.of(
+            PluginDeclaration.property(groupId, artifactId, version, propertyName, declaredIn));
+      }
+      return Optional.empty();
+    }
+    if (declaredVersion.contains("${")) {
+      return Optional.empty();
+    }
+    return Optional.of(PluginDeclaration.literal(groupId, artifactId, version, declaredIn));
+  }
+
+  private static boolean isSymbolicOrRangeVersion(String version) {
+    return version.startsWith("[")
+        || version.startsWith("(")
+        || "LATEST".equals(version)
+        || "RELEASE".equals(version);
   }
 
   private static List<PluginDependencyDeclaration> extractPluginDependencies(

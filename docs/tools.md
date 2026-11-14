@@ -27,7 +27,7 @@ The default image exposes 12 MCP tools: 10 core Maven/dependency tools and 2 Con
 - `directlyEditable` — whether there is a unique root declaration eligible for a mechanical version edit
 - `conflicts[]` — losing candidates when multiple BOMs at the same level disagree (e.g., Spring Boot + Spring Cloud + Jackson BOM all managing `jackson-databind`). Surfaced as raw data so the caller can decide whether to pin the version explicitly; the resolver does not recommend an action.
 
-The tool also returns the resolved `parentChain`, direct `rootImportedBoms[]`, directly editable `rootManagedDeclarations[]`, editable `rootPluginDependencyDeclarations[]` from both build plugins and plugin management, `propertyOverrides[]`, and a `warnings[]` array listing every silent-drop site. An owned declaration appears only when its version is literal or is an exact property reference owned by the input POM.
+The tool also returns the resolved `parentChain`, direct `rootImportedBoms[]`, directly editable `rootManagedDeclarations[]`, editable `rootPluginDependencyDeclarations[]` from both build plugins and plugin management, editable `rootPluginDeclarations[]` (the plugins' own versions from `<build><plugins>` and `<pluginManagement>`; `groupId` defaults to `org.apache.maven.plugins`; profiles and reporting excluded), `propertyOverrides[]`, and a `warnings[]` array listing every silent-drop site. An owned declaration appears only when its version is literal or is an exact property reference owned by the input POM.
 
 Analysis covers declarations in the input POM, not a transitive dependency graph. Active-by-default profile dependencies can appear in analysis, but profile-only declarations are not mechanically editable. Other activation conditions are not evaluated; warnings can originate from parents and imported BOMs. See [architecture limits](architecture.md#caches-and-input-limits).
 
@@ -47,11 +47,20 @@ The classification is the upgrade policy:
 
 `recommend_pom_upgrades` applies this policy and returns a split response so the right consumer reads the right part:
 
-- **`deterministicActions[]`** — mechanical edits a non-LLM agent applies directly. Each entry has `kind` (`explicit_bump`, `bom_bump`, `managed_decl_bump`, or `plugin_dep_bump`), `groupId`, `artifactId`, `current`, `target`, and `updateType`. Owned declarations carry `editTarget`, optional `propertyName`, and `declaredIn`; plugin dependency actions also carry `ownerGroupId` and `ownerArtifactId`.
+- **`deterministicActions[]`** — mechanical edits a non-LLM agent applies directly. Each entry has `kind` (`explicit_bump`, `bom_bump`, `managed_decl_bump`, `plugin_dep_bump`, or `plugin_bump`), `groupId`, `artifactId`, `current`, `target`, and `updateType`. Owned declarations carry `editTarget`, optional `propertyName`, and `declaredIn`; plugin dependency actions also carry `ownerGroupId` and `ownerArtifactId`. `plugin_bump` edits a plugin's own version (`major_available` entries for plugins use `source: PLUGIN`); a plugin whose version property is shared by `plugins` and `pluginManagement` yields one action, separate literal versions one action each, told apart by `declaredIn`. With `minReleaseAgeDays`, an action may carry `heldBackFrom`.
 - **`needsAttention[]`** — items that need judgment, in this order: `vulnerable` entries first (most severe first), then `major_available` (with `currentMajorLatest` so the model can choose to stay same-major), `conflict` (every `candidate` version + `latestOnCentral`), `explicit_override` (`managingCandidates` + `latestOnCentral`), and finally `property_override`. Major entries use `latestStable`; conflicts, explicit overrides, property overrides and vulnerable entries use `latestOnCentral`.
 - **`securitySummary`** — `scanned`, `vulnerable`, `clean`, `unknown` counts and `worstSeverity`; omitted when the scan is disabled.
+- **`incomplete`** — `true` only when a version lookup failed upstream (HTTP error, throttling, open circuit breaker); absent otherwise. Treat an `incomplete` result with no actions as "could not check", never as "up to date".
 
 Use `mode: MINOR_PATCH` (default) to keep majors in the review lane, or `mode: ALL` to treat majors as deterministic too (rarely the right call). In `MINOR_PATCH` mode a newer major never blocks same-major updates: the `major_available` entry is emitted **and**, when a newer same-major stable exists (`currentMajorLatest` > current), the normal action targeting it (with the same edit metadata and a `minor`/`patch` `updateType`).
+
+### Release cooldown (`minReleaseAgeDays`)
+
+Optional Integer, after `includeSecurityScan`; absent or `<= 0` means no cooldown (and no extra lookups). When set, an action only targets a version whose Maven Central publish time (`Last-Modified` of its POM) is at least that many days old. If the preferred target is too young the newest older eligible upgrade of the same kind is used (stable, same variant, same-major for same-major actions; at most 5 publish-time lookups per coordinate) and the action carries `heldBackFrom` (the newest skipped version). If nothing is eligible no action is emitted and one aggregated warning lists the coordinates. A missing, non-positive or failed publish-time lookup counts as not eligible (fail closed). The cooldown also applies to security fixes and `mode: ALL`; a still-vulnerable dependency remains visible as a `vulnerable` entry. `latestStable` and `currentMajorLatest` stay unfiltered.
+
+### Failed lookups
+
+Version lookups that throw are reported in one warning (`Version lookup failed for N coordinates (upstream error): …`) and set `incomplete: true`. Coordinates for which the repository returns no versions (typical for internal artifacts) are reported in `Not found in the configured repository (skipped): …` and do not set `incomplete`. Each list shows at most 10 coordinates plus a count of the rest.
 
 ### Property pins (`property_override`)
 

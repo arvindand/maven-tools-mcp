@@ -151,4 +151,12 @@ class NativeImageConfigurationTest {
           .accepts(hints);
     }
   }
+
+  @Test
+  void registersPluginDeclarationForReflection() {
+    assertThat(
+            RuntimeHintsPredicates.reflection()
+                .onType(com.arvindand.mcp.maven.pom.PluginDeclaration.class))
+        .accepts(register());
+  }
 }

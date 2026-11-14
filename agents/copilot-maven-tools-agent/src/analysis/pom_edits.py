@@ -38,6 +38,13 @@ class Element:
         return node.text.strip() if node else default
 
 
+PLUGIN_PATHS = {
+    "build.plugins.plugin": "project.build.plugins.plugin",
+    "build.pluginManagement.plugins.plugin": "project.build.pluginManagement.plugins.plugin",
+}
+DEFAULT_PLUGIN_GROUP = "org.apache.maven.plugins"
+
+
 class PomEdits:
     """Plan precise, stale-safe version edits against one immutable POM snapshot."""
 
@@ -132,24 +139,73 @@ class PomEdits:
             raise ValueError("Declaration has no explicit version")
         return version
 
-    def _target(self, action: dict[str, Any]) -> tuple[Element, Element, str | None]:
-        version = self._version_node(action)
-        reference = re.fullmatch(r"\$\{([^}]+)}", version.text.strip())
-        if not reference:
-            if action.get("editTarget") == "property":
-                raise ValueError("Property edit does not match declaration")
-            return version, version, None
-        name = reference.group(1)
-        if action.get("propertyName") not in {None, name}:
-            raise ValueError("Property edit does not match declaration")
+    def _root_property(self, name: str) -> Element:
         properties = [node for node in self.nodes if node.path == f"project.properties.{name}"]
         if len(properties) != 1:
             raise ValueError("Missing or ambiguous root property")
-        return properties[0], version, name
+        return properties[0]
+
+    def _plugin_versions(self, action: dict[str, Any]) -> list[Element]:
+        """Version nodes of the plugin declarations an action may edit.
+
+        A property edit is shared by every root plugin declaration (build and plugin
+        management) that references exactly that property; a literal edit must resolve to
+        exactly one declaration at the declared location.
+        """
+        property_name = action.get("propertyName")
+        if action.get("editTarget") == "property":
+            paths = set(PLUGIN_PATHS.values())
+        else:
+            path = PLUGIN_PATHS.get(action.get("declaredIn") or "")
+            if path is None:
+                raise ValueError("Plugin action has no supported declaredIn location")
+            paths = {path}
+        matches = [
+            node
+            for node in self.nodes
+            if node.path in paths
+            and node.value("artifactId") == action["artifactId"]
+            and node.value("groupId", DEFAULT_PLUGIN_GROUP) == action["groupId"]
+        ]
+        versions = []
+        for node in matches:
+            version = node.child("version")
+            if version is None:
+                continue
+            if action.get("editTarget") == "property":
+                if version.text.strip() != "${" + str(property_name) + "}":
+                    continue
+            versions.append(version)
+        if action.get("editTarget") != "property" and (len(matches) != 1 or len(versions) != 1):
+            raise ValueError("Missing or ambiguous plugin declaration")
+        if not versions:
+            raise ValueError("Missing plugin declaration")
+        return versions
+
+    def _target(self, action: dict[str, Any]) -> tuple[Element, tuple[Element, ...], str | None]:
+        if action.get("kind") == "plugin_bump":
+            versions = self._plugin_versions(action)
+        else:
+            versions = [self._version_node(action)]
+        references = {
+            version.text.strip()
+            for version in versions
+            if re.fullmatch(r"\$\{([^}]+)}", version.text.strip())
+        }
+        if not references:
+            if action.get("editTarget") == "property":
+                raise ValueError("Property edit does not match declaration")
+            return versions[0], (versions[0],), None
+        if len(references) != 1 or len(references) != len({v.text.strip() for v in versions}):
+            raise ValueError("Property edit does not match declaration")
+        name = re.fullmatch(r"\$\{([^}]+)}", next(iter(references))).group(1)
+        if action.get("propertyName") not in {None, name}:
+            raise ValueError("Property edit does not match declaration")
+        return self._root_property(name), tuple(versions), name
 
     def apply(self, actions: list[dict[str, Any]]) -> tuple[str, list[dict], list[dict]]:
         """Apply only edits whose complete set of affected references agrees on the target."""
-        planned: list[tuple[dict, Element, Element, str | None]] = []
+        planned: list[tuple[dict, Element, tuple[Element, ...], str | None]] = []
         failed: list[dict] = []
         for action in actions:
             try:
@@ -173,7 +229,7 @@ class PomEdits:
             valid = len({item[0]["target"] for item in peers}) == 1
             if name:
                 reference = ("${" + name + "}").encode("utf-8")
-                owners = {item[2] for item in peers}
+                owners = {node for item in peers for node in item[2]}
                 # References in profiles, ignored dependencies, plugin configuration, chained
                 # properties or comments are intentionally not authorized by these actions.
                 valid = valid and self.raw.count(reference) == len(owners)

@@ -48,7 +48,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     assertThat(rec.deterministicActions())
         .singleElement()
@@ -80,7 +80,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     assertThat(rec.deterministicActions())
         .singleElement()
@@ -124,7 +124,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     assertThat(rec.deterministicActions())
         .hasSize(5)
@@ -163,7 +163,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     assertThat(rec.deterministicActions())
         .singleElement()
@@ -194,7 +194,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.ALL, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.ALL, null, false, null));
 
     assertThat(rec.deterministicActions()).isEmpty();
     assertThat(rec.needsAttention()).isEmpty();
@@ -216,7 +216,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.ALL, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.ALL, null, false, null));
 
     assertThat(rec.deterministicActions())
         .singleElement()
@@ -246,7 +246,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     assertThat(rec.deterministicActions())
         .singleElement()
@@ -285,7 +285,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<platform/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades("<platform/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     assertThat(rec.deterministicActions())
         .hasSize(6)
@@ -341,7 +341,8 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<build-parent/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades(
+                    "<build-parent/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     assertThat(rec.deterministicActions())
         .singleElement()
@@ -373,7 +374,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     assertThat(rec.deterministicActions())
         .singleElement()
@@ -408,7 +409,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.ALL, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.ALL, null, false, null));
 
     assertThat(rec.deterministicActions())
         .singleElement()
@@ -442,7 +443,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     assertThat(rec.deterministicActions()).isEmpty();
     assertThat(rec.needsAttention())
@@ -489,7 +490,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     // Conflict surfaces regardless of BOM bump path.
     assertThat(rec.needsAttention())
@@ -524,7 +525,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     assertThat(rec.deterministicActions()).isEmpty();
     assertThat(rec.needsAttention()).isEmpty();
@@ -544,7 +545,7 @@ class RecommendPomUpgradesToolTest {
 
     PomUpgradeRecommendation rec =
         getSuccessData(
-            buildTools(resolver, maven).recommend_pom_upgrades("<pom/>", null, null, false));
+            buildTools(resolver, maven).recommend_pom_upgrades("<pom/>", null, null, false, null));
 
     assertThat(rec.warnings())
         .containsExactly("Parent com.example:parent:1.0.0 could not be fetched");
@@ -558,7 +559,7 @@ class RecommendPomUpgradesToolTest {
 
     ToolResponse response =
         buildTools(resolver, mock(MavenCentralService.class))
-            .recommend_pom_upgrades("<bad-pom", null, null, false);
+            .recommend_pom_upgrades("<bad-pom", null, null, false, null);
 
     assertThat(response).isInstanceOf(ToolResponse.Error.class);
     assertThat(((ToolResponse.Error) response).error().message())
@@ -598,7 +599,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     assertThat(rec.deterministicActions())
         .as("transitive jackson-bom must not be recommended as a bom_bump")
@@ -624,7 +625,7 @@ class RecommendPomUpgradesToolTest {
     PomUpgradeRecommendation rec =
         getSuccessData(
             buildTools(resolver, maven)
-                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false));
+                .recommend_pom_upgrades("<pom/>", UpgradeMode.MINOR_PATCH, null, false, null));
 
     assertThat(rec.deterministicActions())
         .singleElement()

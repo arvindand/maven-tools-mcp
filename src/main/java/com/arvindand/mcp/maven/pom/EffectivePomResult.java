@@ -24,6 +24,9 @@ import java.util.Objects;
  * @param rootPluginDependencyDeclarations dependencies declared directly under root build plugins
  *     or plugin-management plugins whose literal version or root-owned backing property can be
  *     edited deterministically
+ * @param rootPluginDeclarations build plugins and plugin-management plugins declared directly in
+ *     the input POM whose own literal version or root-owned backing property can be edited
+ *     deterministically
  * @param propertyOverrides root properties that shadow an ancestor property which the ancestors use
  *     as a version (property pins such as {@code <snakeyaml.version>})
  * @param warnings non-fatal issues — unresolved properties, parents that couldn't be fetched,
@@ -38,6 +41,7 @@ public record EffectivePomResult(
     List<MavenCoordinate> rootImportedBoms,
     List<ManagedDeclaration> rootManagedDeclarations,
     List<PluginDependencyDeclaration> rootPluginDependencyDeclarations,
+    List<PluginDeclaration> rootPluginDeclarations,
     List<PropertyOverride> propertyOverrides,
     List<String> warnings) {
 
@@ -48,6 +52,7 @@ public record EffectivePomResult(
     Objects.requireNonNull(rootManagedDeclarations, "rootManagedDeclarations must not be null");
     Objects.requireNonNull(
         rootPluginDependencyDeclarations, "rootPluginDependencyDeclarations must not be null");
+    Objects.requireNonNull(rootPluginDeclarations, "rootPluginDeclarations must not be null");
     Objects.requireNonNull(propertyOverrides, "propertyOverrides must not be null");
     Objects.requireNonNull(warnings, "warnings must not be null");
     dependencies = List.copyOf(dependencies);
@@ -55,8 +60,29 @@ public record EffectivePomResult(
     rootImportedBoms = List.copyOf(rootImportedBoms);
     rootManagedDeclarations = List.copyOf(rootManagedDeclarations);
     rootPluginDependencyDeclarations = List.copyOf(rootPluginDependencyDeclarations);
+    rootPluginDeclarations = List.copyOf(rootPluginDeclarations);
     propertyOverrides = List.copyOf(propertyOverrides);
     warnings = List.copyOf(warnings);
+  }
+
+  /** Backwards-compatible constructor for callers without plugin declarations. */
+  public EffectivePomResult(
+      List<EffectiveDependency> dependencies,
+      List<MavenCoordinate> parentChain,
+      List<MavenCoordinate> rootImportedBoms,
+      List<ManagedDeclaration> rootManagedDeclarations,
+      List<PluginDependencyDeclaration> rootPluginDependencyDeclarations,
+      List<PropertyOverride> propertyOverrides,
+      List<String> warnings) {
+    this(
+        dependencies,
+        parentChain,
+        rootImportedBoms,
+        rootManagedDeclarations,
+        rootPluginDependencyDeclarations,
+        List.of(),
+        propertyOverrides,
+        warnings);
   }
 
   /** Backwards-compatible constructor for callers without property overrides. */
@@ -73,6 +99,7 @@ public record EffectivePomResult(
         rootImportedBoms,
         rootManagedDeclarations,
         rootPluginDependencyDeclarations,
+        List.of(),
         List.of(),
         warnings);
   }

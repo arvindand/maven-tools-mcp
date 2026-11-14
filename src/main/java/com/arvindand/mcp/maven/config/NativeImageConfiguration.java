@@ -31,6 +31,7 @@ import com.arvindand.mcp.maven.pom.EffectiveDependency;
 import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedAlternative;
 import com.arvindand.mcp.maven.pom.ManagedDeclaration;
+import com.arvindand.mcp.maven.pom.PluginDeclaration;
 import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
 import com.arvindand.mcp.maven.pom.PropertyOverride;
 import com.arvindand.mcp.maven.pom.Source;
@@ -196,6 +197,7 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, ManagedAlternative.class);
       registerRecordClass(hints, ManagedDeclaration.class);
       registerRecordClass(hints, PluginDependencyDeclaration.class);
+      registerRecordClass(hints, PluginDeclaration.class);
       registerRecordClass(hints, PropertyOverride.class);
 
       // Register recommend_pom_upgrades response records.

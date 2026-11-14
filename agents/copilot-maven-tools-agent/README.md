@@ -7,10 +7,11 @@ This agent is part of the [maven-tools-mcp](https://github.com/arvindand/maven-t
 ## What It Does
 
 1. Hands the raw `pom.xml` to the Maven Tools MCP `recommend_pom_upgrades` tool — the server walks the parent chain, resolves managed versions, and returns a `deterministicActions[]` list plus a `needsAttention[]` list
-2. Applies each `deterministicActions[]` entry directly to `pom.xml` (`explicit_bump` and `bom_bump` use coordinate matching; owned declarations use exact literal/property metadata; `plugin_dep_bump` literal edits are scoped to the owner plugin)
+2. Applies each `deterministicActions[]` entry directly to `pom.xml` (`explicit_bump` and `bom_bump` use coordinate matching; owned declarations use exact literal/property metadata; `plugin_dep_bump` literal edits are scoped to the owner plugin; `plugin_bump` edits a plugin's own literal version or shared root property)
 3. Displays `needsAttention[]` (major upgrades, multi-BOM conflicts, explicit overrides) for visibility — these never auto-apply
 4. Uses the Copilot SDK only in `major` mode to surface major updates for manual review
 5. Leaves build validation to the repo's normal PR CI
+6. Exits non-zero (after applying what it received) when the server reports `incomplete: true`, i.e. some version lookups failed
 
 Apache Maven on the server resolves the effective model. The Python editor uses Expat only to locate exact XML spans and verify current values, owners and shared-property references before preserving-format edits. It rejects stale or ambiguous actions; it does not implement Maven inheritance or BOM resolution. PR creation is handled externally by GitHub Actions (`peter-evans/create-pull-request`).
 
@@ -55,6 +56,7 @@ maven-agent -f pom.xml --mode major --dry-run
 | `-f, --pom-file` | `pom.xml` | Path to POM file |
 | `-m, --mode` | `minor_patch` | `minor_patch` (direct MCP auto-apply, server mode `MINOR_PATCH`), `major` (Copilot SDK report only), `all` (direct MCP auto-apply, server mode `ALL` — majors treated as deterministic) |
 | `--dry-run` | false | Analyze only, no changes |
+| `--min-release-age-days` | none | Release cooldown: only upgrade to versions published at least N days ago (no effect on the workflow unless passed) |
 | `--http` | false | Use HTTP transport (connect to running MCP server) |
 | `--mcp-url` | `http://localhost:8080/mcp` | MCP server URL for HTTP transport |
 | `-v, --verbose` | false | Enable verbose logging |

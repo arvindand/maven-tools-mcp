@@ -9,8 +9,8 @@ import java.util.List;
  *
  * @param kind {@code "explicit_bump"} (edit the declared dep's {@code <version>}), {@code
  *     "bom_bump"} (edit a user-controllable BOM coordinate), {@code "managed_decl_bump"} (edit a
- *     direct root dependency-management declaration), or {@code "plugin_dep_bump"} (edit a direct
- *     build/plugin dependency)
+ *     direct root dependency-management declaration), {@code "plugin_dep_bump"} (edit a direct
+ *     build/plugin dependency), or {@code "plugin_bump"} (edit a build plugin's own version)
  * @param groupId target groupId
  * @param artifactId target artifactId
  * @param current the currently-resolved version
@@ -25,6 +25,8 @@ import java.util.List;
  * @param ownerGroupId groupId of the plugin that owns a plugin dependency action
  * @param ownerArtifactId artifactId of the plugin that owns a plugin dependency action
  * @param security security context, present only when {@code current} has known vulnerabilities
+ * @param heldBackFrom newest version skipped by the {@code minReleaseAgeDays} cooldown when {@code
+ *     target} is an older eligible version; absent otherwise
  * @author Arvind Menon
  * @since 3.0.0
  */
@@ -41,7 +43,8 @@ public record UpgradeAction(
     String declaredIn,
     String ownerGroupId,
     String ownerArtifactId,
-    Security security) {
+    Security security,
+    String heldBackFrom) {
 
   /**
    * Security context of an action whose current version is vulnerable.
@@ -62,8 +65,9 @@ public record UpgradeAction(
   public static final String KIND_BOM_BUMP = "bom_bump";
   public static final String KIND_MANAGED_DECL_BUMP = "managed_decl_bump";
   public static final String KIND_PLUGIN_DEP_BUMP = "plugin_dep_bump";
+  public static final String KIND_PLUGIN_BUMP = "plugin_bump";
 
-  /** Backwards-compatible constructor for actions without security context. */
+  /** Backwards-compatible constructor for actions without security or cooldown context. */
   public UpgradeAction(
       String kind,
       String groupId,
@@ -88,6 +92,7 @@ public record UpgradeAction(
         declaredIn,
         ownerGroupId,
         ownerArtifactId,
+        null,
         null);
   }
 
@@ -105,7 +110,26 @@ public record UpgradeAction(
         declaredIn,
         ownerGroupId,
         ownerArtifactId,
-        security);
+        security,
+        heldBackFrom);
+  }
+
+  /** Returns a copy of this action recording the newest version the cooldown held back. */
+  public UpgradeAction withHeldBackFrom(String heldBackFrom) {
+    return new UpgradeAction(
+        kind,
+        groupId,
+        artifactId,
+        current,
+        target,
+        updateType,
+        editTarget,
+        propertyName,
+        declaredIn,
+        ownerGroupId,
+        ownerArtifactId,
+        security,
+        heldBackFrom);
   }
 
   /** Backwards-compatible constructor for action kinds without edit metadata. */
@@ -174,5 +198,28 @@ public record UpgradeAction(
         declaredIn,
         ownerGroupId,
         ownerArtifactId);
+  }
+
+  public static UpgradeAction pluginBump(
+      String groupId,
+      String artifactId,
+      String current,
+      String target,
+      String updateType,
+      String editTarget,
+      String propertyName,
+      String declaredIn) {
+    return new UpgradeAction(
+        KIND_PLUGIN_BUMP,
+        groupId,
+        artifactId,
+        current,
+        target,
+        updateType,
+        editTarget,
+        propertyName,
+        declaredIn,
+        null,
+        null);
   }
 }
