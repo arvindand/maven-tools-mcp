@@ -227,6 +227,95 @@ class MavenCentralServiceResilienceTest {
   }
 
   @Test
+  void notFoundWithRetryAfterIsRateLimitedNotMissingAndNeverCached() {
+    MavenCoordinate pom = MavenCoordinate.of("org.example", "lib", "1.0");
+    responder =
+        n ->
+            n <= 2
+                ? new Response(404, "", "54161")
+                : n == 3
+                    ? new Response(200, METADATA, null)
+                    : new Response(200, "<project/>", null);
+    runner()
+        .run(
+            ctx -> {
+              MavenCentralService service = ctx.getBean(MavenCentralService.class);
+              Throwable versions = catchThrowable(() -> service.getAllVersions(COORD));
+              MavenCentralException first = MavenCentralException.classify(versions);
+              assertThat(first.getReason()).isEqualTo(MavenCentralException.Reason.RATE_LIMITED);
+              assertThat(first.getRetryAfterSeconds()).isEqualTo(54161);
+              // Long hint: surfaced immediately, no retry loop.
+              assertThat(hits).hasValue(1);
+              Throwable fetchPom = catchThrowable(() -> service.fetchPomXml(pom));
+              assertThat(MavenCentralException.classify(fetchPom).getReason())
+                  .isEqualTo(MavenCentralException.Reason.RATE_LIMITED);
+              assertThat(hits).hasValue(2);
+              // Nothing was cached: the following 200s return real data.
+              assertThat(service.getAllVersions(COORD)).containsExactly("2.0", "1.0");
+              assertThat(service.fetchPomXml(pom)).contains("<project/>");
+              assertThat(hits).hasValue(4);
+            });
+  }
+
+  @Test
+  void throttledHeadRequestIsRateLimited() {
+    responder = n -> new Response(404, "", "54161");
+    runner()
+        .run(
+            ctx -> {
+              MavenCentralService service = ctx.getBean(MavenCentralService.class);
+              Throwable thrown =
+                  catchThrowable(() -> service.fetchArtifactWithTimestamp(COORD, "1.0"));
+              assertThat(MavenCentralException.classify(thrown).getReason())
+                  .isEqualTo(MavenCentralException.Reason.RATE_LIMITED);
+              assertThat(hits).hasValue(1);
+            });
+  }
+
+  @Test
+  void sustainedThrottledNotFoundOpensTheBreakerButPlainNotFoundDoesNot() {
+    responder = n -> new Response(404, "", "54161");
+    runner()
+        .run(
+            ctx -> {
+              MavenCentralService service = ctx.getBean(MavenCentralService.class);
+              for (int i = 0; i < 12; i++) {
+                int idx = i;
+                catchThrowable(
+                    () -> service.fetchPomXml(MavenCoordinate.of("org.example", "lib", "v" + idx)));
+              }
+              assertThat(
+                      ctx.getBean(CircuitBreakerRegistry.class)
+                          .circuitBreaker("maven-central")
+                          .getState())
+                  .isEqualTo(io.github.resilience4j.circuitbreaker.CircuitBreaker.State.OPEN);
+              Throwable open = catchThrowable(() -> service.getAllVersions(COORD));
+              assertThat(MavenCentralException.classify(open).getReason())
+                  .isEqualTo(MavenCentralException.Reason.CIRCUIT_OPEN);
+            });
+  }
+
+  @Test
+  void plainNotFoundForMetadataStaysEmptyAndBreakerStaysClosed() {
+    responder = n -> new Response(404, "", null);
+    runner()
+        .run(
+            ctx -> {
+              MavenCentralService service = ctx.getBean(MavenCentralService.class);
+              for (int i = 0; i < 12; i++) {
+                assertThat(service.getAllVersions(MavenCoordinate.of("org.example", "a" + i)))
+                    .isEmpty();
+              }
+              assertThat(hits).hasValue(12);
+              assertThat(
+                      ctx.getBean(CircuitBreakerRegistry.class)
+                          .circuitBreaker("maven-central")
+                          .getState())
+                  .isEqualTo(io.github.resilience4j.circuitbreaker.CircuitBreaker.State.CLOSED);
+            });
+  }
+
+  @Test
   void openCircuitIsClassifiedAsCircuitOpen() {
     responder = n -> new Response(429, "limited", "30");
     runner()

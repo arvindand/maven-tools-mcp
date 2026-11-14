@@ -4,6 +4,7 @@ import com.arvindand.mcp.maven.model.license.LicenseFindings;
 import com.arvindand.mcp.maven.model.license.LicenseInfo;
 import com.arvindand.mcp.maven.model.security.SecurityAssessment;
 import com.arvindand.mcp.maven.model.security.SecurityFindings;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -93,6 +94,10 @@ public record ProjectHealthAnalysis(
    * @param daysSinceRelease days since latestVersion was released
    * @param note additional clarification, for example a pre-release fallback
    * @param context7Query optional suggested Context7 query (see top-level context7_guidance)
+   * @param retryAfterSeconds retry hint when the error is a retryable upstream failure (omitted
+   *     otherwise)
+   * @param relocation where the artifact moved to, when its newest POM carries a relocation
+   *     (omitted otherwise)
    */
   public record DependencyHealthAnalysis(
       String dependency,
@@ -111,7 +116,9 @@ public record ProjectHealthAnalysis(
       Optional<List<LicenseInfo>> licenses,
       Optional<String> note,
       Optional<String> context7Query,
-      Optional<String> error) {
+      Optional<String> error,
+      @JsonInclude(JsonInclude.Include.NON_NULL) Integer retryAfterSeconds,
+      @JsonInclude(JsonInclude.Include.NON_NULL) RelocationInfo relocation) {
 
     private static final String STATUS_SUCCESS = "success";
 
@@ -152,6 +159,18 @@ public record ProjectHealthAnalysis(
       private String note;
       private String context7Query;
       private String error;
+      private Integer retryAfterSeconds;
+      private RelocationInfo relocation;
+
+      public Builder retryAfterSeconds(Integer retryAfterSeconds) {
+        this.retryAfterSeconds = retryAfterSeconds;
+        return this;
+      }
+
+      public Builder relocation(RelocationInfo relocation) {
+        this.relocation = relocation;
+        return this;
+      }
 
       public Builder dependency(String dependency) {
         this.dependency = dependency;
@@ -258,7 +277,9 @@ public record ProjectHealthAnalysis(
             Optional.ofNullable(licenses),
             Optional.ofNullable(note),
             Optional.ofNullable(context7Query),
-            Optional.ofNullable(error));
+            Optional.ofNullable(error),
+            retryAfterSeconds,
+            relocation);
       }
     }
   }

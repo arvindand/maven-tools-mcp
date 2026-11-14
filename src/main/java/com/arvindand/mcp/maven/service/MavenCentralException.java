@@ -1,5 +1,6 @@
 package com.arvindand.mcp.maven.service;
 
+import com.arvindand.mcp.maven.model.McpError;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import java.io.IOException;
@@ -32,8 +33,12 @@ public class MavenCentralException extends RuntimeException {
     INVALID_RESPONSE
   }
 
-  /** Upper bound applied to any {@code Retry-After} value reported to callers. */
-  public static final int MAX_RETRY_AFTER_SECONDS = 60;
+  /**
+   * Upper bound applied to any {@code Retry-After} value reported to callers (24 hours). Cloudflare
+   * has been observed asking for 15 hours; the reported hint stays honest. Only hints of a couple
+   * of seconds are ever waited for inline (see {@code MavenCentralRetryConfig}).
+   */
+  public static final int MAX_RETRY_AFTER_SECONDS = 86_400;
 
   /** Retry hint used when a 429 carries no usable {@code Retry-After} header. */
   public static final int DEFAULT_RATE_LIMIT_RETRY_SECONDS = 5;
@@ -100,6 +105,26 @@ public class MavenCentralException extends RuntimeException {
   }
 
   /**
+   * Maps this failure to the structured tool error: {@code RATE_LIMITED} for throttling, {@code
+   * EXTERNAL_SERVICE_UNAVAILABLE} (with a circuit-open marker) for an open breaker, and {@code
+   * EXTERNAL_SERVICE_UNAVAILABLE} with the classified message for everything else.
+   *
+   * @return the error, never null
+   */
+  public McpError toMcpError() {
+    return switch (reason) {
+      case RATE_LIMITED ->
+          McpError.mavenCentralRateLimited(
+              retryAfterSeconds != null ? retryAfterSeconds : DEFAULT_RATE_LIMIT_RETRY_SECONDS);
+      case CIRCUIT_OPEN ->
+          McpError.mavenCentralCircuitOpen(
+              retryAfterSeconds != null ? retryAfterSeconds : DEFAULT_CIRCUIT_OPEN_RETRY_SECONDS);
+      case UPSTREAM_ERROR, INVALID_RESPONSE ->
+          McpError.mavenCentralUnavailable(getMessage(), retryAfterSeconds);
+    };
+  }
+
+  /**
    * Classifies any failure raised by a repository call. Walks the cause chain, so wrapped
    * exceptions are recognised. A {@code MavenCentralException} is returned unchanged.
    *
@@ -134,6 +159,10 @@ public class MavenCentralException extends RuntimeException {
           "Maven repository is rate limiting requests (HTTP 429)",
           seconds > 0 ? seconds : DEFAULT_RATE_LIMIT_RETRY_SECONDS,
           original);
+    }
+    if (current instanceof HttpClientErrorException.NotFound notFound
+        && hasRetryAfter(notFound.getResponseHeaders())) {
+      return throttledNotFound(notFound);
     }
     if (current instanceof RequestNotPermitted) {
       return new MavenCentralException(
@@ -171,6 +200,52 @@ public class MavenCentralException extends RuntimeException {
           original);
     }
     return null;
+  }
+
+  /**
+   * Tells whether a failure is a recognised upstream/repository failure (HTTP, I/O, local limiter,
+   * open circuit or an already classified exception) as opposed to an unexpected programming or
+   * data error. Walks the cause chain like {@link #classify(Throwable)}.
+   *
+   * @param failure the failure, may be null
+   * @return true when {@link #classify(Throwable)} would recognise the failure
+   */
+  public static boolean isUpstreamFailure(Throwable failure) {
+    Throwable current = failure;
+    for (int depth = 0; current != null && depth < MAX_CAUSE_DEPTH; depth++) {
+      if (recognise(current, failure) != null) {
+        return true;
+      }
+      current = current.getCause() == current ? null : current.getCause();
+    }
+    return false;
+  }
+
+  /**
+   * Tells whether the response carries a {@code Retry-After} header. A genuine "no such artifact"
+   * 404 from a Maven repository never does; a 404 with this header is CDN throttling.
+   *
+   * @param headers response headers, may be null
+   * @return true when the header is present
+   */
+  public static boolean hasRetryAfter(HttpHeaders headers) {
+    return headers != null && headers.getFirst(HttpHeaders.RETRY_AFTER) != null;
+  }
+
+  /**
+   * Converts a 404 that carries {@code Retry-After} into a rate-limit exception. The caller must
+   * have checked {@link #hasRetryAfter(HttpHeaders)}.
+   *
+   * @param notFound the 404 response exception
+   * @return exception with reason {@link Reason#RATE_LIMITED} and the retry hint
+   */
+  public static MavenCentralException throttledNotFound(HttpClientErrorException notFound) {
+    int seconds = parseRetryAfterSeconds(notFound.getResponseHeaders());
+    return new MavenCentralException(
+        Reason.RATE_LIMITED,
+        "Maven repository is rate limiting requests (HTTP 404 with Retry-After)",
+        seconds >= 0 ? seconds : DEFAULT_RATE_LIMIT_RETRY_SECONDS,
+        notFound);
   }
 
   /**

@@ -15,6 +15,8 @@ import com.arvindand.mcp.maven.model.PomSecuritySummary;
 import com.arvindand.mcp.maven.model.PomUpgradeRecommendation;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
 import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
+import com.arvindand.mcp.maven.model.Relocation;
+import com.arvindand.mcp.maven.model.RelocationInfo;
 import com.arvindand.mcp.maven.model.StabilityFilter;
 import com.arvindand.mcp.maven.model.ToolResponse;
 import com.arvindand.mcp.maven.model.UpgradeAction;
@@ -56,6 +58,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -80,7 +84,6 @@ public class MavenDependencyTools {
 
   // Error message constants
   private static final String UNEXPECTED_ERROR = "Unexpected error";
-  private static final String MAVEN_CENTRAL_ERROR = "Maven Central error: ";
   private static final String INVALID_MAVEN_COORDINATE_FORMAT = "Invalid Maven coordinate format: ";
   private static final String SUCCESS_STATUS = "success";
   private static final String MAJOR_UPDATE_TYPE = "major";
@@ -155,15 +158,162 @@ public class MavenDependencyTools {
   private <T> ToolResponse executeToolOperation(ToolOperation<T> operation) {
     try {
       T result = operation.execute();
+      if (result instanceof ToolResponse response) {
+        return response;
+      }
       return ToolResponse.Success.of(result);
     } catch (IllegalArgumentException e) {
       return ToolResponse.Error.of(
           McpError.invalidInput(INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage(), Map.of()));
-    } catch (MavenCentralException e) {
-      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return toolFailure(e);
+    }
+  }
+
+  /**
+   * Maps a non-validation failure to a tool error. Recognised upstream failures (rate limiting,
+   * open circuit, HTTP / I/O errors) become precise, retryable {@link McpError}s; anything else is
+   * a genuine internal error and is logged at error level.
+   */
+  private static ToolResponse toolFailure(Exception e) {
+    if (MavenCentralException.isUpstreamFailure(e)) {
+      MavenCentralException upstream = MavenCentralException.classify(e);
+      logger.warn("Maven repository failure ({}): {}", upstream.getReason(), upstream.getMessage());
+      return ToolResponse.Error.of(upstream.toMcpError());
+    }
+    logger.error(UNEXPECTED_ERROR, e);
+    return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+  }
+
+  /** Human-readable per-dependency message for a classified upstream failure. */
+  private static String describe(MavenCentralException failure) {
+    Integer hint = failure.getRetryAfterSeconds();
+    boolean retryable =
+        failure.getReason() == MavenCentralException.Reason.RATE_LIMITED
+            || failure.getReason() == MavenCentralException.Reason.CIRCUIT_OPEN;
+    return retryable && hint != null
+        ? failure.getMessage() + "; retry in " + McpError.describeRetry(hint)
+        : failure.getMessage();
+  }
+
+  /**
+   * Collects, per call, the dependencies whose failure was a recognised upstream failure, so that a
+   * bulk call in which every dependency failed that way becomes one precise tool-level error
+   * instead of a success envelope full of identical per-dependency errors.
+   */
+  private static final class UpstreamFailures {
+    private final Map<String, MavenCentralException> byDependency = new ConcurrentHashMap<>();
+
+    /** Returns the classified failure when {@code e} is an upstream failure, else null. */
+    @Nullable MavenCentralException record(String dependency, RuntimeException e) {
+      if (!MavenCentralException.isUpstreamFailure(e)) {
+        return null;
+      }
+      MavenCentralException classified = MavenCentralException.classify(e);
+      byDependency.putIfAbsent(dependency, classified);
+      return classified;
+    }
+
+    /** Throws the most informative failure when all {@code total} dependencies failed upstream. */
+    void throwIfAllFailed(int total) {
+      if (total <= 0 || byDependency.size() < total) {
+        return;
+      }
+      MavenCentralException best = null;
+      for (MavenCentralException candidate : byDependency.values()) {
+        if (best == null || priority(candidate) < priority(best)) {
+          best = candidate;
+        } else if (priority(candidate) == priority(best) && hint(candidate) > hint(best)) {
+          best = candidate;
+        }
+      }
+      throw best;
+    }
+
+    private static int priority(MavenCentralException e) {
+      return switch (e.getReason()) {
+        case RATE_LIMITED -> 0;
+        case CIRCUIT_OPEN -> 1;
+        case UPSTREAM_ERROR -> 2;
+        case INVALID_RESPONSE -> 3;
+      };
+    }
+
+    private static int hint(MavenCentralException e) {
+      return e.getRetryAfterSeconds() == null ? 0 : e.getRetryAfterSeconds();
+    }
+  }
+
+  /** Per-dependency failure text and retry hint for result records. */
+  private record FailureText(String message, @Nullable Integer retryAfterSeconds) {}
+
+  private FailureText failureText(
+      UpstreamFailures failures, String dependency, RuntimeException e) {
+    MavenCentralException classified = failures.record(dependency, e);
+    if (classified == null) {
+      return new FailureText(e.getMessage(), null);
+    }
+    return new FailureText(describe(classified), classified.getRetryAfterSeconds());
+  }
+
+  /**
+   * Best-effort relocation lookup, one per distinct {@code groupId:artifactId} per call. Looks at
+   * the newest published version of the old coordinates (relocation stubs are published as the
+   * newest versions) and, when it relocates, at the newest stable version of the new coordinates.
+   * Any failure yields no relocation; it never fails a tool or marks a result incomplete.
+   */
+  private final class RelocationLookup {
+    private final Map<String, CompletableFuture<Optional<RelocationInfo>>> memo =
+        new ConcurrentHashMap<>();
+
+    @Nullable RelocationInfo find(MavenCoordinate coordinate) {
+      return find(coordinate.groupId(), coordinate.artifactId());
+    }
+
+    @Nullable RelocationInfo find(String groupId, String artifactId) {
+      String key = groupId + ":" + artifactId;
+      CompletableFuture<Optional<RelocationInfo>> mine = new CompletableFuture<>();
+      CompletableFuture<Optional<RelocationInfo>> existing = memo.putIfAbsent(key, mine);
+      if (existing != null) {
+        return existing.join().orElse(null);
+      }
+      mine.complete(Optional.ofNullable(compute(groupId, artifactId)));
+      return mine.join().orElse(null);
+    }
+
+    @Nullable
+    private RelocationInfo compute(String groupId, String artifactId) {
+      try {
+        Optional<Relocation> found =
+            mavenCentralService.findRelocationOfLatest(MavenCoordinate.of(groupId, artifactId));
+        if (found == null || found.isEmpty()) {
+          return null;
+        }
+        Relocation relocation = found.get();
+        if (groupId.equals(relocation.groupId()) && artifactId.equals(relocation.artifactId())) {
+          return null; // a version-only relocation is not a coordinate change
+        }
+        return RelocationInfo.of(
+            relocation, latestStableOf(relocation.groupId(), relocation.artifactId()));
+      } catch (RuntimeException e) {
+        logger.debug("Relocation lookup failed for {}:{}: {}", groupId, artifactId, e.getMessage());
+        return null;
+      }
+    }
+
+    @Nullable
+    private String latestStableOf(String groupId, String artifactId) {
+      try {
+        List<String> versions =
+            mavenCentralService.getAllVersions(MavenCoordinate.of(groupId, artifactId));
+        return versions == null
+            ? null
+            : versions.stream().filter(versionComparator::isStableVersion).findFirst().orElse(null);
+      } catch (RuntimeException e) {
+        logger.debug(
+            "Latest version lookup failed for {}:{}: {}", groupId, artifactId, e.getMessage());
+        return null;
+      }
     }
   }
 
@@ -183,7 +333,8 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Single dependency. Returns newest versions by type (stable/rc/beta/alpha/milestone). Set"
+          "Single dependency. Returns newest versions by type (stable/rc/beta/alpha/milestone) and"
+              + " any relocation to new coordinates. Set"
               + " stabilityFilter to ALL, STABLE_ONLY, or PREFER_STABLE (default). Use when asked:"
               + " 'what's the latest version of X?' Results span platform variants; for an"
               + " existing dependency use compare_dependency_versions to preserve its variant."
@@ -212,7 +363,8 @@ public class MavenDependencyTools {
 
           StabilityFilter filter =
               stabilityFilter != null ? stabilityFilter : StabilityFilter.PREFER_STABLE;
-          return buildVersionsByType(coordinate, allVersions, filter);
+          return buildVersionsByType(coordinate, allVersions, filter)
+              .withRelocation(new RelocationLookup().find(coordinate));
         });
   }
 
@@ -273,8 +425,8 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Bulk lookup (NO versions in input). Returns latest versions by type for each"
-              + " dependency. Use when you have a list of dependencies without versions and need to"
+          "Bulk lookup (NO versions in input). Returns latest versions by type (and any"
+              + " relocation) for each dependency. Use when you have a list of dependencies without versions and need to"
               + " find what versions are available. For upgrade checks, use compare_dependency_versions"
               + " instead.")
   public ToolResponse check_multiple_dependencies(
@@ -295,8 +447,14 @@ public class MavenDependencyTools {
           List<String> depList = parseDependencies(dependencies);
           StabilityFilter filter = stabilityFilter != null ? stabilityFilter : StabilityFilter.ALL;
 
-          return processBatchWithBackpressure(
-              depList.stream().distinct().toList(), dep -> processVersionCheck(dep, filter));
+          List<String> distinct = depList.stream().distinct().toList();
+          UpstreamFailures failures = new UpstreamFailures();
+          RelocationLookup relocations = new RelocationLookup();
+          List<BulkCheckResult> results =
+              processBatchWithBackpressure(
+                  distinct, dep -> processVersionCheck(dep, filter, failures, relocations));
+          failures.throwIfAllFailed(distinct.size());
+          return results;
         });
   }
 
@@ -313,7 +471,8 @@ public class MavenDependencyTools {
   @Tool(
       description =
           "Bulk upgrade check (versions REQUIRED in input). Compares current versions to latest and"
-              + " suggests upgrades (major/minor/patch). Includes CVE vulnerability scanning."
+              + " suggests upgrades (major/minor/patch), flags relocated artifacts. Includes CVE"
+              + " vulnerability scanning."
               + " Use when user provides their current dependency versions and wants upgrade advice.")
   public ToolResponse compare_dependency_versions(
       @ToolParam(
@@ -345,10 +504,16 @@ public class MavenDependencyTools {
           final SecuritySummary securitySummary =
               scanSecurity ? SecuritySummary.fromAssessments(securityAssessments) : null;
 
+          List<String> distinct = depList.stream().distinct().toList();
+          UpstreamFailures failures = new UpstreamFailures();
+          RelocationLookup relocations = new RelocationLookup();
           List<VersionComparison.DependencyComparisonResult> results =
               processBatchWithBackpressure(
-                  depList.stream().distinct().toList(),
-                  dep -> compareDependencyVersion(dep, filter, securityAssessments));
+                  distinct,
+                  dep ->
+                      compareDependencyVersion(
+                          dep, filter, securityAssessments, failures, relocations));
+          failures.throwIfAllFailed(distinct.size());
 
           VersionComparison.UpdateSummary summary = calculateUpdateSummary(results);
 
@@ -477,8 +642,7 @@ public class MavenDependencyTools {
                   coordinate, ACCURATE_TIMESTAMP_VERSION_LIMIT);
 
           if (allVersions.isEmpty()) {
-            throw new MavenCentralException(
-                "No versions found for " + coordinate.toCoordinateString());
+            return notFoundResponse(coordinate);
           }
 
           return analyzeReleasePattern(
@@ -501,7 +665,7 @@ public class MavenDependencyTools {
       description =
           "Bulk project view (PREFERRED for full audits). Summarizes health across many"
               + " dependencies using age and maintenance patterns. Includes CVE vulnerability"
-              + " scanning and license compliance. Include versions (groupId:artifactId:version) to"
+              + " scanning, license compliance and relocation hints. Include versions (groupId:artifactId:version) to"
               + " audit what you actually run; without one the newest version per stabilityFilter"
               + " is scanned (reported as scannedVersion). Use this instead of"
               + " check_multiple_dependencies when you need security/license info or overall"
@@ -551,7 +715,11 @@ public class MavenDependencyTools {
 
           List<String> distinctDeps = depList.stream().distinct().toList();
           // Decide once, per dependency, which version is audited (supplied or latest per filter)
-          final Map<String, HealthTarget> targets = resolveHealthTargets(distinctDeps, filter);
+          UpstreamFailures failures = new UpstreamFailures();
+          RelocationLookup relocations = new RelocationLookup();
+          final Map<String, HealthTarget> targets =
+              resolveHealthTargets(distinctDeps, filter, failures);
+          failures.throwIfAllFailed(distinctDeps.size());
 
           final Map<String, SecurityAssessment> securityByDependency =
               scanSecurity ? scanTargetSecurity(targets) : Map.of();
@@ -570,7 +738,10 @@ public class MavenDependencyTools {
                           scanSecurity,
                           securityByDependency,
                           scanLicenses,
-                          licensesByDependency));
+                          licensesByDependency,
+                          failures,
+                          relocations));
+          failures.throwIfAllFailed(distinctDeps.size());
 
           // Perform security scan if requested
           SecurityFindings securityFindings = null;
@@ -607,7 +778,9 @@ public class MavenDependencyTools {
           boolean scanSecurity,
           Map<String, SecurityAssessment> securityByDependency,
           boolean scanLicenses,
-          Map<String, List<LicenseInfo>> licensesByDependency) {
+          Map<String, List<LicenseInfo>> licensesByDependency,
+          UpstreamFailures failures,
+          RelocationLookup relocations) {
     try {
       if (target == null) {
         return ProjectHealthAnalysis.DependencyHealthAnalysis.error(
@@ -619,6 +792,7 @@ public class MavenDependencyTools {
             .status(target.status())
             .currentVersion(target.currentVersion())
             .error(target.error())
+            .retryAfterSeconds(target.retryAfterSeconds())
             .build();
       }
 
@@ -684,7 +858,8 @@ public class MavenDependencyTools {
               .maintenanceLevel(maintenanceStatus)
               .security(security)
               .licenses((scanSecurity || scanLicenses) ? licenses : null)
-              .note(notes.isEmpty() ? null : String.join("; ", notes));
+              .note(notes.isEmpty() ? null : String.join("; ", notes))
+              .relocation(relocations.find(coordinate));
 
       String updateType = null;
       boolean updateAvailable = false;
@@ -714,7 +889,13 @@ public class MavenDependencyTools {
 
       return builder.build();
     } catch (RuntimeException e) {
-      return ProjectHealthAnalysis.DependencyHealthAnalysis.error(dependency, e.getMessage());
+      FailureText failure = failureText(failures, dependency, e);
+      return ProjectHealthAnalysis.DependencyHealthAnalysis.builder()
+          .dependency(dependency)
+          .status("error")
+          .error(failure.message())
+          .retryAfterSeconds(failure.retryAfterSeconds())
+          .build();
     }
   }
 
@@ -776,6 +957,11 @@ public class MavenDependencyTools {
     return licensesByDependency != null
         ? licensesByDependency.getOrDefault(gaKey, List.of())
         : List.of();
+  }
+
+  private static String gaOf(String dependency) {
+    String[] parts = dependency.split(":");
+    return parts.length >= 2 ? parts[0] + ":" + parts[1] : dependency;
   }
 
   private static String gaKey(MavenCoordinate coordinate) {
@@ -878,6 +1064,7 @@ public class MavenDependencyTools {
    * @param status {@link #OK} or the status to report for the dependency
    * @param error message when status is not OK
    * @param note optional clarification for the report
+   * @param retryAfterSeconds retry hint when the failure was a retryable upstream failure
    */
   private record HealthTarget(
       MavenCoordinate coordinate,
@@ -886,13 +1073,24 @@ public class MavenDependencyTools {
       String latestVersion,
       String status,
       String error,
-      String note) {
+      String note,
+      @Nullable Integer retryAfterSeconds) {
 
     static final String OK = SUCCESS_STATUS;
 
     static HealthTarget failed(
         MavenCoordinate coordinate, String status, String error, String currentVersion) {
-      return new HealthTarget(coordinate, currentVersion, null, null, status, error, null);
+      return failed(coordinate, status, error, currentVersion, null);
+    }
+
+    static HealthTarget failed(
+        MavenCoordinate coordinate,
+        String status,
+        String error,
+        String currentVersion,
+        @Nullable Integer retryAfterSeconds) {
+      return new HealthTarget(
+          coordinate, currentVersion, null, null, status, error, null, retryAfterSeconds);
     }
 
     String scannedKey() {
@@ -901,7 +1099,7 @@ public class MavenDependencyTools {
   }
 
   private Map<String, HealthTarget> resolveHealthTargets(
-      List<String> dependencies, StabilityFilter filter) {
+      List<String> dependencies, StabilityFilter filter, UpstreamFailures failures) {
     Map<String, HealthTarget> targets = new LinkedHashMap<>();
     for (String dep : dependencies) {
       MavenCoordinate coord = null;
@@ -910,8 +1108,12 @@ public class MavenDependencyTools {
         targets.put(dep, resolveHealthTarget(coord, filter));
       } catch (RuntimeException e) {
         logger.debug("Could not resolve version for {}: {}", dep, e.getMessage());
+        FailureText failure = failureText(failures, dep, e);
         if (coord != null) {
-          targets.put(dep, HealthTarget.failed(coord, "error", e.getMessage(), coord.version()));
+          targets.put(
+              dep,
+              HealthTarget.failed(
+                  coord, "error", failure.message(), coord.version(), failure.retryAfterSeconds()));
         }
       }
     }
@@ -945,7 +1147,7 @@ public class MavenDependencyTools {
       if (latest == null) {
         note = "No stable release available for stabilityFilter=STABLE_ONLY";
       }
-      return new HealthTarget(coord, current, current, latest, HealthTarget.OK, null, note);
+      return new HealthTarget(coord, current, current, latest, HealthTarget.OK, null, note, null);
     }
     if (latest == null) {
       return HealthTarget.failed(
@@ -954,7 +1156,7 @@ public class MavenDependencyTools {
           "No stable version exists and stabilityFilter=STABLE_ONLY; nothing was scanned",
           null);
     }
-    return new HealthTarget(coord, null, latest, latest, HealthTarget.OK, null, note);
+    return new HealthTarget(coord, null, latest, latest, HealthTarget.OK, null, note, null);
   }
 
   private Map<String, SecurityAssessment> scanTargetSecurity(Map<String, HealthTarget> targets) {
@@ -1090,14 +1292,16 @@ public class MavenDependencyTools {
         .toList();
   }
 
-  private BulkCheckResult processVersionCheck(String dep, StabilityFilter filter) {
+  private BulkCheckResult processVersionCheck(
+      String dep, StabilityFilter filter, UpstreamFailures failures, RelocationLookup relocations) {
     return switch (filter) {
-      case STABLE_ONLY -> processStableVersionCheck(dep);
-      case ALL, PREFER_STABLE -> processComprehensiveVersionCheck(dep);
+      case STABLE_ONLY -> processStableVersionCheck(dep, failures, relocations);
+      case ALL, PREFER_STABLE -> processComprehensiveVersionCheck(dep, failures, relocations);
     };
   }
 
-  private BulkCheckResult processStableVersionCheck(String dep) {
+  private BulkCheckResult processStableVersionCheck(
+      String dep, UpstreamFailures failures, RelocationLookup relocations) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
       List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
@@ -1111,23 +1315,29 @@ public class MavenDependencyTools {
 
       String latestStable = stableVersions.isEmpty() ? null : stableVersions.get(0);
 
-      return latestStable != null
-          ? BulkCheckResult.foundStable(
-              coordinate.toCoordinateString(),
-              latestStable,
-              VersionType.STABLE.getDisplayName(),
-              allVersions.size(),
-              stableVersions.size())
-          : BulkCheckResult.noStableVersion(coordinate.toCoordinateString(), allVersions.size());
-    } catch (Exception e) {
-      return BulkCheckResult.error(dep, e.getMessage());
+      BulkCheckResult result =
+          latestStable != null
+              ? BulkCheckResult.foundStable(
+                  coordinate.toCoordinateString(),
+                  latestStable,
+                  VersionType.STABLE.getDisplayName(),
+                  allVersions.size(),
+                  stableVersions.size())
+              : BulkCheckResult.noStableVersion(
+                  coordinate.toCoordinateString(), allVersions.size());
+      return result.withRelocation(relocations.find(coordinate));
+    } catch (RuntimeException e) {
+      FailureText failure = failureText(failures, dep, e);
+      return BulkCheckResult.error(dep, failure.message(), failure.retryAfterSeconds());
     }
   }
 
   private VersionComparison.DependencyComparisonResult compareDependencyVersion(
       String dep,
       StabilityFilter stabilityFilter,
-      Map<String, SecurityAssessment> securityAssessments) {
+      Map<String, SecurityAssessment> securityAssessments,
+      UpstreamFailures failures,
+      RelocationLookup relocations) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
       String currentVersion = coordinate.version();
@@ -1141,7 +1351,8 @@ public class MavenDependencyTools {
 
       if (currentVersion == null) {
         return VersionComparison.DependencyComparisonResult.noCurrentVersion(
-            coordinate.toCoordinateString());
+                coordinate.toCoordinateString())
+            .withRelocation(relocations.find(coordinate));
       }
 
       String latestType = versionComparator.getVersionTypeString(latestVersion);
@@ -1155,30 +1366,35 @@ public class MavenDependencyTools {
         security = securityAssessments.get(coordinate.toCoordinateString());
       }
 
+      RelocationInfo relocation = relocations.find(coordinate);
       if (security != null) {
         return VersionComparison.DependencyComparisonResult.successWithSecurity(
-            coordinate.toCoordinateString(),
-            currentVersion,
-            latestVersion,
-            latestType,
-            updateType,
-            updateAvailable,
-            security,
-            context7Properties.enabled(),
-            sameMajorStableFallback);
+                coordinate.toCoordinateString(),
+                currentVersion,
+                latestVersion,
+                latestType,
+                updateType,
+                updateAvailable,
+                security,
+                context7Properties.enabled(),
+                sameMajorStableFallback)
+            .withRelocation(relocation);
       }
 
       return VersionComparison.DependencyComparisonResult.success(
-          coordinate.toCoordinateString(),
-          currentVersion,
-          latestVersion,
-          latestType,
-          updateType,
-          updateAvailable,
-          context7Properties.enabled(),
-          sameMajorStableFallback);
+              coordinate.toCoordinateString(),
+              currentVersion,
+              latestVersion,
+              latestType,
+              updateType,
+              updateAvailable,
+              context7Properties.enabled(),
+              sameMajorStableFallback)
+          .withRelocation(relocation);
     } catch (RuntimeException e) {
-      return VersionComparison.DependencyComparisonResult.error(dep, e.getMessage());
+      FailureText failure = failureText(failures, dep, e);
+      return VersionComparison.DependencyComparisonResult.error(
+          dep, failure.message(), failure.retryAfterSeconds());
     }
   }
 
@@ -1229,7 +1445,8 @@ public class MavenDependencyTools {
     return numericParts.length > 0 ? numericParts[0] : null;
   }
 
-  private BulkCheckResult processComprehensiveVersionCheck(String dep) {
+  private BulkCheckResult processComprehensiveVersionCheck(
+      String dep, UpstreamFailures failures, RelocationLookup relocations) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
       List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
@@ -1251,19 +1468,26 @@ public class MavenDependencyTools {
               : versionComparator.getVersionTypeString(allVersions.get(0));
 
       return BulkCheckResult.foundComprehensive(
-          dep,
-          primaryVersion,
-          primaryType,
-          allVersions.size(),
-          stableCount,
-          versionInfos.latestStable(),
-          versionInfos.latestRc(),
-          versionInfos.latestBeta(),
-          versionInfos.latestAlpha(),
-          versionInfos.latestMilestone());
+              dep,
+              primaryVersion,
+              primaryType,
+              allVersions.size(),
+              stableCount,
+              versionInfos.latestStable(),
+              versionInfos.latestRc(),
+              versionInfos.latestBeta(),
+              versionInfos.latestAlpha(),
+              versionInfos.latestMilestone())
+          .withRelocation(relocations.find(coordinate));
     } catch (RuntimeException e) {
-      logger.error("Error processing comprehensive version check for {}: {}", dep, e.getMessage());
-      return BulkCheckResult.error(dep, e.getMessage());
+      FailureText failure = failureText(failures, dep, e);
+      if (failures.byDependency.containsKey(dep)) {
+        logger.warn("Version check failed for {}: {}", dep, failure.message());
+      } else {
+        logger.error(
+            "Error processing comprehensive version check for {}: {}", dep, e.getMessage());
+      }
+      return BulkCheckResult.error(dep, failure.message(), failure.retryAfterSeconds());
     }
   }
 
@@ -1598,6 +1822,20 @@ public class MavenDependencyTools {
       }
     }
 
+    List<ProjectHealthAnalysis.DependencyHealthAnalysis> relocated =
+        successfulDeps.stream().filter(dep -> dep.relocation() != null).toList();
+    if (!relocated.isEmpty()) {
+      ProjectHealthAnalysis.DependencyHealthAnalysis first = relocated.get(0);
+      recommendations.add(
+          relocated.size()
+              + (relocated.size() == 1 ? " dependency is" : " dependencies are")
+              + " relocated to new coordinates (for example "
+              + gaOf(first.dependency())
+              + " -> "
+              + first.relocation().coordinate()
+              + "); switching groupId/artifactId may require code changes");
+    }
+
     if (metrics.staleCount() > 0) {
       recommendations.add(
           "Review " + metrics.staleCount() + " stale dependencies for alternatives");
@@ -1676,8 +1914,7 @@ public class MavenDependencyTools {
     } catch (IllegalArgumentException e) {
       return ToolResponse.Error.of("Invalid POM input: " + e.getMessage());
     } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return toolFailure(e);
     }
   }
 
@@ -1703,7 +1940,8 @@ public class MavenDependencyTools {
               + " apply (explicit_bump, bom_bump, managed_decl_bump, plugin_dep_bump,"
               + " plugin_bump); actions"
               + " for vulnerable versions carry a security object with targetStatus; (2)"
-              + " needsAttention — vulnerable (known CVEs, first), major_available (alongside the"
+              + " needsAttention — vulnerable (known CVEs, first), relocated (declared dependency moved to"
+              + " new coordinates), major_available (alongside the"
               + " same-major action when one exists), property_override (a root property pinning a"
               + " parent-managed version, e.g. snakeyaml.version),"
               + " conflict and explicit_override entries needing review, each with the Maven"
@@ -1754,8 +1992,7 @@ public class MavenDependencyTools {
     } catch (IllegalArgumentException e) {
       return ToolResponse.Error.of("Invalid POM input: " + e.getMessage());
     } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return toolFailure(e);
     }
   }
 
@@ -1766,6 +2003,8 @@ public class MavenDependencyTools {
       RecommendationRun run) {
     List<UpgradeAction> actions = new ArrayList<>();
     List<NeedsAttention> attention = new ArrayList<>();
+    // Best effort and never mechanical; ordered after vulnerable and before every other kind.
+    List<NeedsAttention> relocated = buildRelocatedAttention(resolved);
 
     // Only BOMs the user can edit in their own POM are actionable: the direct <parent> and the
     // root POM's direct <dependencyManagement> imports. Transitively-imported BOMs (e.g.,
@@ -1835,8 +2074,10 @@ public class MavenDependencyTools {
 
     if (!includeSecurityScan) {
       warnings.addAll(run.warnings());
+      List<NeedsAttention> unscanned = new ArrayList<>(relocated);
+      unscanned.addAll(attention);
       return new PomUpgradeRecommendation(
-          actions, attention, warnings, null, run.incomplete() ? Boolean.TRUE : null);
+          actions, unscanned, warnings, null, run.incomplete() ? Boolean.TRUE : null);
     }
     SecurityOutcome security = applySecurityScan(run, resolved, actions);
     if (security.summary().unknown() > 0) {
@@ -1845,6 +2086,7 @@ public class MavenDependencyTools {
     }
     warnings.addAll(run.warnings());
     List<NeedsAttention> ordered = new ArrayList<>(security.vulnerable());
+    ordered.addAll(relocated);
     ordered.addAll(attention);
     return new PomUpgradeRecommendation(
         security.actions(),
@@ -1852,6 +2094,72 @@ public class MavenDependencyTools {
         warnings,
         security.summary(),
         run.incomplete() ? Boolean.TRUE : null);
+  }
+
+  /**
+   * Builds {@code relocated} entries for dependencies the POM declares itself (EXPLICIT,
+   * EXPLICIT_OVERRIDE) and for its own dependency-management declarations. BOM-managed (MANAGED)
+   * dependencies, BOMs and plugins are not looked up. Lookups run in the bounded batch, one per
+   * distinct {@code groupId:artifactId}; any failure just yields no entry.
+   */
+  private List<NeedsAttention> buildRelocatedAttention(EffectivePomResult resolved) {
+    record Declared(String groupId, String artifactId, String current, String source) {}
+    Set<Declared> declared = new LinkedHashSet<>();
+    for (EffectiveDependency dep : resolved.dependencies()) {
+      if (dep.source() == Source.EXPLICIT || dep.source() == Source.EXPLICIT_OVERRIDE) {
+        declared.add(
+            new Declared(
+                dep.groupId(), dep.artifactId(), dep.effectiveVersion(), dep.source().name()));
+      }
+    }
+    for (ManagedDeclaration declaration : resolved.rootManagedDeclarations()) {
+      declared.add(
+          new Declared(
+              declaration.groupId(),
+              declaration.artifactId(),
+              declaration.version(),
+              "MANAGED_DECLARATION"));
+    }
+    if (declared.isEmpty()) {
+      return List.of();
+    }
+    List<String> distinct =
+        declared.stream().map(d -> d.groupId() + ":" + d.artifactId()).distinct().toList();
+    Map<String, RelocationInfo> found = new HashMap<>();
+    try {
+      RelocationLookup lookup = new RelocationLookup();
+      List<RelocationInfo> infos =
+          processBatchWithBackpressure(
+              distinct,
+              ga -> {
+                String[] parts = ga.split(":", 2);
+                return lookup.find(parts[0], parts[1]);
+              });
+      for (int i = 0; i < distinct.size(); i++) {
+        if (infos.get(i) != null) {
+          found.put(distinct.get(i), infos.get(i));
+        }
+      }
+    } catch (RuntimeException e) {
+      logger.debug("Relocation lookups skipped: {}", e.getMessage());
+      return List.of();
+    }
+    List<NeedsAttention> out = new ArrayList<>();
+    for (Declared d : declared) {
+      RelocationInfo info = found.get(d.groupId() + ":" + d.artifactId());
+      if (info != null) {
+        out.add(
+            new NeedsAttention.Relocated(
+                d.groupId(),
+                d.artifactId(),
+                d.current(),
+                d.source(),
+                info.coordinate(),
+                info.latestVersion(),
+                info.message()));
+      }
+    }
+    return out;
   }
 
   private static String pluginDeclarationKey(PluginDeclaration declaration) {
@@ -1877,7 +2185,7 @@ public class MavenDependencyTools {
 
     private final Integer minReleaseAgeDays;
     private final long cutoffEpochMillis;
-    private final Set<String> lookupFailed = new LinkedHashSet<>();
+    private final Map<String, MavenCentralException> lookupFailures = new LinkedHashMap<>();
     private final Set<String> notFound = new LinkedHashSet<>();
     private final Set<String> cooldownBlocked = new LinkedHashSet<>();
     private final Map<String, Boolean> eligibility = new HashMap<>();
@@ -1897,19 +2205,35 @@ public class MavenDependencyTools {
 
     /** True only when a lookup threw; repository misses alone do not make a run incomplete. */
     boolean incomplete() {
-      return !lookupFailed.isEmpty();
+      return !lookupFailures.isEmpty();
+    }
+
+    /** Records a failed lookup with its classified cause; the first cause per key is kept. */
+    void recordFailure(String key, RuntimeException failure) {
+      lookupFailures.putIfAbsent(key, MavenCentralException.classify(failure));
     }
 
     List<String> warnings() {
       List<String> out = new ArrayList<>();
-      if (!lookupFailed.isEmpty()) {
-        out.add(
-            "Version lookup failed for "
-                + lookupFailed.size()
-                + (lookupFailed.size() == 1 ? " coordinate" : " coordinates")
-                + " (upstream error): "
-                + listed(lookupFailed));
-      }
+      Map<MavenCentralException.Reason, Set<String>> byReason = new LinkedHashMap<>();
+      Map<MavenCentralException.Reason, Integer> hints = new HashMap<>();
+      lookupFailures.forEach(
+          (key, failure) -> {
+            byReason.computeIfAbsent(failure.getReason(), r -> new LinkedHashSet<>()).add(key);
+            if (failure.getRetryAfterSeconds() != null) {
+              hints.merge(failure.getReason(), failure.getRetryAfterSeconds(), Math::max);
+            }
+          });
+      byReason.forEach(
+          (reason, keys) ->
+              out.add(
+                  "Version lookup failed for "
+                      + keys.size()
+                      + (keys.size() == 1 ? " coordinate" : " coordinates")
+                      + " ("
+                      + failureLabel(reason, hints.get(reason))
+                      + "): "
+                      + listed(keys)));
       if (!notFound.isEmpty()) {
         out.add("Not found in the configured repository (skipped): " + listed(notFound));
       }
@@ -1924,6 +2248,19 @@ public class MavenDependencyTools {
                 + listed(cooldownBlocked));
       }
       return out;
+    }
+
+    private static String failureLabel(
+        MavenCentralException.Reason reason, @Nullable Integer retryAfterSeconds) {
+      String retry =
+          retryAfterSeconds == null
+              ? ""
+              : "; retry in " + McpError.describeRetry(retryAfterSeconds);
+      return switch (reason) {
+        case RATE_LIMITED -> "repository rate limited" + retry;
+        case CIRCUIT_OPEN -> "repository circuit breaker open" + retry;
+        case UPSTREAM_ERROR, INVALID_RESPONSE -> "upstream error";
+      };
     }
 
     private static String listed(Set<String> values) {
@@ -2465,7 +2802,7 @@ public class MavenDependencyTools {
               && artifact.timestamp() <= run.cutoffEpochMillis;
     } catch (RuntimeException e) {
       logger.debug("Publish-time lookup failed for {}: {}", key, e.getMessage());
-      run.lookupFailed.add(coordinate.groupId() + ":" + coordinate.artifactId());
+      run.recordFailure(coordinate.groupId() + ":" + coordinate.artifactId(), e);
     }
     run.eligibility.put(key, eligible);
     return eligible;
@@ -2486,7 +2823,7 @@ public class MavenDependencyTools {
       return versions;
     } catch (RuntimeException e) {
       logger.debug("Version lookup failed for {}: {}", key, e.getMessage());
-      run.lookupFailed.add(key);
+      run.recordFailure(key, e);
       return List.of();
     }
   }

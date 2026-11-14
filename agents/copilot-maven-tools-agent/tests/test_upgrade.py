@@ -461,3 +461,44 @@ def test_display_tolerates_security_and_new_attention_kinds() -> None:
             {"kind": "something_new", "groupId": "g", "artifactId": "a"},
         ]
     )
+
+
+def test_display_shows_relocated_attention_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A relocated entry shows the new coordinates and latest version in the attention table."""
+    import io
+
+    from rich.console import Console
+
+    import scripts.upgrade as upgrade_module
+
+    buffer = io.StringIO()
+    monkeypatch.setattr(upgrade_module, "console", Console(file=buffer, width=200))
+
+    _display_needs_attention(
+        [
+            {
+                "kind": "relocated",
+                "groupId": "mysql",
+                "artifactId": "mysql-connector-java",
+                "current": "8.0.33",
+                "source": "EXPLICIT",
+                "relocatedTo": "com.mysql:mysql-connector-j",
+                "relocatedToLatest": "9.1.0",
+                "message": "Update the groupId and artifactId",
+            },
+            {
+                "kind": "relocated",
+                "groupId": "a",
+                "artifactId": "b",
+                "current": "1",
+                "relocatedTo": "c:d",
+            },
+        ]
+    )
+
+    output = buffer.getvalue()
+    assert "mysql:mysql-connector-java" in output
+    assert "8.0.33" in output
+    assert "9.1.0" in output
+    assert "relocated to com.mysql:mysql-connector-j" in output
+    assert "relocated to c:d" in output

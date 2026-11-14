@@ -11,16 +11,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `recommend_pom_upgrades` scans the effective version of every declared dependency with OSV (`includeSecurityScan`, default `true`). Actions for vulnerable versions carry a `security` object with the target's status, unresolved findings appear first in `needsAttention` as `vulnerable`, and the response includes `securitySummary`.
 - Detect root properties that pin a version managed by a parent (for example `snakeyaml.version` under Spring Boot). `analyze_pom_dependencies` returns them as `propertyOverrides`; `recommend_pom_upgrades` reports `property_override` with the pinned and inherited values.
+- Relocated artifacts are surfaced: `get_latest_version`, `check_multiple_dependencies`, `compare_dependency_versions` and `analyze_project_health` report `relocation` (for example `mysql:mysql-connector-java` to `com.mysql:mysql-connector-j`), and `recommend_pom_upgrades` reports `relocated` entries in `needsAttention`.
 - Bulk vulnerability scans prefilter through the OSV batch endpoint, so dependencies without advisories cost one request in total.
+- New tool `scan_transitive_vulnerabilities`: finds known vulnerabilities in the transitive dependencies of the given coordinates and shows the shortest path from the root that pulls each one in. Graphs come from deps.dev (`api.deps.dev`), resolved per root without the caller's dependency management, so findings are leads to confirm against the real dependency tree. The default image now exposes 12 tools, `-noc7` 10.
+- `recommend_pom_upgrades` covers plugin versions in build plugins and plugin management (`plugin_bump`); `analyze_pom_dependencies` returns them as `rootPluginDeclarations`. The bundled Python agent applies them.
+- `minReleaseAgeDays` on `recommend_pom_upgrades` restricts deterministic actions to versions published at least that many days ago, falling back to an older eligible version (`heldBackFrom`). The agent accepts `--min-release-age-days`.
+- `recommend_pom_upgrades` sets `incomplete: true` and adds aggregated warnings when version lookups fail, and warns about coordinates not found in the configured repository. The agent exits non-zero on an incomplete run.
 
 ### Fixed (Unreleased)
 
+- A throttled repository no longer looks like "artifact not found": an HTTP 404 carrying `Retry-After` (Cloudflare throttling) is reported as `RATE_LIMITED`, is never cached as a missing POM and counts toward the circuit breaker. The reported retry hint is honest up to 24 hours.
+- Tools report upstream failures as `RATE_LIMITED` / `EXTERNAL_SERVICE_UNAVAILABLE` with a retry hint instead of raw upstream text or `Unexpected error`; bulk calls where every dependency failed upstream return a tool-level error, and `recommend_pom_upgrades` names the cause in its lookup-failure warning.
+- `analyze_project_health` audits the versions it is given. It previously dropped a supplied version and analysed the newest release of any stability, and ignored `stabilityFilter`. Each dependency now reports `currentVersion`, `scannedVersion`, `updateAvailable` and `updateType`; without a version the newest release permitted by `stabilityFilter` is scanned.
+- License detection follows the parent chain, so artifacts that inherit their license (for example Apache Commons) are no longer reported as unknown.
+- HTTP 429 from the repository is retried with short bounded backoff before it is reported.
 - A newer major no longer blocks same-major updates in `recommend_pom_upgrades`: the `major_available` entry is now accompanied by the minor/patch action for the current major.
 - Sort Maven 1-era date-stamped builds (`commons-collections:20040616`, `commons-io:20030203.000550`) below real releases. They were reported as the latest version and, in `mode: ALL`, offered as upgrade targets.
 - Find a verified fix when the lowest fix boundaries are still vulnerable. `log4j-core:2.14.1` previously reported that no fixed version was available. Stable versions are no longer offered a pre-release as the fix.
 
 ### Changed (Unreleased)
 
+- Response shape: `analyze_project_health.analysis_date` is an ISO-8601 timestamp again; the health label moved to `overall_health`, next to the new `average_health_score`.
+- Response shape: `compare_dependency_versions` and `analyze_project_health` carry the Context7 orchestration text once at the top level (`context7Guidance` / `context7_guidance`); each dependency has a short `context7Query` instead of its own `context7Guidance` block.
+- Response shape: a missing artifact in `get_latest_version`, `analyze_dependency_age` and `analyze_release_patterns` is a top-level `not_found` response instead of being nested inside a success envelope.
 - Development version is 3.3.0-SNAPSHOT: this cycle adds response fields and tool parameters. Published registry metadata and build fallback versions remain at 3.2.4.
 
 ## [3.2.4] - 2026-10-31

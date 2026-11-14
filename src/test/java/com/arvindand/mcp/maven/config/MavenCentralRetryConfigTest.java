@@ -2,6 +2,7 @@ package com.arvindand.mcp.maven.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.arvindand.mcp.maven.service.MavenCentralException;
 import io.github.resilience4j.core.functions.Either;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,25 @@ class MavenCentralRetryConfigTest {
         .isTrue();
     assertThat(MavenCentralRetryConfig.shouldRetry(status(HttpStatus.TOO_MANY_REQUESTS, "3")))
         .isFalse();
+  }
+
+  @Test
+  void throttledNotFoundBehavesLikeRateLimiting() {
+    assertThat(MavenCentralRetryConfig.shouldRetry(throttled(54161))).isFalse();
+    assertThat(MavenCentralRetryConfig.shouldRetry(throttled(3))).isFalse();
+    assertThat(MavenCentralRetryConfig.shouldRetry(throttled(2))).isTrue();
+    assertThat(
+            MavenCentralRetryConfig.shouldRetry(
+                new MavenCentralException(
+                    MavenCentralException.Reason.INVALID_RESPONSE, "bad", null, null)))
+        .isFalse();
+    assertThat(MavenCentralRetryConfig.shouldRetry(status(HttpStatus.NOT_FOUND, "54161")))
+        .isFalse();
+  }
+
+  private static MavenCentralException throttled(int seconds) {
+    return new MavenCentralException(
+        MavenCentralException.Reason.RATE_LIMITED, "limited", seconds, null);
   }
 
   @Test

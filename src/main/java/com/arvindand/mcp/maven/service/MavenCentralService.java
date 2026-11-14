@@ -174,14 +174,22 @@ public class MavenCentralService {
   @RateLimiter(name = "maven-central")
   public MavenArtifact fetchArtifactWithTimestamp(MavenCoordinate coordinate, String version) {
     String pomUrl = buildPomUrl(coordinate, version);
-    long timestamp =
-        restClient
-            .head()
-            .uri(java.net.URI.create(pomUrl))
-            .retrieve()
-            .toBodilessEntity()
-            .getHeaders()
-            .getLastModified();
+    long timestamp;
+    try {
+      timestamp =
+          restClient
+              .head()
+              .uri(java.net.URI.create(pomUrl))
+              .retrieve()
+              .toBodilessEntity()
+              .getHeaders()
+              .getLastModified();
+    } catch (HttpClientErrorException.NotFound notFound) {
+      if (MavenCentralException.hasRetryAfter(notFound.getResponseHeaders())) {
+        throw MavenCentralException.throttledNotFound(notFound);
+      }
+      throw notFound;
+    }
     return new MavenArtifact(
         coordinate.groupId() + ":" + coordinate.artifactId() + ":" + version,
         coordinate.groupId(),
@@ -225,7 +233,10 @@ public class MavenCentralService {
           .distinct()
           .sorted(versionComparator.reversed())
           .toList();
-    } catch (HttpClientErrorException.NotFound _) {
+    } catch (HttpClientErrorException.NotFound notFound) {
+      if (MavenCentralException.hasRetryAfter(notFound.getResponseHeaders())) {
+        throw MavenCentralException.throttledNotFound(notFound);
+      }
       return List.of();
     } catch (java.io.IOException | org.codehaus.plexus.util.xml.pull.XmlPullParserException ex) {
       throw new MavenCentralException(
@@ -257,8 +268,12 @@ public class MavenCentralService {
     try {
       String xml = restClient.get().uri(java.net.URI.create(url)).retrieve().body(String.class);
       return Optional.ofNullable(xml);
-    } catch (HttpClientErrorException.NotFound _) {
-      // 404 is a legitimate "POM doesn't exist for this coord" — not transient,
+    } catch (HttpClientErrorException.NotFound notFound) {
+      if (MavenCentralException.hasRetryAfter(notFound.getResponseHeaders())) {
+        // A 404 with Retry-After is CDN throttling, not a missing POM: never cache it as missing.
+        throw MavenCentralException.throttledNotFound(notFound);
+      }
+      // A plain 404 is a legitimate "POM doesn't exist for this coord" — not transient,
       // don't retry, don't trip the circuit breaker.
       logger.debug("POM not found for {}", coordinate.toCoordinateString());
       return Optional.empty();

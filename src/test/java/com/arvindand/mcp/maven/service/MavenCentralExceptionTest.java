@@ -50,8 +50,12 @@ class MavenCentralExceptionTest {
 
   @Test
   void absurdRetryAfterIsCapped() {
-    assertThat(MavenCentralException.classify(tooMany("86400")).getRetryAfterSeconds())
+    assertThat(MavenCentralException.classify(tooMany("172800")).getRetryAfterSeconds())
         .isEqualTo(MavenCentralException.MAX_RETRY_AFTER_SECONDS);
+    assertThat(MavenCentralException.MAX_RETRY_AFTER_SECONDS).isEqualTo(86_400);
+    // Cloudflare was observed asking for ~15h: reported honestly, not clipped to a minute.
+    assertThat(MavenCentralException.classify(tooMany("54161")).getRetryAfterSeconds())
+        .isEqualTo(54161);
     assertThat(
             MavenCentralException.classify(tooMany("99999999999999999999")).getRetryAfterSeconds())
         .isEqualTo(MavenCentralException.DEFAULT_RATE_LIMIT_RETRY_SECONDS);

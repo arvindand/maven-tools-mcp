@@ -400,6 +400,12 @@ def _display_needs_attention(attention: list[dict[str, Any]]) -> None:
             current = n.get("pinnedValue", "")
             latest = n.get("latestOnCentral") or ""
             notes = f"{n.get('propertyName', '?')} {n.get('relation', 'unknown')} ({n.get('inheritedValue') or '?'})"
+        elif kind == "relocated":
+            current = n.get("current", "")
+            latest = n.get("relocatedToLatest") or ""
+            notes = f"relocated to {n.get('relocatedTo', '?')}"
+            if n.get("message"):
+                notes += f" ({n['message']})"
         else:
             current = ""
             latest = ""

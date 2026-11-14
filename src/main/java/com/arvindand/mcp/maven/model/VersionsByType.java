@@ -1,5 +1,6 @@
 package com.arvindand.mcp.maven.model;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.Optional;
 import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.databind.annotation.JsonNaming;
@@ -14,6 +15,8 @@ import tools.jackson.databind.annotation.JsonNaming;
  * @param latestAlpha latest alpha version, if available
  * @param latestMilestone latest milestone version, if available
  * @param totalVersions total number of versions found
+ * @param relocation where the artifact moved to, when its newest POM carries a relocation (omitted
+ *     otherwise)
  * @author Arvind Menon
  * @since 1.2.0
  */
@@ -25,7 +28,8 @@ public record VersionsByType(
     Optional<VersionInfo> latestBeta,
     Optional<VersionInfo> latestAlpha,
     Optional<VersionInfo> latestMilestone,
-    int totalVersions) {
+    int totalVersions,
+    @JsonInclude(JsonInclude.Include.NON_NULL) RelocationInfo relocation) {
 
   /** Creates a VersionsByType with primary version based on preference. */
   public static VersionsByType create(
@@ -36,7 +40,25 @@ public record VersionsByType(
       Optional<VersionInfo> alpha,
       Optional<VersionInfo> milestone,
       int totalVersions) {
-    return new VersionsByType(dependency, stable, rc, beta, alpha, milestone, totalVersions);
+    return new VersionsByType(dependency, stable, rc, beta, alpha, milestone, totalVersions, null);
+  }
+
+  /**
+   * Returns a copy carrying the relocation.
+   *
+   * @param info relocation, or null for none
+   * @return the copy
+   */
+  public VersionsByType withRelocation(RelocationInfo info) {
+    return new VersionsByType(
+        dependency,
+        latestStable,
+        latestRc,
+        latestBeta,
+        latestAlpha,
+        latestMilestone,
+        totalVersions,
+        info);
   }
 
   /** Gets the preferred version based on stability preference. */

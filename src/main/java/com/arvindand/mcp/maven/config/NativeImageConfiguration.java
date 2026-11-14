@@ -143,6 +143,7 @@ public class NativeImageConfiguration {
       // Register MavenArtifact for timestamp analysis compatibility
       registerRecordClass(hints, MavenArtifact.class);
       registerRecordClass(hints, com.arvindand.mcp.maven.model.Relocation.class);
+      registerRecordClass(hints, com.arvindand.mcp.maven.model.RelocationInfo.class);
 
       // Register VersionComparator record for version parsing
       registerRecordClass(
@@ -207,6 +208,7 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, PomSecuritySummary.class);
       registerRecordClass(hints, NeedsAttention.PropertyOverride.class);
       registerRecordClass(hints, NeedsAttention.Vulnerable.class);
+      registerRecordClass(hints, NeedsAttention.Relocated.class);
       registerRecordClass(hints, NeedsAttention.MajorAvailable.class);
       registerRecordClass(hints, NeedsAttention.Conflict.class);
       registerRecordClass(hints, NeedsAttention.ExplicitOverride.class);

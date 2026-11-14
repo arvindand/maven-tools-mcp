@@ -23,11 +23,13 @@ public sealed interface NeedsAttention
         NeedsAttention.Conflict,
         NeedsAttention.ExplicitOverride,
         NeedsAttention.PropertyOverride,
-        NeedsAttention.Vulnerable {
+        NeedsAttention.Vulnerable,
+        NeedsAttention.Relocated {
 
   /**
    * Discriminator field — {@code "major_available"}, {@code "conflict"}, {@code
-   * "explicit_override"}, {@code "property_override"}, or {@code "vulnerable"}.
+   * "explicit_override"}, {@code "property_override"}, {@code "vulnerable"}, or {@code
+   * "relocated"}.
    */
   String kind();
 
@@ -209,6 +211,37 @@ public sealed interface NeedsAttention
     @JsonProperty("kind")
     public String kind() {
       return "vulnerable";
+    }
+  }
+
+  /**
+   * A dependency the POM declares itself (or manages in its own dependencyManagement) whose newest
+   * published version carries a Maven relocation to new coordinates. Never mechanical: switching
+   * coordinates can require code changes.
+   *
+   * @param groupId the declared groupId
+   * @param artifactId the declared artifactId
+   * @param current the declared / effective version
+   * @param source {@code EXPLICIT}, {@code EXPLICIT_OVERRIDE} or {@code MANAGED_DECLARATION}
+   * @param relocatedTo the new coordinates as {@code groupId:artifactId}
+   * @param relocatedToLatest newest stable version at the new coordinates; null when unknown
+   * @param message explanation published in the relocation; null when none
+   */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  record Relocated(
+      String groupId,
+      String artifactId,
+      String current,
+      String source,
+      String relocatedTo,
+      String relocatedToLatest,
+      String message)
+      implements NeedsAttention {
+
+    @Override
+    @JsonProperty("kind")
+    public String kind() {
+      return "relocated";
     }
   }
 

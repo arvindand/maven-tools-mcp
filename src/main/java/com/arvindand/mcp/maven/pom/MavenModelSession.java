@@ -1,6 +1,7 @@
 package com.arvindand.mcp.maven.pom;
 
 import com.arvindand.mcp.maven.model.MavenCoordinate;
+import com.arvindand.mcp.maven.service.MavenCentralException;
 import com.arvindand.mcp.maven.util.MavenCoordinateParser;
 import java.io.File;
 import java.io.IOException;
@@ -215,6 +216,15 @@ final class MavenModelSession implements ModelResolver {
     try {
       model = fetcher.fetch(coordinate).map(Model::clone).orElse(null);
     } catch (RuntimeException ex) {
+      if (MavenCentralException.isUpstreamFailure(ex)) {
+        MavenCentralException upstream = MavenCentralException.classify(ex);
+        if (upstream.getReason() == MavenCentralException.Reason.RATE_LIMITED
+            || upstream.getReason() == MavenCentralException.Reason.CIRCUIT_OPEN) {
+          // A throttled parent / BOM would silently yield wrong effective versions; fail the
+          // resolution so the tool can report the precise, retryable cause instead of warnings.
+          throw upstream;
+        }
+      }
       warnings.add("Could not fetch " + key + " (" + ex.getClass().getSimpleName() + ")");
       model = null;
     }

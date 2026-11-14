@@ -62,6 +62,23 @@ class NativeImageConfigurationTest {
   }
 
   @Test
+  void registersRelocationOutputRecordsForSerialization() {
+    for (Class<?> type :
+        List.of(
+            com.arvindand.mcp.maven.model.RelocationInfo.class,
+            com.arvindand.mcp.maven.model.NeedsAttention.Relocated.class)) {
+      assertThat(
+              RuntimeHintsPredicates.reflection()
+                  .onType(type)
+                  .withMemberCategories(
+                      MemberCategory.INVOKE_PUBLIC_CONSTRUCTORS,
+                      MemberCategory.INVOKE_PUBLIC_METHODS))
+          .as(type.getSimpleName())
+          .accepts(register());
+    }
+  }
+
+  @Test
   void registersFactoriesActuallySelectedByConfiguredCaches() {
     CacheManager manager = new CacheConfig().cacheManager();
     RuntimeHints hints = register();

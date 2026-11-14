@@ -55,6 +55,12 @@ public class MavenCentralRetryConfig {
       int retryAfter = MavenCentralException.parseRetryAfterSeconds(tooMany.getResponseHeaders());
       return retryAfter <= MAX_HONOURED_RETRY_AFTER_SECONDS;
     }
+    if (failure instanceof MavenCentralException mce) {
+      // Thrown by MavenCentralService for a throttled 404 (404 + Retry-After). Behaves like a 429.
+      Integer hint = mce.getRetryAfterSeconds();
+      return mce.getReason() == MavenCentralException.Reason.RATE_LIMITED
+          && (hint == null || hint <= MAX_HONOURED_RETRY_AFTER_SECONDS);
+    }
     return failure instanceof ResourceAccessException
         || failure instanceof HttpServerErrorException;
   }
@@ -70,13 +76,18 @@ public class MavenCentralRetryConfig {
   }
 
   private static long waitMillis(long backoffMillis, Either<Throwable, Object> outcome) {
-    if (outcome != null
-        && outcome.isLeft()
-        && outcome.getLeft() instanceof HttpClientErrorException.TooManyRequests tooMany) {
-      int retryAfter = MavenCentralException.parseRetryAfterSeconds(tooMany.getResponseHeaders());
-      if (retryAfter > 0) {
-        return Math.max(backoffMillis, Duration.ofSeconds(retryAfter).toMillis());
-      }
+    if (outcome == null || !outcome.isLeft()) {
+      return backoffMillis;
+    }
+    int retryAfter = -1;
+    if (outcome.getLeft() instanceof HttpClientErrorException.TooManyRequests tooMany) {
+      retryAfter = MavenCentralException.parseRetryAfterSeconds(tooMany.getResponseHeaders());
+    } else if (outcome.getLeft() instanceof MavenCentralException mce
+        && mce.getRetryAfterSeconds() != null) {
+      retryAfter = mce.getRetryAfterSeconds();
+    }
+    if (retryAfter > 0) {
+      return Math.max(backoffMillis, Duration.ofSeconds(retryAfter).toMillis());
     }
     return backoffMillis;
   }

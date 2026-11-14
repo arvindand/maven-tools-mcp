@@ -2,6 +2,7 @@ package com.arvindand.mcp.maven.model;
 
 import com.arvindand.mcp.maven.model.security.SecurityAssessment;
 import com.arvindand.mcp.maven.model.security.SecuritySummary;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -52,7 +53,13 @@ public record VersionComparison(
             : Optional.empty());
   }
 
-  /** Individual dependency comparison result. */
+  /**
+   * Individual dependency comparison result.
+   *
+   * <p>{@code retryAfterSeconds} is set only on errors caused by a retryable upstream failure;
+   * {@code relocation} only when the artifact's newest POM relocates it to new coordinates. Both
+   * are omitted from the JSON otherwise.
+   */
   public record DependencyComparisonResult(
       String dependency,
       String currentVersion,
@@ -64,7 +71,9 @@ public record VersionComparison(
       String error,
       Optional<SecurityAssessment> security,
       Optional<String> context7Query,
-      Optional<SameMajorStableFallback> sameMajorStableFallback) {
+      Optional<SameMajorStableFallback> sameMajorStableFallback,
+      @JsonInclude(JsonInclude.Include.NON_NULL) Integer retryAfterSeconds,
+      @JsonInclude(JsonInclude.Include.NON_NULL) RelocationInfo relocation) {
 
     public static DependencyComparisonResult success(
         String dependency,
@@ -111,7 +120,9 @@ public record VersionComparison(
           null,
           Optional.empty(),
           guidance,
-          Optional.ofNullable(sameMajorStableFallback));
+          Optional.ofNullable(sameMajorStableFallback),
+          null,
+          null);
     }
 
     public static DependencyComparisonResult successWithSecurity(
@@ -161,7 +172,9 @@ public record VersionComparison(
           null,
           Optional.ofNullable(security),
           guidance,
-          Optional.ofNullable(sameMajorStableFallback));
+          Optional.ofNullable(sameMajorStableFallback),
+          null,
+          null);
     }
 
     public static DependencyComparisonResult notFound(String dependency, String currentVersion) {
@@ -176,7 +189,9 @@ public record VersionComparison(
           null,
           Optional.empty(),
           Optional.empty(),
-          Optional.empty());
+          Optional.empty(),
+          null,
+          null);
     }
 
     public static DependencyComparisonResult noCurrentVersion(String dependency) {
@@ -191,7 +206,9 @@ public record VersionComparison(
           null,
           Optional.empty(),
           Optional.empty(),
-          Optional.empty());
+          Optional.empty(),
+          null,
+          null);
     }
 
     public static DependencyComparisonResult error(String dependency, String error) {
@@ -206,7 +223,59 @@ public record VersionComparison(
           error,
           Optional.empty(),
           Optional.empty(),
-          Optional.empty());
+          Optional.empty(),
+          null,
+          null);
+    }
+
+    /**
+     * Creates an error result that carries the retry hint of a classified upstream failure.
+     *
+     * @param dependency the dependency
+     * @param error human-readable message
+     * @param retryAfterSeconds retry hint, or null
+     * @return error result
+     */
+    public static DependencyComparisonResult error(
+        String dependency, String error, Integer retryAfterSeconds) {
+      DependencyComparisonResult base = error(dependency, error);
+      return new DependencyComparisonResult(
+          base.dependency,
+          base.currentVersion,
+          base.latestVersion,
+          base.latestType,
+          base.updateType,
+          base.updateAvailable,
+          base.status,
+          base.error,
+          base.security,
+          base.context7Query,
+          base.sameMajorStableFallback,
+          retryAfterSeconds,
+          null);
+    }
+
+    /**
+     * Returns a copy carrying the relocation.
+     *
+     * @param info relocation, or null for none
+     * @return the copy
+     */
+    public DependencyComparisonResult withRelocation(RelocationInfo info) {
+      return new DependencyComparisonResult(
+          dependency,
+          currentVersion,
+          latestVersion,
+          latestType,
+          updateType,
+          updateAvailable,
+          status,
+          error,
+          security,
+          context7Query,
+          sameMajorStableFallback,
+          retryAfterSeconds,
+          info);
     }
 
     /** Check if this dependency requires urgent security action. */

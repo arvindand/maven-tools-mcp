@@ -65,9 +65,31 @@ public record McpError(String code, String message, Map<String, Object> data, In
    * @param retryAfter Suggested retry delay in seconds
    * @return McpError with EXTERNAL_SERVICE_UNAVAILABLE code
    */
-  public static McpError mavenCentralUnavailable(String message, int retryAfter) {
+  public static McpError mavenCentralUnavailable(String message, Integer retryAfter) {
     return new McpError(
         EXTERNAL_SERVICE_UNAVAILABLE, message, Map.of("service", "Maven Central"), retryAfter);
+  }
+
+  /**
+   * Renders a retry delay for humans: seconds up to two minutes, then minutes, then hours.
+   *
+   * @param seconds delay in seconds
+   * @return for example {@code "12 seconds"}, {@code "~5 min"} or {@code "~15h"}
+   */
+  public static String describeRetry(int seconds) {
+    if (seconds < 120) {
+      return seconds + " seconds";
+    }
+    if (seconds < 7200) {
+      return "~" + Math.round(seconds / 60.0) + " min";
+    }
+    return "~" + Math.round(seconds / 3600.0) + "h";
+  }
+
+  private static String retryPhrase(int seconds) {
+    return seconds < 120
+        ? "Retry in " + seconds + " seconds."
+        : "Retry in " + describeRetry(seconds) + " (" + seconds + " seconds).";
   }
 
   /**
@@ -137,9 +159,7 @@ public record McpError(String code, String message, Map<String, Object> data, In
   public static McpError mavenCentralRateLimited(int retryAfterSeconds) {
     return new McpError(
         RATE_LIMITED,
-        "Maven repository is rate limiting requests (HTTP 429). Retry in "
-            + retryAfterSeconds
-            + " seconds.",
+        "Maven repository is rate limiting requests (HTTP 429). " + retryPhrase(retryAfterSeconds),
         Map.of(
             "service",
             "Maven Central",
@@ -159,9 +179,8 @@ public record McpError(String code, String message, Map<String, Object> data, In
     return new McpError(
         EXTERNAL_SERVICE_UNAVAILABLE,
         "Maven repository temporarily unavailable (circuit open after repeated failures)."
-            + " Retry in "
-            + retryAfterSeconds
-            + " seconds.",
+            + " "
+            + retryPhrase(retryAfterSeconds),
         Map.of("service", "Maven Central", "reason", "CIRCUIT_OPEN"),
         retryAfterSeconds);
   }
