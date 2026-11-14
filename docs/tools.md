@@ -108,6 +108,8 @@ checks up to three candidate releases against OSV. It never constructs an assume
 version. If repository lookup or OSV verification fails, known vulnerabilities remain visible
 and no unverified fix is proposed.
 
+In `analyze_project_health`, `stabilityFilter` (default `PREFER_STABLE`) decides which version counts as "latest" and, for unversioned input, which version is scanned: with `PREFER_STABLE` or `STABLE_ONLY` the newest stable release is used. If no stable release exists, `PREFER_STABLE` and `ALL` fall back to the newest pre-release (with a `note`), while `STABLE_ONLY` reports status `no_stable_version` and scans nothing.
+
 Version responses are classified using the server's built-in stability types:
 
 - `stable`
@@ -131,6 +133,12 @@ There is no `get_version_timeline` tool or `versionCount` parameter. Use `recent
 
 These are most useful in `compare_dependency_versions` and `analyze_project_health` when you want a fuller upgrade or compliance picture.
 
+`analyze_project_health` accepts `groupId:artifactId` or `groupId:artifactId:version`, and a list may mix both. For an audit of a real project, include the versions you run:
+
+- with a version, the security and license scans use exactly that version; the result reports `currentVersion`, `scannedVersion`, `latestVersion` (per `stabilityFilter`, preserving release variants such as `-jre`/`-android`), `updateAvailable`, `updateType`, and, best effort, `currentVersionAgeDays`. A version that does not exist in the repository is reported as `status: "error"` and nothing else is scanned in its place
+- without a version, the newest version per `stabilityFilter` is scanned, and `scannedVersion` states which one, so a clean result is never ambiguous
+- `ageClassification`, `daysSinceRelease` and `maintenanceLevel` describe the artifact's release history (the latest version honouring `stabilityFilter` and the recent release cadence), not the version you run
+
 ## Response Behavior
 
 The tools are designed for conversational clients and agents:
@@ -140,11 +148,11 @@ The tools are designed for conversational clients and agents:
 - POM response fields use camelCase (`deterministicActions`, `needsAttention`, `effectiveVersion`); other analytical records may use snake_case, so follow the actual tool schema/payload
 - version stability is classified directly
 - upgrade results include major/minor/patch context
-- some responses include guidance about when to consult Context7 docs
+- some responses include guidance about when to consult Context7 docs; bulk tools (`compare_dependency_versions`, `analyze_project_health`) emit the orchestration instructions once as a top-level `context7_guidance` template and a short per-dependency `context7Query` hint, and emit nothing when Context7 hints are disabled
 
 Security results distinguish a successful scan from `UNKNOWN` when upstream data is unavailable or incomplete. CVSS v2/v3/v4 vectors are scored with a maintained library. Recommended remediation versions are checked against OSV; a successful scan is an advisory snapshot, not a guarantee that a dependency is vulnerability-free.
 
-In 3.2.2, `analyze_project_health` has a known field mismatch: `analysis_date` contains an overall health label (for example, `poor`), not a timestamp. There is no top-level `overall_health` or `average_health_score`; use the per-dependency `healthScore` values and `age_distribution`, and do not parse `analysis_date` as a date.
+`analyze_project_health` returns top-level `analysis_date` (ISO-8601 timestamp), `overall_health` (`excellent`, `good`, `fair`, `poor`, or `unknown` when nothing could be analysed) and `average_health_score` (rounded, over successfully analysed dependencies; `null` when none succeeded), alongside `age_distribution`, per-dependency `healthScore` values, and the security and license findings.
 
 The project aims to keep the server focused on dependency intelligence so the client can make decisions with clean inputs instead of custom parsing.
 

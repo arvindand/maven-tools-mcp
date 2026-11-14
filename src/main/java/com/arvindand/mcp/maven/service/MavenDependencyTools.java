@@ -3,6 +3,7 @@ package com.arvindand.mcp.maven.service;
 import com.arvindand.mcp.maven.MavenToolsConstants;
 import com.arvindand.mcp.maven.config.Context7Properties;
 import com.arvindand.mcp.maven.model.BulkCheckResult;
+import com.arvindand.mcp.maven.model.Context7Guidance;
 import com.arvindand.mcp.maven.model.DependencyAge;
 import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
 import com.arvindand.mcp.maven.model.DependencyInfo;
@@ -497,14 +498,17 @@ public class MavenDependencyTools {
       description =
           "Bulk project view (PREFERRED for full audits). Summarizes health across many"
               + " dependencies using age and maintenance patterns. Includes CVE vulnerability"
-              + " scanning and license compliance. Use this instead of check_multiple_dependencies"
-              + " when you need security/license info or overall project health assessment.")
+              + " scanning and license compliance. Include versions (groupId:artifactId:version) to"
+              + " audit what you actually run; without one the newest version per stabilityFilter"
+              + " is scanned (reported as scannedVersion). Use this instead of"
+              + " check_multiple_dependencies when you need security/license info or overall"
+              + " project health assessment.")
   public ToolResponse analyze_project_health(
       @ToolParam(
               description =
-                  "Comma or newline separated list of Maven dependency coordinates in format"
-                      + " 'groupId:artifactId' (NO versions). Example:"
-                      + " 'org.springframework:spring-core,junit:junit'")
+                  "Comma or newline separated Maven coordinates 'groupId:artifactId' or"
+                      + " 'groupId:artifactId:version' (versions optional, recommended for a real"
+                      + " audit). Example: 'org.springframework:spring-core:6.0.0,junit:junit'")
           String dependencies,
       @ToolParam(
               description =
@@ -515,8 +519,8 @@ public class MavenDependencyTools {
           @Nullable Integer maxAgeInDays,
       @ToolParam(
               description =
-                  "Stability filter: ALL (any version), STABLE_ONLY (production-ready only), or"
-                      + " PREFER_STABLE (prioritize stable). Default: PREFER_STABLE",
+                  "Stability filter for the latest version (and the scanned version when none is"
+                      + " given): ALL, STABLE_ONLY, or PREFER_STABLE. Default: PREFER_STABLE",
               required = false)
           @Nullable StabilityFilter stabilityFilter,
       @ToolParam(
@@ -539,19 +543,26 @@ public class MavenDependencyTools {
 
           boolean scanSecurity = includeSecurityScan == null || includeSecurityScan;
           boolean scanLicenses = includeLicenseScan == null || includeLicenseScan;
+          StabilityFilter filter =
+              stabilityFilter != null ? stabilityFilter : StabilityFilter.PREFER_STABLE;
+
+          List<String> distinctDeps = depList.stream().distinct().toList();
+          // Decide once, per dependency, which version is audited (supplied or latest per filter)
+          final Map<String, HealthTarget> targets = resolveHealthTargets(distinctDeps, filter);
 
           final Map<String, SecurityAssessment> securityByDependency =
-              scanSecurity ? scanLatestDependencySecurity(depList) : Map.of();
+              scanSecurity ? scanTargetSecurity(targets) : Map.of();
           final Map<String, List<LicenseInfo>> licensesByDependency =
-              scanLicenses ? scanLatestDependencyLicenses(depList) : Map.of();
+              scanLicenses ? scanTargetLicenses(targets) : Map.of();
 
           // Analyze each dependency for age and patterns
           List<ProjectHealthAnalysis.DependencyHealthAnalysis> dependencyAnalyses =
               processBatchWithBackpressure(
-                  depList.stream().distinct().toList(),
+                  distinctDeps,
                   dep ->
                       analyzeDependencyHealthWithSecurityAndLicenses(
                           dep,
+                          targets.get(dep),
                           maxAgeInDays,
                           scanSecurity,
                           securityByDependency,
@@ -588,14 +599,28 @@ public class MavenDependencyTools {
   private ProjectHealthAnalysis.DependencyHealthAnalysis
       analyzeDependencyHealthWithSecurityAndLicenses(
           String dependency,
+          HealthTarget target,
           Integer maxAgeInDays,
           boolean scanSecurity,
           Map<String, SecurityAssessment> securityByDependency,
           boolean scanLicenses,
           Map<String, List<LicenseInfo>> licensesByDependency) {
     try {
-      MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-      String gaKey = gaKey(coordinate);
+      if (target == null) {
+        return ProjectHealthAnalysis.DependencyHealthAnalysis.error(
+            dependency, "Dependency could not be resolved");
+      }
+      if (!HealthTarget.OK.equals(target.status())) {
+        return ProjectHealthAnalysis.DependencyHealthAnalysis.builder()
+            .dependency(dependency)
+            .status(target.status())
+            .currentVersion(target.currentVersion())
+            .error(target.error())
+            .build();
+      }
+
+      MavenCoordinate coordinate = target.coordinate();
+      String scannedKey = target.scannedKey();
 
       List<MavenArtifact> versions =
           mavenCentralService.getRecentVersionsWithAccurateTimestamps(coordinate, 10);
@@ -603,18 +628,39 @@ public class MavenDependencyTools {
         return ProjectHealthAnalysis.DependencyHealthAnalysis.notFound(dependency);
       }
 
-      MavenArtifact latestVersion = versions.get(0);
+      // Freshness describes the latest version honouring the stability filter; maintenance
+      // describes the artifact's recent release history.
+      List<String> notes = new ArrayList<>();
+      if (target.note() != null) {
+        notes.add(target.note());
+      }
+      MavenArtifact latestArtifact =
+          target.latestVersion() != null
+              ? findArtifactTimestamp(coordinate, versions, target.latestVersion())
+              : null;
+      if (latestArtifact == null) {
+        latestArtifact = versions.get(0);
+        if (target.latestVersion() != null) {
+          notes.add(
+              "Release date of "
+                  + target.latestVersion()
+                  + " unavailable; freshness is based on the newest published version "
+                  + latestArtifact.version());
+        }
+      }
       DependencyAgeAnalysis ageAnalysis =
           DependencyAgeAnalysis.fromTimestamp(
-              coordinate.toCoordinateString(), latestVersion.version(), latestVersion.timestamp());
+              coordinate.toCoordinateString(),
+              latestArtifact.version(),
+              latestArtifact.timestamp());
 
       String maintenanceStatus = determineMaintenanceStatus(versions);
       int freshnessScore = calculateFreshnessScore(ageAnalysis, maxAgeInDays);
       int maintenanceScore = calculateMaintenanceScore(maintenanceStatus);
 
       SecurityAssessment security =
-          resolveSecurityAssessment(scanSecurity, gaKey, securityByDependency);
-      List<LicenseInfo> licenses = resolveLicenses(scanLicenses, gaKey, licensesByDependency);
+          resolveSecurityAssessment(scanSecurity, scannedKey, securityByDependency);
+      List<LicenseInfo> licenses = resolveLicenses(scanLicenses, scannedKey, licensesByDependency);
 
       int healthScore =
           (scanSecurity || scanLicenses)
@@ -622,29 +668,70 @@ public class MavenDependencyTools {
                   freshnessScore, maintenanceScore, security, licenses)
               : calculateSimpleHealthScore(ageAnalysis, maintenanceStatus, maxAgeInDays);
 
-      if (scanSecurity || scanLicenses) {
-        return ProjectHealthAnalysis.DependencyHealthAnalysis.successWithSecurityAndLicenses(
-            dependency,
-            latestVersion.version(),
-            ageAnalysis.ageClassification().getName(),
-            ageAnalysis.daysSinceLastRelease(),
-            healthScore,
-            maintenanceStatus,
-            security,
-            licenses,
-            context7Properties.enabled());
+      String ageName = ageAnalysis.ageClassification().getName();
+      var builder =
+          ProjectHealthAnalysis.DependencyHealthAnalysis.builder()
+              .dependency(dependency)
+              .currentVersion(target.currentVersion())
+              .scannedVersion(target.scannedVersion())
+              .latestVersion(target.latestVersion())
+              .ageClassification(ageName)
+              .daysSinceRelease(ageAnalysis.daysSinceLastRelease())
+              .healthScore(healthScore)
+              .maintenanceLevel(maintenanceStatus)
+              .security(security)
+              .licenses((scanSecurity || scanLicenses) ? licenses : null)
+              .note(notes.isEmpty() ? null : String.join("; ", notes));
+
+      String updateType = null;
+      boolean updateAvailable = false;
+      if (target.currentVersion() != null && target.latestVersion() != null) {
+        updateType =
+            versionComparator.determineUpdateType(target.currentVersion(), target.latestVersion());
+        updateAvailable =
+            versionComparator.compare(target.currentVersion(), target.latestVersion()) < 0;
+        builder.updateAvailable(updateAvailable).updateType(updateType);
+      }
+      if (target.currentVersion() != null) {
+        MavenArtifact current =
+            findArtifactTimestamp(coordinate, versions, target.currentVersion());
+        if (current != null) {
+          builder.currentVersionAgeDays(
+              ChronoUnit.DAYS.between(Instant.ofEpochMilli(current.timestamp()), Instant.now()));
+        }
       }
 
-      return ProjectHealthAnalysis.DependencyHealthAnalysis.success(
-          dependency,
-          latestVersion.version(),
-          ageAnalysis.ageClassification().getName(),
-          ageAnalysis.daysSinceLastRelease(),
-          healthScore,
-          maintenanceStatus,
-          context7Properties.enabled());
+      if (context7Properties.enabled()) {
+        if (updateAvailable) {
+          builder.context7Query(Context7Guidance.migrationQuery(dependency, updateType));
+        } else if (AGING_AGE.equals(ageName) || STALE_AGE.equals(ageName)) {
+          builder.context7Query(Context7Guidance.modernizationQuery(dependency, ageName));
+        }
+      }
+
+      return builder.build();
     } catch (RuntimeException e) {
       return ProjectHealthAnalysis.DependencyHealthAnalysis.error(dependency, e.getMessage());
+    }
+  }
+
+  /**
+   * Finds a version's release timestamp in the already fetched recent versions, falling back to a
+   * single (cached) lookup. Best effort: returns null when unavailable.
+   */
+  private MavenArtifact findArtifactTimestamp(
+      MavenCoordinate coordinate, List<MavenArtifact> recent, String version) {
+    for (MavenArtifact artifact : recent) {
+      if (version.equals(artifact.version())) {
+        return artifact.timestamp() > 0 ? artifact : null;
+      }
+    }
+    try {
+      MavenArtifact fetched = mavenCentralService.fetchArtifactWithTimestamp(coordinate, version);
+      return fetched != null && fetched.timestamp() > 0 ? fetched : null;
+    } catch (RuntimeException e) {
+      logger.debug("Could not fetch release date of {}:{}", coordinate, version, e);
+      return null;
     }
   }
 
@@ -778,64 +865,136 @@ public class MavenDependencyTools {
     return allPermissive ? 100 : 70;
   }
 
-  private Map<String, SecurityAssessment> scanLatestDependencySecurity(List<String> dependencies) {
-    // Resolve latest versions and scan those versions
-    List<MavenCoordinate> coordinatesWithVersions = new ArrayList<>();
+  /**
+   * The version of one dependency that an audit looks at.
+   *
+   * @param coordinate parsed input coordinate (carries the supplied version, if any)
+   * @param currentVersion version supplied by the caller, or null
+   * @param scannedVersion version security/license scans run against (current, else latest)
+   * @param latestVersion newest version honouring the stability filter, or null
+   * @param status {@link #OK} or the status to report for the dependency
+   * @param error message when status is not OK
+   * @param note optional clarification for the report
+   */
+  private record HealthTarget(
+      MavenCoordinate coordinate,
+      String currentVersion,
+      String scannedVersion,
+      String latestVersion,
+      String status,
+      String error,
+      String note) {
 
-    for (String dep : dependencies) {
-      try {
-        MavenCoordinate coord = MavenCoordinateParser.parse(dep);
-        String latestVersion = mavenCentralService.getLatestVersion(coord);
-        if (latestVersion != null) {
-          coordinatesWithVersions.add(
-              MavenCoordinate.of(coord.groupId(), coord.artifactId(), latestVersion));
-        }
-      } catch (Exception e) {
-        logger.debug("Could not resolve version for {}: {}", dep, e.getMessage());
-      }
+    static final String OK = SUCCESS_STATUS;
+
+    static HealthTarget failed(
+        MavenCoordinate coordinate, String status, String error, String currentVersion) {
+      return new HealthTarget(coordinate, currentVersion, null, null, status, error, null);
     }
 
-    if (coordinatesWithVersions.isEmpty()) {
-      return Map.of();
+    String scannedKey() {
+      return coordinate.groupId() + ":" + coordinate.artifactId() + ":" + scannedVersion;
     }
-
-    Map<String, SecurityAssessment> versionKeyed =
-        vulnerabilityService.scanBulk(coordinatesWithVersions);
-    Map<String, SecurityAssessment> byGa = new LinkedHashMap<>();
-
-    for (MavenCoordinate c : coordinatesWithVersions) {
-      String ga = gaKey(c);
-      SecurityAssessment assessment = versionKeyed.get(c.toCoordinateString());
-      if (assessment != null) {
-        byGa.put(ga, assessment);
-      }
-    }
-
-    return Map.copyOf(byGa);
   }
 
-  private Map<String, List<LicenseInfo>> scanLatestDependencyLicenses(List<String> dependencies) {
-    Map<String, List<LicenseInfo>> byGa = new LinkedHashMap<>();
-
+  private Map<String, HealthTarget> resolveHealthTargets(
+      List<String> dependencies, StabilityFilter filter) {
+    Map<String, HealthTarget> targets = new LinkedHashMap<>();
     for (String dep : dependencies) {
+      MavenCoordinate coord = null;
       try {
-        MavenCoordinate coord = MavenCoordinateParser.parse(dep);
-        String ga = gaKey(coord);
-        String latestVersion = mavenCentralService.getLatestVersion(coord);
-        if (latestVersion == null) {
-          byGa.put(ga, List.of());
-          continue;
+        coord = MavenCoordinateParser.parse(dep);
+        targets.put(dep, resolveHealthTarget(coord, filter));
+      } catch (RuntimeException e) {
+        logger.debug("Could not resolve version for {}: {}", dep, e.getMessage());
+        if (coord != null) {
+          targets.put(dep, HealthTarget.failed(coord, "error", e.getMessage(), coord.version()));
         }
-
-        MavenCoordinate coordWithVersion =
-            MavenCoordinate.of(coord.groupId(), coord.artifactId(), latestVersion);
-        byGa.put(ga, mavenCentralService.getLicenses(coordWithVersion));
-      } catch (Exception e) {
-        logger.debug("Could not scan license for {}: {}", dep, e.getMessage());
       }
     }
+    return targets;
+  }
 
-    return Map.copyOf(byGa);
+  private HealthTarget resolveHealthTarget(MavenCoordinate coord, StabilityFilter filter) {
+    String current = coord.version();
+    List<String> allVersions = mavenCentralService.getAllVersions(coord);
+    if (allVersions.isEmpty()) {
+      return HealthTarget.failed(
+          coord, "not_found", "Dependency not found in Maven Central", current);
+    }
+    if (current != null && !allVersions.contains(current)) {
+      return HealthTarget.failed(
+          coord,
+          "error",
+          "Version %s of %s:%s does not exist in the repository"
+              .formatted(current, coord.groupId(), coord.artifactId()),
+          current);
+    }
+
+    String latest = getLatestCompatibleVersion(coord, filter != StabilityFilter.ALL);
+    String note = null;
+    if (latest == null && filter != StabilityFilter.STABLE_ONLY) {
+      latest = getLatestCompatibleVersion(coord, false);
+      note = "No stable release exists; the newest pre-release is used as latest";
+    }
+
+    if (current != null) {
+      if (latest == null) {
+        note = "No stable release available for stabilityFilter=STABLE_ONLY";
+      }
+      return new HealthTarget(coord, current, current, latest, HealthTarget.OK, null, note);
+    }
+    if (latest == null) {
+      return HealthTarget.failed(
+          coord,
+          "no_stable_version",
+          "No stable version exists and stabilityFilter=STABLE_ONLY; nothing was scanned",
+          null);
+    }
+    return new HealthTarget(coord, null, latest, latest, HealthTarget.OK, null, note);
+  }
+
+  private Map<String, SecurityAssessment> scanTargetSecurity(Map<String, HealthTarget> targets) {
+    Map<String, MavenCoordinate> toScan = new LinkedHashMap<>();
+    for (HealthTarget target : targets.values()) {
+      if (HealthTarget.OK.equals(target.status())) {
+        toScan.putIfAbsent(
+            target.scannedKey(),
+            MavenCoordinate.of(
+                target.coordinate().groupId(),
+                target.coordinate().artifactId(),
+                target.scannedVersion()));
+      }
+    }
+    if (toScan.isEmpty()) {
+      return Map.of();
+    }
+    return vulnerabilityService.scanBulk(List.copyOf(toScan.values()));
+  }
+
+  private Map<String, List<LicenseInfo>> scanTargetLicenses(Map<String, HealthTarget> targets) {
+    Map<String, List<LicenseInfo>> byKey = new LinkedHashMap<>();
+    for (HealthTarget target : targets.values()) {
+      if (!HealthTarget.OK.equals(target.status())) {
+        continue;
+      }
+      String key = target.scannedKey();
+      if (byKey.containsKey(key)) {
+        continue;
+      }
+      try {
+        byKey.put(
+            key,
+            mavenCentralService.getLicenses(
+                MavenCoordinate.of(
+                    target.coordinate().groupId(),
+                    target.coordinate().artifactId(),
+                    target.scannedVersion())));
+      } catch (Exception e) {
+        logger.debug("Could not scan license for {}: {}", key, e.getMessage());
+      }
+    }
+    return Map.copyOf(byKey);
   }
 
   private LicenseFindings buildLicenseFindings(
@@ -1316,8 +1475,9 @@ public class MavenDependencyTools {
         dependencyAnalyses.stream().filter(dep -> SUCCESS_STATUS.equals(dep.status())).toList();
 
     if (successfulDeps.isEmpty()) {
-      return new ProjectHealthAnalysis(
+      return ProjectHealthAnalysis.of(
           "unknown",
+          null,
           totalDependencies,
           0,
           totalDependencies,
@@ -1352,8 +1512,9 @@ public class MavenDependencyTools {
             securityFindings,
             licenseFindings);
 
-    return new ProjectHealthAnalysis(
+    return ProjectHealthAnalysis.of(
         overallHealth,
+        (int) Math.round(averageHealthScore),
         totalDependencies,
         successfulAnalyses,
         totalDependencies - successfulAnalyses,

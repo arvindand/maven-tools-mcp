@@ -15,6 +15,8 @@ import tools.jackson.databind.annotation.JsonNaming;
  * @param dependencies individual comparison results for each dependency
  * @param updateSummary overall summary of available updates
  * @param securitySummary aggregate security findings (null if scanning disabled)
+ * @param context7Guidance orchestration template for the per-dependency {@code context7_query}
+ *     hints, emitted once (empty when Context7 hints are disabled or no dependency has a hint)
  * @author Arvind Menon
  * @since 1.3.0
  */
@@ -23,7 +25,8 @@ public record VersionComparison(
     Instant comparisonDate,
     List<DependencyComparisonResult> dependencies,
     UpdateSummary updateSummary,
-    SecuritySummary securitySummary) {
+    SecuritySummary securitySummary,
+    Optional<Context7Guidance> context7Guidance) {
 
   /** Constructor without security summary for backward compatibility. */
   public VersionComparison(
@@ -31,6 +34,22 @@ public record VersionComparison(
       List<DependencyComparisonResult> dependencies,
       UpdateSummary updateSummary) {
     this(comparisonDate, dependencies, updateSummary, null);
+  }
+
+  /** Constructor that derives the single top-level Context7 template from the dependencies. */
+  public VersionComparison(
+      Instant comparisonDate,
+      List<DependencyComparisonResult> dependencies,
+      UpdateSummary updateSummary,
+      SecuritySummary securitySummary) {
+    this(
+        comparisonDate,
+        dependencies,
+        updateSummary,
+        securitySummary,
+        dependencies.stream().anyMatch(dep -> dep.context7Query().isPresent())
+            ? Optional.of(Context7Guidance.bulkTemplate())
+            : Optional.empty());
   }
 
   /** Individual dependency comparison result. */
@@ -44,7 +63,7 @@ public record VersionComparison(
       String status,
       String error,
       Optional<SecurityAssessment> security,
-      Optional<Context7Guidance> context7Guidance,
+      Optional<String> context7Query,
       Optional<SameMajorStableFallback> sameMajorStableFallback) {
 
     public static DependencyComparisonResult success(
@@ -75,10 +94,10 @@ public record VersionComparison(
         boolean updateAvailable,
         boolean context7Enabled,
         SameMajorStableFallback sameMajorStableFallback) {
-      // Add Context7 guidance if update is available and Context7 is enabled
-      Optional<Context7Guidance> guidance =
+      // Add a short Context7 query hint if update is available and Context7 is enabled
+      Optional<String> guidance =
           (updateAvailable && context7Enabled)
-              ? Optional.of(Context7Guidance.forMigration(dependency, updateType))
+              ? Optional.of(Context7Guidance.migrationQuery(dependency, updateType))
               : Optional.empty();
 
       return new DependencyComparisonResult(
@@ -126,9 +145,9 @@ public record VersionComparison(
         SecurityAssessment security,
         boolean context7Enabled,
         SameMajorStableFallback sameMajorStableFallback) {
-      Optional<Context7Guidance> guidance =
+      Optional<String> guidance =
           (updateAvailable && context7Enabled)
-              ? Optional.of(Context7Guidance.forMigration(dependency, updateType))
+              ? Optional.of(Context7Guidance.migrationQuery(dependency, updateType))
               : Optional.empty();
 
       return new DependencyComparisonResult(

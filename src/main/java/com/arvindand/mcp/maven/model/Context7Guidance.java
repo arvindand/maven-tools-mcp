@@ -57,6 +57,49 @@ public record Context7Guidance(String orchestrationInstructions) {
     return new Context7Guidance(orchestrationInstructions);
   }
 
+  /**
+   * Template for bulk tools: emitted once per response, applies to every dependency carrying a
+   * {@code context7_query} hint.
+   *
+   * @return the shared orchestration instructions
+   */
+  public static Context7Guidance bulkTemplate() {
+    return new Context7Guidance(
+        "For each dependency that has a context7_query: use resolve-library-id tool with"
+            + " query=<context7_query> and libraryName=<the dependency's artifactId> to find the"
+            + " library ID. Then use query-docs tool with the returned libraryId and"
+            + " query=<context7_query>. If Context7 doesn't provide sufficient information,"
+            + " perform a web search for <context7_query>.");
+  }
+
+  /**
+   * Short per-dependency Context7 query for version migration scenarios (bulk tools).
+   *
+   * @param dependency the Maven coordinate
+   * @param updateType the type of update (major, minor, patch)
+   * @return the suggested query string
+   */
+  public static String migrationQuery(String dependency, String updateType) {
+    String artifactId = extractArtifactId(dependency);
+    return MAJOR.equals(updateType)
+        ? artifactId + " migration guide breaking changes"
+        : artifactId + " upgrade guide";
+  }
+
+  /**
+   * Short per-dependency Context7 query for modernization scenarios (bulk tools).
+   *
+   * @param dependency the Maven coordinate
+   * @param ageClassification the age classification (fresh, current, aging, stale)
+   * @return the suggested query string
+   */
+  public static String modernizationQuery(String dependency, String ageClassification) {
+    String artifactId = extractArtifactId(dependency);
+    return STALE.equals(ageClassification)
+        ? artifactId + " alternatives replacements deprecated"
+        : artifactId + " modern usage best practices";
+  }
+
   private static String extractArtifactId(String dependency) {
     if (dependency == null || !dependency.contains(":")) {
       return dependency;
