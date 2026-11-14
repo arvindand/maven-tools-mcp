@@ -168,6 +168,10 @@ public class NativeImageConfiguration {
       // Register OSV API DTOs for native image JSON serialization (v2.0.0)
       registerRecordClass(hints, VulnerabilityService.OsvRequest.class);
       registerRecordClass(hints, VulnerabilityService.OsvPackage.class);
+      registerRecordClass(hints, VulnerabilityService.OsvBatchRequest.class);
+      registerRecordClass(hints, VulnerabilityService.OsvBatchResponse.class);
+      registerRecordClass(hints, VulnerabilityService.OsvBatchResult.class);
+      registerRecordClass(hints, VulnerabilityService.OsvBatchVulnerability.class);
       registerRecordClass(hints, VulnerabilityService.OsvResponse.class);
       registerRecordClass(hints, VulnerabilityService.OsvVulnerability.class);
       registerRecordClass(hints, VulnerabilityService.OsvSeverity.class);
