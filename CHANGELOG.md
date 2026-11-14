@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (Unreleased)
 
-- Start the 3.2.5-SNAPSHOT development cycle. Published registry metadata and build fallback versions remain at 3.2.4.
+- Development version is 3.3.0-SNAPSHOT: this cycle adds response fields and tool parameters. Published registry metadata and build fallback versions remain at 3.2.4.
 
 ## [3.2.4] - 2026-10-31
 
