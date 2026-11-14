@@ -528,4 +528,120 @@ class VersionComparatorTest {
         Arguments.of(null, "unknown", "Null version returns unknown"),
         Arguments.of("1.0.0-custom", "alpha", "Unknown qualifier defaults to alpha for safety"));
   }
+
+  @Test
+  void dateStampedDetection() {
+    assertThat(versionComparator.isLegacyDateStampedVersion("20040616")).isTrue();
+    assertThat(versionComparator.isLegacyDateStampedVersion("20030203.000550")).isTrue();
+    assertThat(versionComparator.isLegacyDateStampedVersion("20040102.233541")).isTrue();
+    assertThat(versionComparator.isLegacyDateStampedVersion("20031027.000000")).isTrue();
+    assertThat(versionComparator.isLegacyDateStampedVersion("20050101")).isTrue();
+    assertThat(versionComparator.isLegacyDateStampedVersion("20060101")).isFalse();
+    assertThat(versionComparator.isLegacyDateStampedVersion("20150501.1")).isFalse();
+    assertThat(versionComparator.isLegacyDateStampedVersion("20231013")).isFalse();
+    assertThat(versionComparator.isLegacyDateStampedVersion("3.2.2")).isFalse();
+    assertThat(versionComparator.isLegacyDateStampedVersion("2.11.0")).isFalse();
+    assertThat(versionComparator.isLegacyDateStampedVersion("12345678")).isFalse();
+    assertThat(versionComparator.isLegacyDateStampedVersion("20041301")).isFalse();
+    assertThat(versionComparator.isLegacyDateStampedVersion("20040632")).isFalse();
+    assertThat(versionComparator.isLegacyDateStampedVersion("18990101")).isFalse();
+    assertThat(versionComparator.isLegacyDateStampedVersion("200406160")).isFalse();
+    assertThat(versionComparator.isLegacyDateStampedVersion("2004061")).isFalse();
+    assertThat(versionComparator.isLegacyDateStampedVersion(null)).isFalse();
+  }
+
+  @Test
+  void dateStampedSortsBelowNormalVersions() {
+    assertThat(versionComparator.compare("20040616", "3.2.2")).isNegative();
+    assertThat(versionComparator.compare("3.2.2", "20040616")).isPositive();
+    assertThat(versionComparator.compare("20030203.000550", "2.11.0")).isNegative();
+    assertThat(versionComparator.compare("2.11.0", "20030203.000550")).isPositive();
+  }
+
+  @Test
+  void allDateStampedVersionsKeepNewestDateLatest() {
+    assertThat(versionComparator.compare("20231013", "20240303")).isNegative();
+    assertThat(VersionComparator.getLatest(new String[] {"20231013", "20250107", "20240303"}))
+        .isEqualTo("20250107");
+  }
+
+  @Test
+  void mixedListSortsConsistentlyInBothDirections() {
+    List<String> versions =
+        Arrays.asList(
+            "20040616", "3.2.2", "20030203.000550", "2.11.0", "3.2.1", "20040102.233541", "3.0");
+    List<String> expectedAsc =
+        List.of(
+            "20030203.000550", "20040102.233541", "20040616", "2.11.0", "3.0", "3.2.1", "3.2.2");
+    List<String> asc = versions.stream().sorted(versionComparator).toList();
+    List<String> desc = versions.stream().sorted(versionComparator.reversed()).toList();
+    assertThat(asc).isEqualTo(expectedAsc);
+    assertThat(desc).containsExactlyElementsOf(expectedAsc.reversed());
+    assertThat(VersionComparator.getLatest(versions.toArray(new String[0]))).isEqualTo("3.2.2");
+  }
+
+  @Test
+  void comparisonIsAntisymmetricAndTransitive() {
+    List<String> vs =
+        List.of("20040616", "20030203.000550", "3.2.2", "2.11.0", "1.0", "20231013", "3.0-beta-1");
+    for (String a : vs) {
+      for (String b : vs) {
+        assertThat(Integer.signum(versionComparator.compare(a, b)))
+            .isEqualTo(-Integer.signum(versionComparator.compare(b, a)));
+        for (String c : vs) {
+          if (versionComparator.compare(a, b) <= 0 && versionComparator.compare(b, c) <= 0) {
+            assertThat(versionComparator.compare(a, c)).isLessThanOrEqualTo(0);
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  void dateStampedUpdateTypes() {
+    assertThat(versionComparator.determineUpdateType("20040616", "3.2.2")).isEqualTo("major");
+    assertThat(versionComparator.determineUpdateType("20030203.000550", "2.11.0"))
+        .isEqualTo("major");
+    assertThat(versionComparator.determineUpdateType("3.2.2", "20040616")).isEqualTo("unknown");
+    assertThat(versionComparator.determineUpdateType("3.2.1", "20040616")).isEqualTo("unknown");
+    assertThat(versionComparator.determineUpdateType("20231013", "20240303")).isEqualTo("major");
+    assertThat(versionComparator.determineUpdateType("20240303", "20231013")).isEqualTo("unknown");
+    assertThat(versionComparator.determineUpdateType("20040616", "20040616")).isEqualTo("none");
+  }
+
+  @Test
+  void dateStampedVersionsAreStable() {
+    assertThat(versionComparator.isStableVersion("20040616")).isTrue();
+    assertThat(versionComparator.isStableVersion("20030203.000550")).isTrue();
+    assertThat(versionComparator.getVersionTypeString("20040616")).isEqualTo("stable");
+  }
+
+  @Test
+  void parseDateStampedVersions() {
+    assertThat(versionComparator.parseVersion("20040616").numericParts()).containsExactly(20040616);
+    assertThat(versionComparator.parseVersion("20030203.000550").numericParts())
+        .containsExactly(20030203, 550);
+    assertThat(versionComparator.parseVersion("20030203.000550").qualifier()).isEmpty();
+  }
+
+  @Test
+  void calendarVersionedArtifactKeepsMavenOrdering() {
+    List<String> versions = Arrays.asList("r239", "1.1", "20150501.1", "20240325.1", "20261110.1");
+    assertThat(versions.stream().sorted(versionComparator).toList().getLast())
+        .isEqualTo("20261110.1");
+    assertThat(versions.stream().sorted(versionComparator.reversed()).toList().getFirst())
+        .isEqualTo("20261110.1");
+    assertThat(VersionComparator.getLatest(versions.toArray(new String[0])))
+        .isEqualTo("20261110.1");
+    assertThat(versionComparator.determineUpdateType("1.1", "20150501.1")).isEqualTo("major");
+  }
+
+  @Test
+  void sameDayDifferentTimeLegacyVersions() {
+    assertThat(versionComparator.compare("20030203.000550", "20030203.010000")).isNegative();
+    assertThat(versionComparator.determineUpdateType("20030203.000550", "20030203.010000"))
+        .isEqualTo("minor");
+    assertThat(versionComparator.determineUpdateType("20030203.010000", "20030203.000550"))
+        .isEqualTo("unknown");
+  }
 }

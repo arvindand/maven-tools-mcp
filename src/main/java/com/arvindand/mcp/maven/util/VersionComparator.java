@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.springframework.stereotype.Component;
@@ -31,9 +32,19 @@ public final class VersionComparator implements Comparator<String> {
   private static final Set<String> RC_QUALIFIERS = Set.of("rc", "cr");
   // Guava flavors and JDBC Java-target variants are compatibility choices, not release stages.
   private static final Pattern RELEASE_VARIANT = Pattern.compile("android|jre(?:[1-9][0-9]*)?");
+  // Maven 1-era timestamped builds synced to Central in 2002-2005 (commons-collections 20040616,
+  // commons-io 20030203.000550). Later yyyyMMdd versions are real calendar versioning (e.g.
+  // owasp-java-html-sanitizer 20261110.1, org.json 20250107) and must keep Maven ordering.
+  private static final int LEGACY_DATE_CUTOFF_YEAR = 2005;
+  private static final int LEGACY_DATE_FIRST_YEAR = 1990;
+  // Group 1 is the year; first numeric segment is exactly 8 digits, optional trailing segments.
+  private static final Pattern DATE_STAMPED =
+      Pattern.compile("((?:19|20)\\d\\d)(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])(?:[.\\-_].*)?");
 
   /**
-   * Compares two version strings using Maven's ComparableVersion.
+   * Compares two version strings using Maven's ComparableVersion, except that date-stamped legacy
+   * versions (see {@link #isLegacyDateStampedVersion(String)}) always sort below all other
+   * versions.
    *
    * @param version1 first version to compare
    * @param version2 second version to compare
@@ -42,14 +53,43 @@ public final class VersionComparator implements Comparator<String> {
   @Override
   public int compare(String version1, String version2) {
     return switch ((version1 == null ? 1 : 0) + (version2 == null ? 2 : 0)) {
-      case 0 ->
-          new ComparableVersion(version1)
-              .compareTo(new ComparableVersion(version2)); // both non-null
+      case 0 -> compareNonNull(version1, version2);
       case 1 -> -1; // version1 is null, version2 is not
       case 2 -> 1; // version2 is null, version1 is not
       case 3 -> 0; // both null
       default -> throw new IllegalStateException("Unexpected comparison state");
     };
+  }
+
+  private static int compareNonNull(String version1, String version2) {
+    boolean date1 = isLegacyDateStamped(version1);
+    boolean date2 = isLegacyDateStamped(version2);
+    if (date1 != date2) {
+      return date1 ? -1 : 1;
+    }
+    return new ComparableVersion(version1).compareTo(new ComparableVersion(version2));
+  }
+
+  private static boolean isLegacyDateStamped(String version) {
+    if (version == null) return false;
+    Matcher m = DATE_STAMPED.matcher(version.trim());
+    if (!m.matches()) return false;
+    int year = Integer.parseInt(m.group(1));
+    return year >= LEGACY_DATE_FIRST_YEAR && year <= LEGACY_DATE_CUTOFF_YEAR;
+  }
+
+  /**
+   * Checks whether a version is a legacy date-stamped version (a Maven 1-era timestamped build):
+   * its first numeric segment is exactly eight digits forming a plausible yyyyMMdd date (year
+   * 1990-2005 inclusive, month 01-12, day 01-31), optionally followed by further segments such as
+   * {@code .HHmmss} (e.g. {@code 20040616}, {@code 20030203.000550}). Later yyyyMMdd versions (e.g.
+   * {@code 20150501.1}, {@code 20240303}) are genuine calendar versioning and return false.
+   *
+   * @param version the version to check
+   * @return true if the version is a legacy date-stamped version
+   */
+  public boolean isLegacyDateStampedVersion(String version) {
+    return isLegacyDateStamped(version);
   }
 
   /**
@@ -81,6 +121,8 @@ public final class VersionComparator implements Comparator<String> {
         int comparison = compare(currentVersion, latestVersion);
         if (comparison >= 0) {
           yield comparison == 0 ? "none" : UNKNOWN;
+        } else if (isLegacyDateStamped(currentVersion) && !isLegacyDateStamped(latestVersion)) {
+          yield "major";
         } else {
           yield determineUpdateType(parseVersion(currentVersion), parseVersion(latestVersion));
         }
