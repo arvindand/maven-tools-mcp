@@ -9,6 +9,7 @@ import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.McpError;
 import com.arvindand.mcp.maven.model.NeedsAttention;
+import com.arvindand.mcp.maven.model.PomSecuritySummary;
 import com.arvindand.mcp.maven.model.PomUpgradeRecommendation;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
 import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
@@ -29,6 +30,7 @@ import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedAlternative;
 import com.arvindand.mcp.maven.pom.ManagedDeclaration;
 import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
+import com.arvindand.mcp.maven.pom.PropertyOverride;
 import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.service.VulnerabilityService;
 import org.jspecify.annotations.Nullable;
@@ -191,10 +193,15 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, ManagedAlternative.class);
       registerRecordClass(hints, ManagedDeclaration.class);
       registerRecordClass(hints, PluginDependencyDeclaration.class);
+      registerRecordClass(hints, PropertyOverride.class);
 
       // Register recommend_pom_upgrades response records.
       registerRecordClass(hints, PomUpgradeRecommendation.class);
       registerRecordClass(hints, UpgradeAction.class);
+      registerRecordClass(hints, UpgradeAction.Security.class);
+      registerRecordClass(hints, PomSecuritySummary.class);
+      registerRecordClass(hints, NeedsAttention.PropertyOverride.class);
+      registerRecordClass(hints, NeedsAttention.Vulnerable.class);
       registerRecordClass(hints, NeedsAttention.MajorAvailable.class);
       registerRecordClass(hints, NeedsAttention.Conflict.class);
       registerRecordClass(hints, NeedsAttention.ExplicitOverride.class);

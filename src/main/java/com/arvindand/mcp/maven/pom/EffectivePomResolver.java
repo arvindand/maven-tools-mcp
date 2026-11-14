@@ -101,7 +101,132 @@ public class EffectivePomResolver {
         extractRootBomImports(root, properties),
         extractRootManagedDeclarations(root, properties),
         extractRootPluginDependencyDeclarations(root, properties),
+        detectPropertyOverrides(built, root, properties),
         warnings);
+  }
+
+  /**
+   * Finds root {@code <properties>} that shadow a property defined by an ancestor which uses it as
+   * an exact {@code ${name}} version (in dependency management, import-scope BOM entries,
+   * dependencies, or plugins / plugin management). Profile properties are ignored.
+   */
+  private static List<PropertyOverride> detectPropertyOverrides(
+      ModelBuildingResult built, Model root, Map<String, String> effectiveProperties) {
+    List<Model> ancestors =
+        built.getModelIds().stream()
+            .skip(1)
+            .map(built::getRawModel)
+            .filter(Objects::nonNull)
+            .filter(model -> model.getArtifactId() != null)
+            .toList();
+    if (ancestors.isEmpty() || root.getProperties() == null || root.getProperties().isEmpty()) {
+      return List.of();
+    }
+    Map<String, java.util.Set<String>> usages = new java.util.LinkedHashMap<>();
+    for (Model ancestor : ancestors) {
+      collectVersionPropertyUsages(ancestor, root, usages);
+    }
+    List<PropertyOverride> result = new ArrayList<>();
+    for (Map.Entry<String, java.util.Set<String>> usage : usages.entrySet()) {
+      String name = usage.getKey();
+      if (name.startsWith("project.") || name.startsWith("pom.")) continue;
+      int definer = nearestDefiner(ancestors, name);
+      if (definer < 0 || usage.getValue().isEmpty()) continue;
+      List<String> all = List.copyOf(usage.getValue());
+      String pinned =
+          PropertyInterpolator.interpolate(
+              root.getProperties().getProperty(name, "").trim(), effectiveProperties);
+      result.add(
+          new PropertyOverride(
+              name,
+              pinned,
+              inheritedValue(ancestors, definer, name),
+              rootCoordinate(ancestors.get(definer)).toCoordinateString(),
+              all.subList(0, Math.min(all.size(), PropertyOverride.MAX_AFFECTS)),
+              all.size()));
+    }
+    return List.copyOf(result);
+  }
+
+  private static int nearestDefiner(List<Model> ancestors, String name) {
+    for (int i = 0; i < ancestors.size(); i++) {
+      if (ancestors.get(i).getProperties().containsKey(name)) return i;
+    }
+    return -1;
+  }
+
+  /** Interpolates the ancestor's raw value against that ancestor's own inheritance chain. */
+  private static String inheritedValue(List<Model> ancestors, int definer, String name) {
+    Map<String, String> context = new HashMap<>();
+    for (int i = ancestors.size() - 1; i >= definer; i--) {
+      Model model = ancestors.get(i);
+      model
+          .getProperties()
+          .forEach((key, value) -> context.put(key.toString(), value.toString().trim()));
+    }
+    Model definingModel = ancestors.get(definer);
+    seedProjectProperties(definingModel, context);
+    try {
+      String value = PropertyInterpolator.interpolate(context.get(name), context);
+      return hasUnresolvedValue(value) ? null : value;
+    } catch (IllegalArgumentException _) {
+      return null;
+    }
+  }
+
+  private static void collectVersionPropertyUsages(
+      Model ancestor, Model root, Map<String, java.util.Set<String>> usages) {
+    Map<String, String> context = new HashMap<>();
+    seedProjectProperties(ancestor, context);
+    ancestor
+        .getProperties()
+        .forEach((key, value) -> context.put(key.toString(), value.toString().trim()));
+    List<Dependency> declarations = new ArrayList<>(ancestor.getDependencies());
+    if (ancestor.getDependencyManagement() != null) {
+      declarations.addAll(ancestor.getDependencyManagement().getDependencies());
+    }
+    for (Dependency dependency : declarations) {
+      recordUsage(
+          dependency.getVersion(),
+          dependency.getGroupId(),
+          dependency.getArtifactId(),
+          context,
+          root,
+          usages);
+    }
+    if (ancestor.getBuild() != null) {
+      List<Plugin> plugins = new ArrayList<>(ancestor.getBuild().getPlugins());
+      if (ancestor.getBuild().getPluginManagement() != null) {
+        plugins.addAll(ancestor.getBuild().getPluginManagement().getPlugins());
+      }
+      for (Plugin plugin : plugins) {
+        recordUsage(
+            plugin.getVersion(),
+            plugin.getGroupId() == null ? "org.apache.maven.plugins" : plugin.getGroupId(),
+            plugin.getArtifactId(),
+            context,
+            root,
+            usages);
+      }
+    }
+  }
+
+  private static void recordUsage(
+      String version,
+      String groupId,
+      String artifactId,
+      Map<String, String> context,
+      Model root,
+      Map<String, java.util.Set<String>> usages) {
+    if (version == null) return;
+    Matcher reference = EXACT_PROPERTY_REFERENCE.matcher(version.trim());
+    if (!reference.matches() || !root.getProperties().containsKey(reference.group(1))) return;
+    String group = PropertyInterpolator.interpolate(groupId, context);
+    String artifact = PropertyInterpolator.interpolate(artifactId, context);
+    if (hasUnresolvedValue(group) || hasUnresolvedValue(artifact)) return;
+    usages
+        .computeIfAbsent(reference.group(1), _ -> new java.util.LinkedHashSet<>())
+        .add(group + ":" + artifact);
   }
 
   private static EffectiveDependency withEditability(EffectiveDependency dependency, Model root) {

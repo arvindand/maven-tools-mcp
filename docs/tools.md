@@ -26,11 +26,13 @@ The default image exposes 11 MCP tools: 9 core Maven/dependency tools and 2 Cont
 - `directlyEditable` — whether there is a unique root declaration eligible for a mechanical version edit
 - `conflicts[]` — losing candidates when multiple BOMs at the same level disagree (e.g., Spring Boot + Spring Cloud + Jackson BOM all managing `jackson-databind`). Surfaced as raw data so the caller can decide whether to pin the version explicitly; the resolver does not recommend an action.
 
-The tool also returns the resolved `parentChain`, direct `rootImportedBoms[]`, directly editable `rootManagedDeclarations[]`, editable `rootPluginDependencyDeclarations[]` from both build plugins and plugin management, and a `warnings[]` array listing every silent-drop site. An owned declaration appears only when its version is literal or is an exact property reference owned by the input POM.
+The tool also returns the resolved `parentChain`, direct `rootImportedBoms[]`, directly editable `rootManagedDeclarations[]`, editable `rootPluginDependencyDeclarations[]` from both build plugins and plugin management, `propertyOverrides[]`, and a `warnings[]` array listing every silent-drop site. An owned declaration appears only when its version is literal or is an exact property reference owned by the input POM.
 
 Analysis covers declarations in the input POM, not a transitive dependency graph. Active-by-default profile dependencies can appear in analysis, but profile-only declarations are not mechanically editable. Other activation conditions are not evaluated; warnings can originate from parents and imported BOMs. See [architecture limits](architecture.md#caches-and-input-limits).
 
 For multi-module / monorepo projects, pass an optional `sideloadedPoms: string[]` of additional POM XML strings (sibling modules, unreleased parents). The resolver indexes each by its self-declared GAV and tries the bundle before falling back to Maven Central — so a child whose parent is not yet published still resolves cleanly.
+
+`propertyOverrides[]` lists root `<properties>` that shadow a property of the same name defined by an ancestor which uses it as an exact `${name}` `<version>` (dependency management, `import` BOMs, dependencies, plugins). This is the Spring Boot way of pinning a managed version (e.g. `<snakeyaml.version>1.33</snakeyaml.version>`); such dependencies are `MANAGED`, so they would otherwise be invisible. Each entry has `propertyName`, `pinnedValue`, `inheritedValue` (nearest ancestor value, null if unresolvable), `definedIn`, `affects[]` (`groupId:artifactId`, capped at 20) and `affectedCount`. Properties no ancestor uses as a version (`java.version`, `project.build.sourceEncoding`) and profile properties are not reported.
 
 ### Why this matters for upgrades
 
@@ -45,9 +47,22 @@ The classification is the upgrade policy:
 `recommend_pom_upgrades` applies this policy and returns a split response so the right consumer reads the right part:
 
 - **`deterministicActions[]`** — mechanical edits a non-LLM agent applies directly. Each entry has `kind` (`explicit_bump`, `bom_bump`, `managed_decl_bump`, or `plugin_dep_bump`), `groupId`, `artifactId`, `current`, `target`, and `updateType`. Owned declarations carry `editTarget`, optional `propertyName`, and `declaredIn`; plugin dependency actions also carry `ownerGroupId` and `ownerArtifactId`.
-- **`needsAttention[]`** — items that need judgment. `kind: "major_available"` for majors (with `currentMajorLatest` so the model can choose to stay same-major); `kind: "conflict"` when two BOMs disagree (with every `candidate` version + `latestOnCentral`); `kind: "explicit_override"` (with `managingCandidates` + `latestOnCentral`). Major entries use `latestStable`; conflicts and explicit overrides use `latestOnCentral`.
+- **`needsAttention[]`** — items that need judgment, in this order: `vulnerable` entries first (most severe first), then `major_available` (with `currentMajorLatest` so the model can choose to stay same-major), `conflict` (every `candidate` version + `latestOnCentral`), `explicit_override` (`managingCandidates` + `latestOnCentral`), and finally `property_override`. Major entries use `latestStable`; conflicts, explicit overrides, property overrides and vulnerable entries use `latestOnCentral`.
+- **`securitySummary`** — `scanned`, `vulnerable`, `clean`, `unknown` counts and `worstSeverity`; omitted when the scan is disabled.
 
-Use `mode: MINOR_PATCH` (default) to keep majors in the review lane, or `mode: ALL` to treat majors as deterministic too (rarely the right call).
+Use `mode: MINOR_PATCH` (default) to keep majors in the review lane, or `mode: ALL` to treat majors as deterministic too (rarely the right call). In `MINOR_PATCH` mode a newer major never blocks same-major updates: the `major_available` entry is emitted **and**, when a newer same-major stable exists (`currentMajorLatest` > current), the normal action targeting it (with the same edit metadata and a `minor`/`patch` `updateType`).
+
+### Property pins (`property_override`)
+
+A root property pin is never changed mechanically. The entry carries `propertyName`, `pinnedValue`, `inheritedValue`, `definedIn`, `affects[]`, `affectedCount`, `latestOnCentral` (first affected artifact, best effort) and `relation`: `behind_inherited` (the pin holds versions back), `equal_to_inherited` (the pin is redundant), `ahead_of_inherited`, or `unknown`. `groupId` / `artifactId` identify the first affected coordinate.
+
+### Security awareness
+
+`includeSecurityScan` (Boolean, default `true`) scans the effective version of every resolved declared dependency (EXPLICIT, MANAGED, EXPLICIT_OVERRIDE) with OSV in one bulk call; targets of actions whose current version is vulnerable get a second call.
+
+- A deterministic action whose current version is vulnerable carries `security`: `maxSeverity`, `vulnerabilityCount`, `vulnerabilityIds` (critical + high) and `targetStatus` (`OK` | `VULNERABLE` | `UNKNOWN`). Non-vulnerable actions are unchanged.
+- `kind: "vulnerable"` (`groupId`, `artifactId`, `current`, `source`, `managedByCoordinate`, `maxSeverity`, `vulnerabilityCount`, `criticalIds`, `highIds`, `fixedInVersion`, `latestOnCentral`) is emitted for every vulnerable dependency not resolved by an action with `targetStatus: OK`, in addition to any other entry for the same coordinate.
+- If OSV is unavailable the tool still succeeds: unassessed dependencies count as `unknown` (never clean) and a warning "Security scan unavailable for N dependencies" is added.
 
 ## Raw Context7 Documentation Tools
 

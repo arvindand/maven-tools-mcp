@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Unreleased)
+
+- `recommend_pom_upgrades` scans the effective version of every declared dependency with OSV (`includeSecurityScan`, default `true`). Actions for vulnerable versions carry a `security` object with the target's status, unresolved findings appear first in `needsAttention` as `vulnerable`, and the response includes `securitySummary`.
+- Detect root properties that pin a version managed by a parent (for example `snakeyaml.version` under Spring Boot). `analyze_pom_dependencies` returns them as `propertyOverrides`; `recommend_pom_upgrades` reports `property_override` with the pinned and inherited values.
+- Bulk vulnerability scans prefilter through the OSV batch endpoint, so dependencies without advisories cost one request in total.
+
+### Fixed (Unreleased)
+
+- A newer major no longer blocks same-major updates in `recommend_pom_upgrades`: the `major_available` entry is now accompanied by the minor/patch action for the current major.
+- Sort Maven 1-era date-stamped builds (`commons-collections:20040616`, `commons-io:20030203.000550`) below real releases. They were reported as the latest version and, in `mode: ALL`, offered as upgrade targets.
+- Find a verified fix when the lowest fix boundaries are still vulnerable. `log4j-core:2.14.1` previously reported that no fixed version was available. Stable versions are no longer offered a pre-release as the fix.
+
 ### Changed (Unreleased)
 
 - Start the 3.2.5-SNAPSHOT development cycle. Published registry metadata and build fallback versions remain at 3.2.4.

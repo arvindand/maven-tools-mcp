@@ -14,6 +14,8 @@ from scripts.upgrade import (
     PomUpdater,
     _action_key,
     _apply_deterministic_actions,
+    _display_deterministic_actions,
+    _display_needs_attention,
     _filter_actions_by_ignored,
     _filter_attention_by_ignored,
     parse_ignored_dependency_keys,
@@ -434,3 +436,28 @@ def test_apply_plugin_dependency_action_scopes_literal_edit_to_owner_plugin(
     assert "<version>9.0.0</version>" in updater.content
     assert "<version>10.1.0</version>" in updater.content
     assert "<version>10.0.0</version>" not in updater.content
+
+
+def test_display_tolerates_security_and_new_attention_kinds() -> None:
+    """New response fields (security, vulnerable, property_override) must not break rendering."""
+    _display_deterministic_actions(
+        [
+            {
+                "kind": "explicit_bump",
+                "groupId": "g",
+                "artifactId": "a",
+                "current": "1.0.0",
+                "target": "1.0.1",
+                "updateType": "patch",
+                "security": {"maxSeverity": "CRITICAL", "targetStatus": "OK"},
+            }
+        ]
+    )
+    _display_needs_attention(
+        [
+            {"kind": "vulnerable", "groupId": "g", "artifactId": "a", "current": "1.0.0"},
+            {"kind": "property_override", "groupId": "g", "artifactId": "a", "propertyName": "p"},
+            {"kind": "major_available", "groupId": "g", "artifactId": "a"},
+            {"kind": "something_new", "groupId": "g", "artifactId": "a"},
+        ]
+    )

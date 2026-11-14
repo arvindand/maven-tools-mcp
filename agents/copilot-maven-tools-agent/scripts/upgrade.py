@@ -344,13 +344,20 @@ def _display_deterministic_actions(actions: list[dict[str, Any]]) -> None:
     table.add_column("Current", style="yellow")
     table.add_column("Target", style="green")
     table.add_column("Type", style="blue")
+    table.add_column("Security", style="red")
     for a in actions:
+        security = a.get("security")
         table.add_row(
             a.get("kind", "?"),
             f"{a.get('groupId', '')}:{a.get('artifactId', '')}",
             a.get("current", ""),
             a.get("target", ""),
             a.get("updateType", ""),
+            (
+                f"fixes {security.get('maxSeverity', '?')} (target {security.get('targetStatus', '?')})"
+                if isinstance(security, dict)
+                else ""
+            ),
         )
     console.print(table)
 
@@ -382,6 +389,14 @@ def _display_needs_attention(attention: list[dict[str, Any]]) -> None:
             latest = n.get("latestOnCentral", "")
             candidates = n.get("managingCandidates", [])
             notes = f"override; {len(candidates)} managing candidate(s)"
+        elif kind == "vulnerable":
+            current = n.get("current", "")
+            latest = n.get("fixedInVersion") or n.get("latestOnCentral") or ""
+            notes = f"{n.get('maxSeverity', '?')}: {n.get('vulnerabilityCount', 0)} known vulnerabilities"
+        elif kind == "property_override":
+            current = n.get("pinnedValue", "")
+            latest = n.get("latestOnCentral") or ""
+            notes = f"{n.get('propertyName', '?')} {n.get('relation', 'unknown')} ({n.get('inheritedValue') or '?'})"
         else:
             current = ""
             latest = ""

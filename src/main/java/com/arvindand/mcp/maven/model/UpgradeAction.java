@@ -1,6 +1,8 @@
 package com.arvindand.mcp.maven.model;
 
+import com.arvindand.mcp.maven.model.security.SecurityAssessment;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.List;
 
 /**
  * A mechanical upgrade action a non-LLM agent can apply by editing the POM directly.
@@ -22,6 +24,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  *     "dependency_management"}
  * @param ownerGroupId groupId of the plugin that owns a plugin dependency action
  * @param ownerArtifactId artifactId of the plugin that owns a plugin dependency action
+ * @param security security context, present only when {@code current} has known vulnerabilities
  * @author Arvind Menon
  * @since 3.0.0
  */
@@ -37,12 +40,73 @@ public record UpgradeAction(
     String propertyName,
     String declaredIn,
     String ownerGroupId,
-    String ownerArtifactId) {
+    String ownerArtifactId,
+    Security security) {
+
+  /**
+   * Security context of an action whose current version is vulnerable.
+   *
+   * @param maxSeverity highest severity among the current version's findings
+   * @param vulnerabilityCount number of findings for the current version
+   * @param vulnerabilityIds critical and high severity vulnerability ids
+   * @param targetStatus whether {@code target} is {@code OK}, {@code VULNERABLE} or {@code UNKNOWN}
+   */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  public record Security(
+      SecurityAssessment.Severity maxSeverity,
+      int vulnerabilityCount,
+      List<String> vulnerabilityIds,
+      SecurityAssessment.Status targetStatus) {}
 
   public static final String KIND_EXPLICIT_BUMP = "explicit_bump";
   public static final String KIND_BOM_BUMP = "bom_bump";
   public static final String KIND_MANAGED_DECL_BUMP = "managed_decl_bump";
   public static final String KIND_PLUGIN_DEP_BUMP = "plugin_dep_bump";
+
+  /** Backwards-compatible constructor for actions without security context. */
+  public UpgradeAction(
+      String kind,
+      String groupId,
+      String artifactId,
+      String current,
+      String target,
+      String updateType,
+      String editTarget,
+      String propertyName,
+      String declaredIn,
+      String ownerGroupId,
+      String ownerArtifactId) {
+    this(
+        kind,
+        groupId,
+        artifactId,
+        current,
+        target,
+        updateType,
+        editTarget,
+        propertyName,
+        declaredIn,
+        ownerGroupId,
+        ownerArtifactId,
+        null);
+  }
+
+  /** Returns a copy of this action carrying the given security context. */
+  public UpgradeAction withSecurity(Security security) {
+    return new UpgradeAction(
+        kind,
+        groupId,
+        artifactId,
+        current,
+        target,
+        updateType,
+        editTarget,
+        propertyName,
+        declaredIn,
+        ownerGroupId,
+        ownerArtifactId,
+        security);
+  }
 
   /** Backwards-compatible constructor for action kinds without edit metadata. */
   public UpgradeAction(

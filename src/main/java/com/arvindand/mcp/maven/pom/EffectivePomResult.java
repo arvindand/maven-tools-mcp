@@ -24,6 +24,8 @@ import java.util.Objects;
  * @param rootPluginDependencyDeclarations dependencies declared directly under root build plugins
  *     or plugin-management plugins whose literal version or root-owned backing property can be
  *     edited deterministically
+ * @param propertyOverrides root properties that shadow an ancestor property which the ancestors use
+ *     as a version (property pins such as {@code <snakeyaml.version>})
  * @param warnings non-fatal issues — unresolved properties, parents that couldn't be fetched,
  *     ranges left as opaque strings, etc. Resolution still produces a result; warnings let the
  *     caller decide whether to trust each entry.
@@ -36,6 +38,7 @@ public record EffectivePomResult(
     List<MavenCoordinate> rootImportedBoms,
     List<ManagedDeclaration> rootManagedDeclarations,
     List<PluginDependencyDeclaration> rootPluginDependencyDeclarations,
+    List<PropertyOverride> propertyOverrides,
     List<String> warnings) {
 
   public EffectivePomResult {
@@ -45,13 +48,33 @@ public record EffectivePomResult(
     Objects.requireNonNull(rootManagedDeclarations, "rootManagedDeclarations must not be null");
     Objects.requireNonNull(
         rootPluginDependencyDeclarations, "rootPluginDependencyDeclarations must not be null");
+    Objects.requireNonNull(propertyOverrides, "propertyOverrides must not be null");
     Objects.requireNonNull(warnings, "warnings must not be null");
     dependencies = List.copyOf(dependencies);
     parentChain = List.copyOf(parentChain);
     rootImportedBoms = List.copyOf(rootImportedBoms);
     rootManagedDeclarations = List.copyOf(rootManagedDeclarations);
     rootPluginDependencyDeclarations = List.copyOf(rootPluginDependencyDeclarations);
+    propertyOverrides = List.copyOf(propertyOverrides);
     warnings = List.copyOf(warnings);
+  }
+
+  /** Backwards-compatible constructor for callers without property overrides. */
+  public EffectivePomResult(
+      List<EffectiveDependency> dependencies,
+      List<MavenCoordinate> parentChain,
+      List<MavenCoordinate> rootImportedBoms,
+      List<ManagedDeclaration> rootManagedDeclarations,
+      List<PluginDependencyDeclaration> rootPluginDependencyDeclarations,
+      List<String> warnings) {
+    this(
+        dependencies,
+        parentChain,
+        rootImportedBoms,
+        rootManagedDeclarations,
+        rootPluginDependencyDeclarations,
+        List.of(),
+        warnings);
   }
 
   /**
