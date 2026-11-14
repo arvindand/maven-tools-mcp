@@ -1,6 +1,6 @@
 # Tools
 
-The default image exposes 11 MCP tools: 9 core Maven/dependency tools and 2 Context7 documentation tools. The `-noc7` image exposes only the 9 core tools.
+The default image exposes 12 MCP tools: 10 core Maven/dependency tools and 2 Context7 documentation tools. The `-noc7` image exposes only the 10 core tools.
 
 ## Core Maven Intelligence Tools
 
@@ -15,6 +15,7 @@ The default image exposes 11 MCP tools: 9 core Maven/dependency tools and 2 Cont
 | `analyze_project_health` | Run a broader audit across a dependency set | "Give me a health overview for this project" |
 | `analyze_pom_dependencies` | Resolve a whole POM into per-dep effective versions + classification | "What versions does my pom.xml actually resolve to, and which ones are BOM-managed?" |
 | `recommend_pom_upgrades` | Build on the resolver to produce a deterministic action list + a human-review list | "What can I safely bump in my pom.xml?" |
+| `scan_transitive_vulnerabilities` | Scan the transitive dependencies of direct dependencies for known vulnerabilities | "Is any CVE hiding below the dependencies I declare?" |
 
 ## POM-Aware Analysis
 
@@ -63,6 +64,23 @@ A root property pin is never changed mechanically. The entry carries `propertyNa
 - A deterministic action whose current version is vulnerable carries `security`: `maxSeverity`, `vulnerabilityCount`, `vulnerabilityIds` (critical + high) and `targetStatus` (`OK` | `VULNERABLE` | `UNKNOWN`). Non-vulnerable actions are unchanged.
 - `kind: "vulnerable"` (`groupId`, `artifactId`, `current`, `source`, `managedByCoordinate`, `maxSeverity`, `vulnerabilityCount`, `criticalIds`, `highIds`, `fixedInVersion`, `latestOnCentral`) is emitted for every vulnerable dependency not resolved by an action with `targetStatus: OK`, in addition to any other entry for the same coordinate.
 - If OSV is unavailable the tool still succeeds: unassessed dependencies count as `unknown` (never clean) and a warning "Security scan unavailable for N dependencies" is added.
+
+## Transitive Vulnerability Scan
+
+`scan_transitive_vulnerabilities` takes your **direct** dependencies as `groupId:artifactId:version` (comma or newline separated, versions required, at most 100) and reports known vulnerabilities in everything they pull in. Parameters: `dependencies` (required) and `includeDirect` (optional, default `true`; set `false` to hide findings on the listed coordinates themselves).
+
+It fetches each root's resolved graph from [deps.dev](https://deps.dev) (no local dependency resolver), unions the nodes, and scans every distinct `groupId:artifactId:version` through OSV. The response contains:
+
+- `findings[]`, most severe first: `groupId`, `artifactId`, `version`, `relation` (`ROOT` for a coordinate you passed, `TRANSITIVE` otherwise), `maxSeverity`, `vulnerabilityCount`, `criticalIds`, `highIds`, `fixedInVersion`, and `introducedBy[]` (up to 5 roots, each with one shortest `root -> ... -> vulnerable` path of `g:a:v` entries) plus `introducedByTotal`
+- `summary`: roots requested/resolved/failed, transitive nodes found, nodes scanned, vulnerable and unknown counts, worst severity
+- `unresolvedRoots[]`: roots without a graph, as `NOT_FOUND` (deps.dev does not know the version) or `UPSTREAM_ERROR`
+- `warnings[]`: the accuracy caveat, scan-unavailable notices and graph errors flagged by deps.dev
+
+If deps.dev is unreachable for every root the tool returns an `EXTERNAL_SERVICE_UNAVAILABLE` error, never an empty "clean" result. Versions whose OSV lookup fails are counted as `unknownCount` and warned about, not treated as clean. If two roots pull different versions of the same artifact, each version is reported separately.
+
+**Accuracy caveat:** each graph is deps.dev's resolution of that root on its own. It does not apply your project's `dependencyManagement`, BOM imports, exclusions or version mediation between roots, so your project may resolve different versions of a transitive. Treat findings as leads and confirm them with `mvn dependency:tree` or `gradle dependencies`. Use `compare_dependency_versions` for upgrade advice on the declared dependencies themselves.
+
+Graphs are cached for 12 hours. The scan is limited to 1000 distinct versions per request; split larger projects into groups of roots.
 
 ## Raw Context7 Documentation Tools
 

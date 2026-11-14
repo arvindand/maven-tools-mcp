@@ -25,6 +25,8 @@ import com.arvindand.mcp.maven.model.security.SecurityAssessment;
 import com.arvindand.mcp.maven.model.security.SecurityFindings;
 import com.arvindand.mcp.maven.model.security.SecuritySummary;
 import com.arvindand.mcp.maven.model.security.VulnerabilityInfo;
+import com.arvindand.mcp.maven.model.transitive.DepsDevGraph;
+import com.arvindand.mcp.maven.model.transitive.TransitiveScanResult;
 import com.arvindand.mcp.maven.pom.EffectiveDependency;
 import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedAlternative;
@@ -207,6 +209,19 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, NeedsAttention.Conflict.class);
       registerRecordClass(hints, NeedsAttention.ExplicitOverride.class);
       registerRecordClass(hints, NeedsAttention.Candidate.class);
+
+      // Register deps.dev graph DTOs and scan_transitive_vulnerabilities response records.
+      registerRecordClass(hints, DepsDevGraph.class);
+      registerRecordClass(hints, DepsDevGraph.Node.class);
+      registerRecordClass(hints, DepsDevGraph.VersionKey.class);
+      registerRecordClass(hints, DepsDevGraph.Edge.class);
+      registerRecordClass(hints, TransitiveScanResult.class);
+      registerRecordClass(hints, TransitiveScanResult.Summary.class);
+      registerRecordClass(hints, TransitiveScanResult.Finding.class);
+      registerRecordClass(hints, TransitiveScanResult.IntroducedBy.class);
+      registerRecordClass(hints, TransitiveScanResult.UnresolvedRoot.class);
+      registerEnumClass(hints, TransitiveScanResult.Relation.class);
+      registerEnumClass(hints, TransitiveScanResult.UnresolvedReason.class);
 
       // Register configuration properties record classes
       registerRecordClass(hints, MavenCentralProperties.class);

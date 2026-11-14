@@ -77,7 +77,7 @@ For fuller setup guidance, including JAR and native-container usage, Docker Comp
 
 ## Available Tools
 
-The default image exposes 11 MCP tools; `-noc7` exposes the 9 core tools.
+The default image exposes 12 MCP tools; `-noc7` exposes the 10 core tools.
 
 ### Maven intelligence tools
 
@@ -92,6 +92,7 @@ The default image exposes 11 MCP tools; `-noc7` exposes the 9 core tools.
 | `analyze_project_health` | Run a broader dependency health audit |
 | `analyze_pom_dependencies` | Resolve declared dependency versions, identify their source, and surface BOM conflicts |
 | `recommend_pom_upgrades` | Produce actionable POM upgrade recommendations and flag changes needing review |
+| `scan_transitive_vulnerabilities` | Find known vulnerabilities in the transitive dependencies of your direct dependencies, with the path that pulls each one in |
 
 ### Context7 documentation tools
 
@@ -111,7 +112,7 @@ Both POM tools use **Apache Maven Model Builder** for parent inheritance, proper
 
 Recommendations cover editable parent/BOM versions, explicit dependencies, root dependency-management entries, and direct build/plugin dependencies. Declarations without an unambiguous edit location in the input POM are skipped. The server returns recommendations; the client or agent validates and applies them.
 
-Analysis covers declared dependencies, not the full transitive dependency graph. Profile activation is limited to active-by-default profiles. See [POM analysis details and limits](docs/tools.md#pom-aware-analysis).
+The POM tools analyze declared dependencies, not the full transitive dependency graph; use `scan_transitive_vulnerabilities` for transitive CVE exposure (graphs come from deps.dev, so confirm findings with `mvn dependency:tree`). Profile activation is limited to active-by-default profiles. See [POM analysis details and limits](docs/tools.md#pom-aware-analysis).
 
 ## Example
 

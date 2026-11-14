@@ -15,7 +15,7 @@ import tools.jackson.databind.annotation.JsonNaming;
  * @param dependencies individual comparison results for each dependency
  * @param updateSummary overall summary of available updates
  * @param securitySummary aggregate security findings (null if scanning disabled)
- * @param context7Guidance orchestration template for the per-dependency {@code context7_query}
+ * @param context7Guidance orchestration template for the per-dependency {@code context7Query}
  *     hints, emitted once (empty when Context7 hints are disabled or no dependency has a hint)
  * @author Arvind Menon
  * @since 1.3.0

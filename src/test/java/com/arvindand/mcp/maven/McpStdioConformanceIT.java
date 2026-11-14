@@ -77,7 +77,8 @@ class McpStdioConformanceIT {
             "analyze_release_patterns",
             "analyze_project_health",
             "analyze_pom_dependencies",
-            "recommend_pom_upgrades");
+            "recommend_pom_upgrades",
+            "scan_transitive_vulnerabilities");
   }
 
   @Test

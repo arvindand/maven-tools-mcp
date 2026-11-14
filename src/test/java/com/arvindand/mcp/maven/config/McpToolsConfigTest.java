@@ -6,8 +6,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.arvindand.mcp.maven.pom.EffectivePomResolver;
+import com.arvindand.mcp.maven.service.DepsDevClient;
 import com.arvindand.mcp.maven.service.MavenCentralService;
 import com.arvindand.mcp.maven.service.MavenDependencyTools;
+import com.arvindand.mcp.maven.service.TransitiveDependencyTools;
 import com.arvindand.mcp.maven.service.VulnerabilityService;
 import com.arvindand.mcp.maven.util.VersionComparator;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -39,6 +41,11 @@ class McpToolsConfigTest {
         new Context7Properties(false, null),
         mock(VulnerabilityService.class),
         mock(EffectivePomResolver.class));
+  }
+
+  private TransitiveDependencyTools transitiveTools() {
+    return new TransitiveDependencyTools(
+        mock(DepsDevClient.class), mock(VulnerabilityService.class));
   }
 
   @SuppressWarnings("unchecked")
@@ -76,15 +83,18 @@ class McpToolsConfigTest {
   @Test
   void exposesNativeToolsOnlyWhenNoMcpClientConnected() {
     ToolCallbackProvider provider =
-        new McpToolsConfig().mavenDependencyToolsCallbackProvider(tools(), noClients());
+        new McpToolsConfig()
+            .mavenDependencyToolsCallbackProvider(tools(), transitiveTools(), noClients());
 
-    // All nine @Tool methods are exposed; nothing extra when no client is connected (noc7).
-    assertThat(provider.getToolCallbacks()).hasSize(9).allSatisfy(tc -> assertThat(tc).isNotNull());
+    // All ten @Tool methods are exposed; nothing extra when no client is connected (noc7).
+    assertThat(provider.getToolCallbacks())
+        .hasSize(10)
+        .allSatisfy(tc -> assertThat(tc).isNotNull());
   }
 
   /**
    * The 3.1.0 regression: the Context7 client stayed connected but its tools stopped being
-   * re-exported, so {@code tools/list} returned only the native nine. Every shape-only assertion
+   * re-exported, so {@code tools/list} returned only the native ten. Every shape-only assertion
    * passes in that state, so this one counts.
    */
   @Test
@@ -92,10 +102,10 @@ class McpToolsConfigTest {
     ToolCallbackProvider provider =
         new McpToolsConfig()
             .mavenDependencyToolsCallbackProvider(
-                tools(), clientExposing("resolve_library_id", "query_docs"));
+                tools(), transitiveTools(), clientExposing("resolve_library_id", "query_docs"));
 
     assertThat(provider.getToolCallbacks())
-        .as("native nine plus the connected client's two")
-        .hasSize(11);
+        .as("native ten plus the connected client's two")
+        .hasSize(12);
   }
 }

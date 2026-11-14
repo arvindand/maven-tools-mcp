@@ -59,17 +59,17 @@ public record Context7Guidance(String orchestrationInstructions) {
 
   /**
    * Template for bulk tools: emitted once per response, applies to every dependency carrying a
-   * {@code context7_query} hint.
+   * {@code context7Query} hint.
    *
    * @return the shared orchestration instructions
    */
   public static Context7Guidance bulkTemplate() {
     return new Context7Guidance(
-        "For each dependency that has a context7_query: use resolve-library-id tool with"
-            + " query=<context7_query> and libraryName=<the dependency's artifactId> to find the"
+        "For each dependency that has a context7Query: use resolve-library-id tool with"
+            + " query=<context7Query> and libraryName=<the dependency's artifactId> to find the"
             + " library ID. Then use query-docs tool with the returned libraryId and"
-            + " query=<context7_query>. If Context7 doesn't provide sufficient information,"
-            + " perform a web search for <context7_query>.");
+            + " query=<context7Query>. If Context7 doesn't provide sufficient information,"
+            + " perform a web search for <context7Query>.");
   }
 
   /**

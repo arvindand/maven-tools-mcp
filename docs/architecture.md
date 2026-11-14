@@ -146,6 +146,7 @@ The server may need outbound HTTPS to:
 
 - `repo1.maven.org` for Maven metadata
 - `api.osv.dev` for vulnerability data
+- `api.deps.dev` for resolved dependency graphs (only `scan_transitive_vulnerabilities`)
 - `mcp.context7.com` for optional documentation tools
 
 For corporate networks:
@@ -192,7 +193,7 @@ Key points:
 - Default transport for desktop images: stdio
 - HTTP transport available as `:latest-http`
 - Data source: Maven Central metadata
-- Optional enrichments: OSV.dev and Context7
+- Optional enrichments: OSV.dev, deps.dev (transitive graphs) and Context7
 
 ## Reference Links
 

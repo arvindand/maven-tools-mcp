@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.arvindand.mcp.maven.model.McpError;
 import com.arvindand.mcp.maven.model.ToolResponse;
+import com.arvindand.mcp.maven.model.transitive.DepsDevGraph;
+import com.arvindand.mcp.maven.model.transitive.TransitiveScanResult;
 import com.arvindand.mcp.maven.pom.ManagedDeclaration;
 import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
 import java.util.List;
@@ -126,5 +128,27 @@ class NativeImageConfigurationTest {
   void registersPluginDependencyDeclarationForReflection() {
     assertThat(RuntimeHintsPredicates.reflection().onType(PluginDependencyDeclaration.class))
         .accepts(register());
+  }
+
+  @Test
+  void registersDepsDevAndTransitiveScanRecordsForReflection() {
+    RuntimeHints hints = register();
+    for (Class<?> type :
+        List.of(
+            DepsDevGraph.class,
+            DepsDevGraph.Node.class,
+            DepsDevGraph.VersionKey.class,
+            DepsDevGraph.Edge.class,
+            TransitiveScanResult.class,
+            TransitiveScanResult.Summary.class,
+            TransitiveScanResult.Finding.class,
+            TransitiveScanResult.IntroducedBy.class,
+            TransitiveScanResult.UnresolvedRoot.class,
+            TransitiveScanResult.Relation.class,
+            TransitiveScanResult.UnresolvedReason.class)) {
+      assertThat(RuntimeHintsPredicates.reflection().onType(type))
+          .as(type.getName())
+          .accepts(hints);
+    }
   }
 }

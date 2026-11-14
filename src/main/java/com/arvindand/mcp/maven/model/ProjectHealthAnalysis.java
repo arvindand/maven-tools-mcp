@@ -26,7 +26,7 @@ import tools.jackson.databind.annotation.JsonNaming;
  * @param recommendations prioritized list of recommendations
  * @param securityFindings aggregate security findings (null if scanning disabled)
  * @param licenseFindings aggregate license findings (null if scanning disabled)
- * @param context7Guidance orchestration template for the per-dependency {@code context7_query}
+ * @param context7Guidance orchestration template for the per-dependency {@code context7Query}
  *     hints, emitted once (empty when Context7 is disabled or no dependency has a hint)
  * @author Arvind Menon
  * @since 1.1.0

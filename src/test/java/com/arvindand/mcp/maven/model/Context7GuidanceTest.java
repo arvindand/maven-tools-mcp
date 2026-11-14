@@ -84,7 +84,7 @@ class Context7GuidanceTest {
 
     assertTrue(template.contains("resolve-library-id"));
     assertTrue(template.contains("query-docs"));
-    assertTrue(template.contains("context7_query"));
+    assertTrue(template.contains("context7Query"));
     assertTrue(template.contains("libraryName="));
     assertTrue(template.contains("web search"));
     // Generic: must not embed any particular artifact
