@@ -73,6 +73,21 @@ public record McpError(String code, String message, Map<String, Object> data, In
   }
 
   /**
+   * The server's own time budget for a bulk call ran out before every dependency was answered.
+   * Lookups already in flight finish and are cached, so an immediate retry makes progress.
+   *
+   * @return McpError with EXTERNAL_SERVICE_UNAVAILABLE code and reason BATCH_TIMEOUT
+   */
+  public static McpError batchTimeout() {
+    return new McpError(
+        EXTERNAL_SERVICE_UNAVAILABLE,
+        "The request did not finish within its time budget: the batch is large or the repository"
+            + " is slow. Completed lookups are cached, so retry now, or send fewer dependencies.",
+        Map.of("reason", "BATCH_TIMEOUT"),
+        2);
+  }
+
+  /**
    * Renders a retry delay for humans: seconds up to two minutes, then minutes, then hours.
    *
    * @param seconds delay in seconds

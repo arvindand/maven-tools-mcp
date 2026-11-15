@@ -40,6 +40,7 @@ import com.arvindand.mcp.maven.pom.PluginDeclaration;
 import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
 import com.arvindand.mcp.maven.pom.PropertyOverride;
 import com.arvindand.mcp.maven.pom.Source;
+import com.arvindand.mcp.maven.util.BoundedBatch;
 import com.arvindand.mcp.maven.util.MavenCoordinateParser;
 import com.arvindand.mcp.maven.util.VersionComparator;
 import java.time.Duration;
@@ -136,6 +137,19 @@ public class MavenDependencyTools {
   private static final int MAX_CONCURRENT_REQUESTS = MavenToolsConstants.MAX_CONCURRENT_REQUESTS;
   private final Semaphore batchSemaphore = new Semaphore(MAX_CONCURRENT_REQUESTS);
 
+  /**
+   * Time a bulk call may spend starting relocation lookups; see {@link RelocationLookup}. Kept well
+   * under the batch deadline so the version results always have room to finish.
+   */
+  static final Duration DEFAULT_BULK_RELOCATION_BUDGET = Duration.ofSeconds(8);
+
+  private Duration bulkRelocationBudget = DEFAULT_BULK_RELOCATION_BUDGET;
+
+  /** Overrides the bulk relocation budget; for tests. */
+  void setBulkRelocationBudget(Duration budget) {
+    this.bulkRelocationBudget = budget;
+  }
+
   public MavenDependencyTools(
       MavenCentralService mavenCentralService,
       VersionComparator versionComparator,
@@ -177,6 +191,11 @@ public class MavenDependencyTools {
    * a genuine internal error and is logged at error level.
    */
   private static ToolResponse toolFailure(Exception e) {
+    if (e instanceof BoundedBatch.DeadlineExceededException) {
+      // Running lookups are left to finish and are cached, so a retry resumes where this stopped.
+      logger.warn("Batch deadline exceeded: {}", e.getMessage());
+      return ToolResponse.Error.of(McpError.batchTimeout());
+    }
     if (MavenCentralException.isUpstreamFailure(e)) {
       MavenCentralException upstream = MavenCentralException.classify(e);
       logger.warn("Maven repository failure ({}): {}", upstream.getReason(), upstream.getMessage());
@@ -266,12 +285,31 @@ public class MavenDependencyTools {
   private final class RelocationLookup {
     private final Map<String, CompletableFuture<Optional<RelocationInfo>>> memo =
         new ConcurrentHashMap<>();
+    private final long startedNanos = System.nanoTime();
+    private final long budgetNanos;
+
+    /** Looks up every coordinate it is asked about. */
+    RelocationLookup() {
+      this.budgetNanos = Long.MAX_VALUE;
+    }
+
+    /**
+     * Stops starting new lookups once {@code budget} has elapsed. A lookup costs a POM fetch on a
+     * cold cache, which in a bulk call competes with the version lookups for the same rate limit
+     * and batch deadline; relocation is supplementary, so it yields first.
+     */
+    RelocationLookup(Duration budget) {
+      this.budgetNanos = budget.toNanos();
+    }
 
     @Nullable RelocationInfo find(MavenCoordinate coordinate) {
       return find(coordinate.groupId(), coordinate.artifactId());
     }
 
     @Nullable RelocationInfo find(String groupId, String artifactId) {
+      if (System.nanoTime() - startedNanos >= budgetNanos) {
+        return null;
+      }
       String key = groupId + ":" + artifactId;
       CompletableFuture<Optional<RelocationInfo>> mine = new CompletableFuture<>();
       CompletableFuture<Optional<RelocationInfo>> existing = memo.putIfAbsent(key, mine);
@@ -450,7 +488,7 @@ public class MavenDependencyTools {
 
           List<String> distinct = depList.stream().distinct().toList();
           UpstreamFailures failures = new UpstreamFailures();
-          RelocationLookup relocations = new RelocationLookup();
+          RelocationLookup relocations = new RelocationLookup(bulkRelocationBudget);
           List<BulkCheckResult> results =
               processBatchWithBackpressure(
                   distinct, dep -> processVersionCheck(dep, filter, failures, relocations));
@@ -507,7 +545,7 @@ public class MavenDependencyTools {
 
           List<String> distinct = depList.stream().distinct().toList();
           UpstreamFailures failures = new UpstreamFailures();
-          RelocationLookup relocations = new RelocationLookup();
+          RelocationLookup relocations = new RelocationLookup(bulkRelocationBudget);
           List<VersionComparison.DependencyComparisonResult> results =
               processBatchWithBackpressure(
                   distinct,
@@ -717,7 +755,7 @@ public class MavenDependencyTools {
           List<String> distinctDeps = depList.stream().distinct().toList();
           // Decide once, per dependency, which version is audited (supplied or latest per filter)
           UpstreamFailures failures = new UpstreamFailures();
-          RelocationLookup relocations = new RelocationLookup();
+          RelocationLookup relocations = new RelocationLookup(bulkRelocationBudget);
           final Map<String, HealthTarget> targets =
               resolveHealthTargets(distinctDeps, filter, failures);
           failures.throwIfAllFailed(distinctDeps.size());
@@ -764,7 +802,7 @@ public class MavenDependencyTools {
 
   private <T> List<T> processBatchWithBackpressure(
       List<String> items, Function<String, T> processor) {
-    return com.arvindand.mcp.maven.util.BoundedBatch.map(
+    return BoundedBatch.map(
         items,
         processor,
         batchSemaphore,
