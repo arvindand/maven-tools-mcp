@@ -134,8 +134,9 @@ jobs:
     - name: Exercise the JVM image over STDIO
       run: |
         PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
-        ./mvnw verify -Pintegration -Dit.test=McpStdioConformanceIT \
-          -Dmaven.tools.test.image=maven-tools-mcp:${PROJECT_VERSION}-jvm
+        ./mvnw verify -Pintegration -Dit.test='McpStdioConformanceIT,McpImageFeaturesIT' \
+          -Dmaven.tools.test.image=maven-tools-mcp:${PROJECT_VERSION}-jvm \
+          -Dmaven.tools.test.expected.version=${PROJECT_VERSION}
 
   integration-tests:
     name: Integration Tests (Manual)

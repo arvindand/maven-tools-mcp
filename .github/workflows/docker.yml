@@ -224,6 +224,62 @@ jobs:
             --amend arvindand/maven-tools-mcp:${PROJECT_VERSION}-http-arm64
           docker manifest push arvindand/maven-tools-mcp:latest-http
 
+  # Pulls the images the release just published and exercises each variant, so a release is
+  # shown to run and to contain the tagged version rather than assumed to.
+  verify-published:
+    runs-on: ubuntu-latest
+    needs: create-manifest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: "25"
+          distribution: temurin
+          cache: maven
+
+      - name: Make mvnw executable
+        run: chmod +x ./mvnw
+
+      - name: Exercise the published stdio images
+        run: |
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+          for variant in "" "-noc7"; do
+            image="${DOCKER_HUB_REPOSITORY}:${PROJECT_VERSION}${variant}"
+            docker pull "$image"
+            context7=""
+            if [ "$variant" = "-noc7" ]; then context7="-Dmaven.tools.test.context7=absent"; fi
+            ./mvnw verify -Pintegration -DskipUTs -Dit.test='McpStdioConformanceIT,McpImageFeaturesIT' \
+              -Dmaven.tools.test.image="$image" \
+              -Dmaven.tools.test.expected.version="${PROJECT_VERSION}" $context7
+          done
+
+      - name: Exercise the published HTTP image
+        run: |
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+          docker run --rm -d -p 8080:8080 --name http-published "${DOCKER_HUB_REPOSITORY}:${PROJECT_VERSION}-http"
+          trap 'docker stop http-published' EXIT
+          curl --fail --retry 10 --retry-all-errors --retry-delay 2 http://localhost:8080/actuator/health/liveness
+          ./mvnw verify -Pintegration -DskipUTs -Dit.test=McpImageFeaturesIT \
+            -Dmaven.tools.test.http.url=http://localhost:8080/mcp \
+            -Dmaven.tools.test.expected.version="${PROJECT_VERSION}"
+
+      - name: Verify the latest tags point at this release
+        run: |
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+          platform_digests() {
+            docker buildx imagetools inspect --raw "$1" | jq -r '.manifests[].digest' | sort
+          }
+          for variant in "" "-noc7" "-http"; do
+            versioned=$(platform_digests "${DOCKER_HUB_REPOSITORY}:${PROJECT_VERSION}${variant}")
+            latest=$(platform_digests "${DOCKER_HUB_REPOSITORY}:latest${variant}")
+            test -n "$versioned"
+            test "$versioned" = "$latest"
+          done
+
   test-pr:
     needs: validate
     runs-on: ubuntu-latest
@@ -269,12 +325,13 @@ jobs:
 
           # Test all images
           echo "Testing image with Context7..."
-          ./mvnw verify -Pintegration -DskipUTs -Dit.test=McpStdioConformanceIT -Dmaven.tools.test.image=maven-tools-mcp:pr-${{ github.event.number }}
+          ./mvnw verify -Pintegration -DskipUTs -Dit.test='McpStdioConformanceIT,McpImageFeaturesIT' -Dmaven.tools.test.image=maven-tools-mcp:pr-${{ github.event.number }}
 
           echo "Testing image without Context7..."
-          ./mvnw verify -Pintegration -DskipUTs -Dit.test=McpStdioConformanceIT -Dmaven.tools.test.image=maven-tools-mcp:pr-${{ github.event.number }}-noc7
+          ./mvnw verify -Pintegration -DskipUTs -Dit.test='McpStdioConformanceIT,McpImageFeaturesIT' -Dmaven.tools.test.image=maven-tools-mcp:pr-${{ github.event.number }}-noc7 -Dmaven.tools.test.context7=absent
 
           echo "Testing HTTP transport image..."
           timeout 30s docker run --rm -d -p 8080:8080 --name http-test maven-tools-mcp:pr-${{ github.event.number }}-http
           trap 'docker stop http-test' EXIT
           curl --fail --retry 10 --retry-all-errors --retry-delay 2 http://localhost:8080/actuator/health/liveness
+          ./mvnw verify -Pintegration -DskipUTs -Dit.test=McpImageFeaturesIT -Dmaven.tools.test.http.url=http://localhost:8080/mcp

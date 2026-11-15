@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Response shape: `analyze_project_health.analysis_date` is an ISO-8601 timestamp again; the health label moved to `overall_health`, next to the new `average_health_score`.
 - Response shape: `compare_dependency_versions` and `analyze_project_health` carry the Context7 orchestration text once at the top level (`context7Guidance` / `context7_guidance`); each dependency has a short `context7Query` instead of its own `context7Guidance` block.
 - Response shape: a missing artifact in `get_latest_version`, `analyze_dependency_age` and `analyze_release_patterns` is a top-level `not_found` response instead of being nested inside a success envelope.
+- Image-level feature tests (`McpImageFeaturesIT`) run against the JVM image and all three native variants on pull requests, and the release workflow pulls and exercises the published images, checking the reported version and that the `latest` tags point at the release.
 - Align project, runtime, registry and build fallback versions at 3.3.0, and update the README and setup guide for the new tools and version-pinned Docker tags.
 
 ## [3.2.4] - 2026-10-31
