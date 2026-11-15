@@ -20,6 +20,7 @@ import com.arvindand.mcp.maven.pom.EffectiveDependency;
 import com.arvindand.mcp.maven.pom.EffectivePomResolver;
 import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.Source;
+import com.arvindand.mcp.maven.util.BoundedBatch;
 import com.arvindand.mcp.maven.util.VersionComparator;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -27,6 +28,7 @@ import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -73,6 +75,19 @@ class MavenDependencyToolsUpstreamErrorsTest {
   }
 
   // ------------------------------------------------------------ whole-tool errors
+
+  @Test
+  void batchDeadlineBecomesARetryableTimeoutNotAnInternalError() {
+    when(maven.getAllVersions(any()))
+        .thenThrow(new BoundedBatch.DeadlineExceededException(new TimeoutException()));
+
+    McpError error = errorOf(tools.get_latest_version("g:a", null));
+
+    assertThat(error.code()).isEqualTo(McpError.EXTERNAL_SERVICE_UNAVAILABLE);
+    assertThat(error.data()).containsEntry("reason", "BATCH_TIMEOUT");
+    assertThat(error.retryAfter()).isEqualTo(2);
+    assertThat(error.message()).contains("retry").doesNotContain("Unexpected error");
+  }
 
   @Test
   void rateLimitedFailureBecomesRateLimitedErrorWithHonestRetryHint() {

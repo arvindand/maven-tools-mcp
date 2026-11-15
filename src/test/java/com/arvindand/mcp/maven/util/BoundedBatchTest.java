@@ -6,6 +6,9 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -47,6 +50,72 @@ class BoundedBatchTest {
     } finally {
       release.countDown();
     }
+  }
+
+  @Test
+  void runningOperationsAreLeftToFinishNotInterrupted() throws InterruptedException {
+    CountDownLatch release = new CountDownLatch(1);
+    CountDownLatch finished = new CountDownLatch(1);
+    AtomicBoolean interrupted = new AtomicBoolean();
+    List<Integer> inputs = List.of(1);
+    Semaphore permits = new Semaphore(1);
+    Duration timeout = Duration.ofMillis(100);
+
+    assertThatThrownBy(
+            () ->
+                BoundedBatch.map(
+                    inputs,
+                    value -> {
+                      try {
+                        release.await();
+                      } catch (InterruptedException _) {
+                        interrupted.set(true);
+                      } finally {
+                        finished.countDown();
+                      }
+                      return value;
+                    },
+                    permits,
+                    timeout))
+        .isInstanceOf(BoundedBatch.DeadlineExceededException.class);
+
+    release.countDown();
+    assertThat(finished.await(2, TimeUnit.SECONDS)).isTrue();
+    assertThat(interrupted)
+        .as("an interrupted HTTP call counts as an upstream failure and opens the breaker")
+        .isFalse();
+  }
+
+  @Test
+  void itemsStillWaitingWhenTheBatchEndsNeverStart() throws InterruptedException {
+    CountDownLatch release = new CountDownLatch(1);
+    AtomicInteger started = new AtomicInteger();
+    List<Integer> inputs = List.of(1, 2, 3);
+    Semaphore permits = new Semaphore(1);
+    Duration timeout = Duration.ofMillis(100);
+
+    assertThatThrownBy(
+            () ->
+                BoundedBatch.map(
+                    inputs,
+                    value -> {
+                      started.incrementAndGet();
+                      try {
+                        release.await();
+                      } catch (InterruptedException _) {
+                        Thread.currentThread().interrupt();
+                      }
+                      return value;
+                    },
+                    permits,
+                    timeout))
+        .isInstanceOf(BoundedBatch.DeadlineExceededException.class);
+
+    release.countDown();
+    assertThat(permits.tryAcquire(2, TimeUnit.SECONDS))
+        .as("the running item releases its permit when it finishes")
+        .isTrue();
+    assertThat(started).hasValue(1);
   }
 
   @Test

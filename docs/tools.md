@@ -187,6 +187,8 @@ Upstream failures are reported precisely, never as a missing artifact or `INTERN
 
 When the newest published version of an artifact carries a Maven relocation (`distributionManagement/relocation`, for example `mysql:mysql-connector-java` to `com.mysql:mysql-connector-j`), `get_latest_version`, `check_multiple_dependencies`, `compare_dependency_versions` and `analyze_project_health` add `relocation: {groupId, artifactId, version?, message?, latestVersion?}` (`latestVersion` is the newest stable version at the new coordinates). The field is absent when nothing is relocated or the lookup failed: it is best effort, never fails the tool and never marks a result incomplete. `analyze_project_health` also adds a recommendation line. In `recommend_pom_upgrades` the same fact appears as a `relocated` entry in `needsAttention`.
 
+In the bulk tools the relocation check is best effort: a call spends at most about eight seconds starting relocation lookups, so on a large batch with a cold cache some dependencies may come back without the field. The version results are unaffected, lookups are cached, and repeating the call fills in the rest. `get_latest_version` and `recommend_pom_upgrades` always check.
+
 The project aims to keep the server focused on dependency intelligence so the client can make decisions with clean inputs instead of custom parsing.
 
 That boundary matters for recommendation-style questions. Maven Tools MCP can ground the client with current dependency facts, but it is the calling model that decides how to weigh tradeoffs, compare alternatives, and combine these results with documentation or broader research.

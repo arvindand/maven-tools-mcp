@@ -33,6 +33,7 @@ import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedDeclaration;
 import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.util.VersionComparator;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -184,6 +185,34 @@ class MavenDependencyToolsRelocationTest {
     var slf4j = comparison.dependencies().get(1);
     assertThat(slf4j.relocation()).isNull();
     assertThat(json.writeValueAsString(slf4j)).doesNotContain("relocation");
+  }
+
+  @Test
+  void bulkCallsStopStartingRelocationLookupsOnceTheirBudgetIsSpent() {
+    tools.setBulkRelocationBudget(Duration.ZERO);
+
+    VersionComparison comparison =
+        getSuccessData(
+            tools.compare_dependency_versions(
+                OLD + ":8.0.33,org.slf4j:slf4j-api:2.0.17", null, false));
+
+    assertThat(comparison.dependencies())
+        .as("version results are complete; relocation is omitted, not an error")
+        .allSatisfy(
+            dependency -> {
+              assertThat(dependency.status()).isEqualTo("success");
+              assertThat(dependency.relocation()).isNull();
+            });
+    verify(maven, never()).findRelocationOfLatest(any());
+  }
+
+  @Test
+  void singleLookupsAreNotSubjectToTheBulkRelocationBudget() {
+    tools.setBulkRelocationBudget(Duration.ZERO);
+
+    VersionsByType result = getSuccessData(tools.get_latest_version(OLD, null));
+
+    assertThat(result.relocation()).isNotNull();
   }
 
   @Test
