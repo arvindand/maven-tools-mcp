@@ -227,9 +227,14 @@ jobs:
   # Pulls the images the release just published and exercises each variant, so a release is
   # shown to run and to contain the tagged version rather than assumed to.
   verify-published:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     needs: create-manifest
     if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        # One runner per published architecture, so both halves of each manifest are run.
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
