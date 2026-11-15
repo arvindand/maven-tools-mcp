@@ -285,11 +285,12 @@ public class MavenDependencyTools {
   private final class RelocationLookup {
     private final Map<String, CompletableFuture<Optional<RelocationInfo>>> memo =
         new ConcurrentHashMap<>();
-    private final long deadlineNanos;
+    private final long startedNanos = System.nanoTime();
+    private final long budgetNanos;
 
     /** Looks up every coordinate it is asked about. */
     RelocationLookup() {
-      this.deadlineNanos = Long.MAX_VALUE;
+      this.budgetNanos = Long.MAX_VALUE;
     }
 
     /**
@@ -298,7 +299,7 @@ public class MavenDependencyTools {
      * and batch deadline; relocation is supplementary, so it yields first.
      */
     RelocationLookup(Duration budget) {
-      this.deadlineNanos = System.nanoTime() + budget.toNanos();
+      this.budgetNanos = budget.toNanos();
     }
 
     @Nullable RelocationInfo find(MavenCoordinate coordinate) {
@@ -306,7 +307,7 @@ public class MavenDependencyTools {
     }
 
     @Nullable RelocationInfo find(String groupId, String artifactId) {
-      if (System.nanoTime() - deadlineNanos > 0) {
+      if (System.nanoTime() - startedNanos >= budgetNanos) {
         return null;
       }
       String key = groupId + ":" + artifactId;

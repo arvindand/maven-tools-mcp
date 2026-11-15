@@ -129,6 +129,20 @@ class BoundedBatchTest {
   }
 
   @Test
+  void expiredBatchDoesNotStartAnItemEvenWithAnAvailablePermit() {
+    AtomicInteger started = new AtomicInteger();
+    assertThatThrownBy(
+            () ->
+                BoundedBatch.map(
+                    List.of(1),
+                    value -> started.incrementAndGet(),
+                    new Semaphore(1),
+                    Duration.ZERO))
+        .isInstanceOf(BoundedBatch.DeadlineExceededException.class);
+    assertThat(started).hasValue(0);
+  }
+
+  @Test
   void rejectsOversizedInputsBeforeScheduling() {
     List<Integer> inputs = java.util.Collections.nCopies(501, 1);
     Semaphore permits = new Semaphore(1);

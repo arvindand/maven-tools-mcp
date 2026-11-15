@@ -100,12 +100,12 @@ public final class BoundedBatch {
   private static <T, R> R runItem(
       T item, Function<T, R> operation, Semaphore permits, long deadline, AtomicBoolean ended)
       throws InterruptedException {
-    long wait = Math.max(0, deadline - System.nanoTime());
-    if (ended.get() || !permits.tryAcquire(wait, TimeUnit.NANOSECONDS)) {
+    long wait = deadline - System.nanoTime();
+    if (ended.get() || wait <= 0 || !permits.tryAcquire(wait, TimeUnit.NANOSECONDS)) {
       throw new NotStartedException();
     }
     try {
-      if (ended.get()) {
+      if (ended.get() || deadline - System.nanoTime() <= 0) {
         throw new NotStartedException();
       }
       return operation.apply(item);
