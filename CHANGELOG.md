@@ -5,9 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.3.0] - 2026-11-15
 
-### Added (Unreleased)
+### Added (3.3.0)
 
 - `recommend_pom_upgrades` scans the effective version of every declared dependency with OSV (`includeSecurityScan`, default `true`). Actions for vulnerable versions carry a `security` object with the target's status, unresolved findings appear first in `needsAttention` as `vulnerable`, and the response includes `securitySummary`.
 - Detect root properties that pin a version managed by a parent (for example `snakeyaml.version` under Spring Boot). `analyze_pom_dependencies` returns them as `propertyOverrides`; `recommend_pom_upgrades` reports `property_override` with the pinned and inherited values.
@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `minReleaseAgeDays` on `recommend_pom_upgrades` restricts deterministic actions to versions published at least that many days ago, falling back to an older eligible version (`heldBackFrom`). The agent accepts `--min-release-age-days`.
 - `recommend_pom_upgrades` sets `incomplete: true` and adds aggregated warnings when version lookups fail, and warns about coordinates not found in the configured repository. The agent exits non-zero on an incomplete run.
 
-### Fixed (Unreleased)
+### Fixed (3.3.0)
 
 - A throttled repository no longer looks like "artifact not found": an HTTP 404 carrying `Retry-After` (Cloudflare throttling) is reported as `RATE_LIMITED`, is never cached as a missing POM and counts toward the circuit breaker. The reported retry hint is honest up to 24 hours.
 - Tools report upstream failures as `RATE_LIMITED` / `EXTERNAL_SERVICE_UNAVAILABLE` with a retry hint instead of raw upstream text or `Unexpected error`; bulk calls where every dependency failed upstream return a tool-level error, and `recommend_pom_upgrades` names the cause in its lookup-failure warning.
@@ -29,12 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sort Maven 1-era date-stamped builds (`commons-collections:20040616`, `commons-io:20030203.000550`) below real releases. They were reported as the latest version and, in `mode: ALL`, offered as upgrade targets.
 - Find a verified fix when the lowest fix boundaries are still vulnerable. `log4j-core:2.14.1` previously reported that no fixed version was available. Stable versions are no longer offered a pre-release as the fix.
 
-### Changed (Unreleased)
+### Changed (3.3.0)
 
 - Response shape: `analyze_project_health.analysis_date` is an ISO-8601 timestamp again; the health label moved to `overall_health`, next to the new `average_health_score`.
 - Response shape: `compare_dependency_versions` and `analyze_project_health` carry the Context7 orchestration text once at the top level (`context7Guidance` / `context7_guidance`); each dependency has a short `context7Query` instead of its own `context7Guidance` block.
 - Response shape: a missing artifact in `get_latest_version`, `analyze_dependency_age` and `analyze_release_patterns` is a top-level `not_found` response instead of being nested inside a success envelope.
-- Development version is 3.3.0-SNAPSHOT: this cycle adds response fields and tool parameters. Published registry metadata and build fallback versions remain at 3.2.4.
+- Align project, runtime, registry and build fallback versions at 3.3.0, and update the README and setup guide for the new tools and version-pinned Docker tags.
 
 ## [3.2.4] - 2026-10-31
 
@@ -821,7 +821,9 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.3...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.3.0...HEAD
+[3.3.0]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.4...v3.3.0
+[3.2.4]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.3...v3.2.4
 [3.2.3]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.2...v3.2.3
 [3.2.2]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.1...v3.2.2
 [3.2.0]: https://github.com/arvindand/maven-tools-mcp/compare/v3.1.2...v3.2.0
