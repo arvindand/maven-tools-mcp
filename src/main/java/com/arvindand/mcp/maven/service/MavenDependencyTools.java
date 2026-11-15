@@ -86,6 +86,7 @@ public class MavenDependencyTools {
   private static final String UNEXPECTED_ERROR = "Unexpected error";
   private static final String INVALID_MAVEN_COORDINATE_FORMAT = "Invalid Maven coordinate format: ";
   private static final String SUCCESS_STATUS = "success";
+  private static final String ERROR_STATUS = "error";
   private static final String MAJOR_UPDATE_TYPE = "major";
   private static final String MINOR_UPDATE_TYPE = "minor";
   private static final String PATCH_UPDATE_TYPE = "patch";
@@ -221,9 +222,9 @@ public class MavenDependencyTools {
       }
       MavenCentralException best = null;
       for (MavenCentralException candidate : byDependency.values()) {
-        if (best == null || priority(candidate) < priority(best)) {
-          best = candidate;
-        } else if (priority(candidate) == priority(best) && hint(candidate) > hint(best)) {
+        if (best == null
+            || priority(candidate) < priority(best)
+            || (priority(candidate) == priority(best) && hint(candidate) > hint(best))) {
           best = candidate;
         }
       }
@@ -286,7 +287,7 @@ public class MavenDependencyTools {
       try {
         Optional<Relocation> found =
             mavenCentralService.findRelocationOfLatest(MavenCoordinate.of(groupId, artifactId));
-        if (found == null || found.isEmpty()) {
+        if (found.isEmpty()) {
           return null;
         }
         Relocation relocation = found.get();
@@ -892,7 +893,7 @@ public class MavenDependencyTools {
       FailureText failure = failureText(failures, dependency, e);
       return ProjectHealthAnalysis.DependencyHealthAnalysis.builder()
           .dependency(dependency)
-          .status("error")
+          .status(ERROR_STATUS)
           .error(failure.message())
           .retryAfterSeconds(failure.retryAfterSeconds())
           .build();
@@ -962,10 +963,6 @@ public class MavenDependencyTools {
   private static String gaOf(String dependency) {
     String[] parts = dependency.split(":");
     return parts.length >= 2 ? parts[0] + ":" + parts[1] : dependency;
-  }
-
-  private static String gaKey(MavenCoordinate coordinate) {
-    return coordinate.groupId() + ":" + coordinate.artifactId();
   }
 
   private int calculateFreshnessScore(DependencyAgeAnalysis ageAnalysis, Integer maxAgeInDays) {
@@ -1113,7 +1110,11 @@ public class MavenDependencyTools {
           targets.put(
               dep,
               HealthTarget.failed(
-                  coord, "error", failure.message(), coord.version(), failure.retryAfterSeconds()));
+                  coord,
+                  ERROR_STATUS,
+                  failure.message(),
+                  coord.version(),
+                  failure.retryAfterSeconds()));
         }
       }
     }
@@ -1130,7 +1131,7 @@ public class MavenDependencyTools {
     if (current != null && !allVersions.contains(current)) {
       return HealthTarget.failed(
           coord,
-          "error",
+          ERROR_STATUS,
           "Version %s of %s:%s does not exist in the repository"
               .formatted(current, coord.groupId(), coord.artifactId()),
           current);
@@ -1551,10 +1552,6 @@ public class MavenDependencyTools {
         counts.getOrDefault(MINOR_UPDATE_TYPE, 0L).intValue(),
         counts.getOrDefault(PATCH_UPDATE_TYPE, 0L).intValue(),
         counts.getOrDefault(NO_UPDATE_TYPE, 0L).intValue());
-  }
-
-  private String getLatestStableVersion(MavenCoordinate coordinate) throws MavenCentralException {
-    return getLatestCompatibleVersion(coordinate, true);
   }
 
   private String getLatestCompatibleVersion(MavenCoordinate coordinate, boolean stableOnly)

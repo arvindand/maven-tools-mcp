@@ -3,6 +3,8 @@ package com.arvindand.mcp.maven.service;
 import static com.arvindand.mcp.maven.TestHelpers.getSuccessData;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -338,7 +340,7 @@ class RecommendPomUpgradesSecurityAndPinsTest {
   void unknownAssessmentsAreCountedWarnedAndNeverClean() {
     when(resolver.resolve("<pom/>"))
         .thenReturn(result(explicit("g", "a", "1.0.0"), explicit("g", "b", "1.0.0")));
-    org.mockito.Mockito.doReturn(Map.of("g:a:1.0.0", SecurityAssessment.unknown("OSV down")))
+    doReturn(Map.of("g:a:1.0.0", SecurityAssessment.unknown("OSV down")))
         .when(vulnerabilities)
         .scanBulk(any());
 
@@ -353,9 +355,7 @@ class RecommendPomUpgradesSecurityAndPinsTest {
   @Test
   void scanFailureNeverFailsTheTool() {
     when(resolver.resolve("<pom/>")).thenReturn(result(explicit("g", "a", "1.0.0")));
-    org.mockito.Mockito.doThrow(new IllegalStateException("boom"))
-        .when(vulnerabilities)
-        .scanBulk(any());
+    doThrow(new IllegalStateException("boom")).when(vulnerabilities).scanBulk(any());
 
     PomUpgradeRecommendation rec = recommend(UpgradeMode.MINOR_PATCH, true);
 

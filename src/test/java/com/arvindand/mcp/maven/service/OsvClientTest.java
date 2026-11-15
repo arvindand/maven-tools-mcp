@@ -83,7 +83,8 @@ class OsvClientTest {
         .expect(requestTo("https://api.osv.dev/v1/querybatch"))
         .andRespond(withSuccess("{\"results\":[{}]}", MediaType.APPLICATION_JSON));
 
-    assertThatThrownBy(() -> client.queryBatchClean(List.of(a, b)))
+    List<MavenCoordinate> coordinates = List.of(a, b);
+    assertThatThrownBy(() -> client.queryBatchClean(coordinates))
         .isInstanceOf(IllegalStateException.class);
   }
 }

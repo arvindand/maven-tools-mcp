@@ -28,6 +28,8 @@ public record McpError(String code, String message, Map<String, Object> data, In
 
   // Data field constants
   private static final String SUGGESTION = "suggestion";
+  private static final String SERVICE_KEY = "service";
+  private static final String MAVEN_CENTRAL = "Maven Central";
 
   /**
    * Create error for invalid input parameters.
@@ -67,7 +69,7 @@ public record McpError(String code, String message, Map<String, Object> data, In
    */
   public static McpError mavenCentralUnavailable(String message, Integer retryAfter) {
     return new McpError(
-        EXTERNAL_SERVICE_UNAVAILABLE, message, Map.of("service", "Maven Central"), retryAfter);
+        EXTERNAL_SERVICE_UNAVAILABLE, message, Map.of(SERVICE_KEY, MAVEN_CENTRAL), retryAfter);
   }
 
   /**
@@ -161,8 +163,8 @@ public record McpError(String code, String message, Map<String, Object> data, In
         RATE_LIMITED,
         "Maven repository is rate limiting requests (HTTP 429). " + retryPhrase(retryAfterSeconds),
         Map.of(
-            "service",
-            "Maven Central",
+            SERVICE_KEY,
+            MAVEN_CENTRAL,
             SUGGESTION,
             "Wait and retry, reduce batch size, or point maven.central.repository-base-url at a"
                 + " mirror or repository manager"),
@@ -181,7 +183,7 @@ public record McpError(String code, String message, Map<String, Object> data, In
         "Maven repository temporarily unavailable (circuit open after repeated failures)."
             + " "
             + retryPhrase(retryAfterSeconds),
-        Map.of("service", "Maven Central", "reason", "CIRCUIT_OPEN"),
+        Map.of(SERVICE_KEY, MAVEN_CENTRAL, "reason", "CIRCUIT_OPEN"),
         retryAfterSeconds);
   }
 }

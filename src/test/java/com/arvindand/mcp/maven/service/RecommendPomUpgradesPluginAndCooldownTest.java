@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -342,7 +343,7 @@ class RecommendPomUpgradesPluginAndCooldownTest {
     PomUpgradeRecommendation rec = f.recommend(UpgradeMode.MINOR_PATCH, 7);
 
     assertThat(rec.deterministicActions()).isEmpty();
-    verify(f.maven, org.mockito.Mockito.times(5)).fetchArtifactWithTimestamp(any(), any());
+    verify(f.maven, times(5)).fetchArtifactWithTimestamp(any(), any());
   }
 
   @Test

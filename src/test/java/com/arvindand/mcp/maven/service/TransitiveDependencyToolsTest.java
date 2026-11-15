@@ -2,8 +2,8 @@ package com.arvindand.mcp.maven.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -259,7 +259,7 @@ class TransitiveDependencyToolsTest {
 
     assertThat(error.code()).isEqualTo(McpError.EXTERNAL_SERVICE_UNAVAILABLE);
     assertThat(error.message()).contains("not a clean result");
-    verify(vulnerabilities, org.mockito.Mockito.never()).scanBulk(anyList());
+    verify(vulnerabilities, never()).scanBulk(anyList());
   }
 
   @Test
@@ -333,7 +333,7 @@ class TransitiveDependencyToolsTest {
     assertThat(error.message())
         .contains("'org.foo:bar' has no version")
         .contains("'not-a-coordinate'");
-    verify(depsDev, org.mockito.Mockito.never()).fetchGraph(org.mockito.ArgumentMatchers.any());
+    verify(depsDev, never()).fetchGraph(org.mockito.ArgumentMatchers.any());
   }
 
   @Test
@@ -344,7 +344,7 @@ class TransitiveDependencyToolsTest {
         .isEqualTo(McpError.INVALID_INPUT);
     assertThat(error(tools.scan_transitive_vulnerabilities("  ", null)).code())
         .isEqualTo(McpError.INVALID_INPUT);
-    verify(depsDev, org.mockito.Mockito.never()).fetchGraph(org.mockito.ArgumentMatchers.any());
+    verify(depsDev, never()).fetchGraph(org.mockito.ArgumentMatchers.any());
   }
 
   @Test
@@ -375,8 +375,7 @@ class TransitiveDependencyToolsTest {
     @SuppressWarnings("unchecked")
     ArgumentCaptor<List<MavenCoordinate>> chunks = ArgumentCaptor.forClass(List.class);
     verify(vulnerabilities, org.mockito.Mockito.atLeast(2)).scanBulk(chunks.capture());
-    assertThat(chunks.getAllValues())
-        .allSatisfy(c -> assertThat(c.size()).isLessThanOrEqualTo(500));
+    assertThat(chunks.getAllValues()).allSatisfy(c -> assertThat(c).hasSizeLessThanOrEqualTo(500));
     assertThat(chunks.getAllValues().stream().mapToInt(List::size).sum()).isEqualTo(601);
     assertThat(result.summary().nodesScanned()).isEqualTo(601);
   }
@@ -395,7 +394,7 @@ class TransitiveDependencyToolsTest {
 
     assertThat(error(tools.scan_transitive_vulnerabilities("g:root:1", null)).code())
         .isEqualTo(McpError.INVALID_INPUT);
-    verify(vulnerabilities, org.mockito.Mockito.never()).scanBulk(anyList());
+    verify(vulnerabilities, never()).scanBulk(anyList());
   }
 
   @Test
@@ -416,10 +415,10 @@ class TransitiveDependencyToolsTest {
     assertThat(result.findings())
         .extracting(Finding::artifactId)
         .containsExactly("crit", "high", "low");
-    verify(vulnerabilities).scanBulk(eq(scanned(result)));
+    verify(vulnerabilities).scanBulk(scanned());
   }
 
-  private static List<MavenCoordinate> scanned(TransitiveScanResult result) {
+  private static List<MavenCoordinate> scanned() {
     return List.of(
         MavenCoordinate.of("g", "root", "1"),
         MavenCoordinate.of("x", "low", "1"),

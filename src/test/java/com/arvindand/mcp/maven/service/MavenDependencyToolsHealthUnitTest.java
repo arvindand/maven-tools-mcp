@@ -181,7 +181,7 @@ class MavenDependencyToolsHealthUnitTest {
   @Test
   void mixedListScansEachDependencyAtItsOwnVersion() {
     stubLog4j();
-    when(maven.getAllVersions(eq(MavenCoordinate.of("com.example", "lib"))))
+    when(maven.getAllVersions(MavenCoordinate.of("com.example", "lib")))
         .thenReturn(List.of("2.0.0-RC1", "1.5.0", "1.4.0"));
     when(maven.getRecentVersionsWithAccurateTimestamps(
             eq(MavenCoordinate.of("com.example", "lib")), anyInt()))
@@ -236,7 +236,7 @@ class MavenDependencyToolsHealthUnitTest {
   @Test
   void healthGuidanceIsEmittedOnceWithShortPerDependencyQueries() throws Exception {
     stubLog4j();
-    when(maven.getAllVersions(eq(MavenCoordinate.of("com.example", "lib", "1.0.0"))))
+    when(maven.getAllVersions(MavenCoordinate.of("com.example", "lib", "1.0.0")))
         .thenReturn(List.of("1.1.0", "1.0.0"));
     when(maven.getRecentVersionsWithAccurateTimestamps(
             eq(MavenCoordinate.of("com.example", "lib", "1.0.0")), anyInt()))
