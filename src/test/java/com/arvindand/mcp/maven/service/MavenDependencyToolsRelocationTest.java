@@ -198,6 +198,7 @@ class MavenDependencyToolsRelocationTest {
 
     assertThat(comparison.dependencies())
         .as("version results are complete; relocation is omitted, not an error")
+        .hasSize(2)
         .allSatisfy(
             dependency -> {
               assertThat(dependency.status()).isEqualTo("success");

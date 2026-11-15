@@ -73,22 +73,7 @@ public final class BoundedBatch {
     List<Future<R>> futures = new ArrayList<>();
     try {
       for (T item : items) {
-        futures.add(
-            executor.submit(
-                () -> {
-                  long wait = Math.max(0, deadline - System.nanoTime());
-                  if (ended.get() || !permits.tryAcquire(wait, TimeUnit.NANOSECONDS)) {
-                    throw new NotStartedException();
-                  }
-                  try {
-                    if (ended.get()) {
-                      throw new NotStartedException();
-                    }
-                    return operation.apply(item);
-                  } finally {
-                    permits.release();
-                  }
-                }));
+        futures.add(executor.submit(() -> runItem(item, operation, permits, deadline, ended)));
       }
       List<R> results = new ArrayList<>();
       for (Future<R> future : futures) {
@@ -108,6 +93,24 @@ public final class BoundedBatch {
     } finally {
       ended.set(true);
       executor.shutdown();
+    }
+  }
+
+  /** Waits for a permit until the batch deadline, then runs the item unless the batch ended. */
+  private static <T, R> R runItem(
+      T item, Function<T, R> operation, Semaphore permits, long deadline, AtomicBoolean ended)
+      throws InterruptedException {
+    long wait = Math.max(0, deadline - System.nanoTime());
+    if (ended.get() || !permits.tryAcquire(wait, TimeUnit.NANOSECONDS)) {
+      throw new NotStartedException();
+    }
+    try {
+      if (ended.get()) {
+        throw new NotStartedException();
+      }
+      return operation.apply(item);
+    } finally {
+      permits.release();
     }
   }
 }
