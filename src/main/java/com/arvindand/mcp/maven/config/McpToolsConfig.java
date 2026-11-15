@@ -1,6 +1,7 @@
 package com.arvindand.mcp.maven.config;
 
 import com.arvindand.mcp.maven.service.MavenDependencyTools;
+import com.arvindand.mcp.maven.service.TransitiveDependencyTools;
 import io.modelcontextprotocol.client.McpSyncClient;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,15 +41,19 @@ public class McpToolsConfig {
    * native-only when no client is connected (noc7).
    *
    * @param mavenDependencyTools the Maven dependency tools service ({@code @Tool} methods)
+   * @param transitiveDependencyTools the transitive vulnerability tool ({@code @Tool} method)
    * @param mcpSyncClients connected downstream MCP sync clients, if any (e.g. Context7)
    * @return a provider exposing native tools plus any connected client's tools
    */
   @Bean
   public ToolCallbackProvider mavenDependencyToolsCallbackProvider(
       MavenDependencyTools mavenDependencyTools,
+      TransitiveDependencyTools transitiveDependencyTools,
       ObjectProvider<List<McpSyncClient>> mcpSyncClients) {
     ToolCallbackProvider nativeTools =
-        MethodToolCallbackProvider.builder().toolObjects(mavenDependencyTools).build();
+        MethodToolCallbackProvider.builder()
+            .toolObjects(mavenDependencyTools, transitiveDependencyTools)
+            .build();
 
     List<McpSyncClient> clients = mcpSyncClients.getIfAvailable(List::of);
     if (clients.isEmpty()) {

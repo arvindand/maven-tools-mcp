@@ -21,7 +21,7 @@ import org.springframework.test.context.ActiveProfiles;
  * <p>The tool names are asserted exactly, not just counted: the 3.1.0 regression was the two
  * Context7 tools silently vanishing from {@code tools/list}, which every shape-only assertion
  * (unique names, descriptions present, valid schemas) passes straight through. The client is
- * disabled under the {@code test} profile, so this covers the native nine; the aggregation with a
+ * disabled under the {@code test} profile, so this covers the native ten; the aggregation with a
  * connected client is guarded in {@code McpToolsConfigTest}.
  */
 @SpringBootTest(webEnvironment = RANDOM_PORT)
@@ -29,7 +29,7 @@ import org.springframework.test.context.ActiveProfiles;
 @McpServerTest(url = "spring:/mcp")
 class McpProtocolConformanceIT {
 
-  /** Every {@code @Tool} method on {@code MavenDependencyTools}, as published on the wire. */
+  /** Every native {@code @Tool} method, as published on the wire. */
   private static final String[] NATIVE_TOOLS = {
     "get_latest_version",
     "check_version_exists",
@@ -39,7 +39,8 @@ class McpProtocolConformanceIT {
     "analyze_release_patterns",
     "analyze_project_health",
     "analyze_pom_dependencies",
-    "recommend_pom_upgrades"
+    "recommend_pom_upgrades",
+    "scan_transitive_vulnerabilities"
   };
 
   @Test

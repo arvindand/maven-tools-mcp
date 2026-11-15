@@ -1,5 +1,6 @@
 package com.arvindand.mcp.maven.model;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
 import java.util.Objects;
 
@@ -23,13 +24,37 @@ import java.util.Objects;
  * @param deterministicActions safe upgrades the agent can apply mechanically
  * @param needsAttention upgrades that need human / LLM review
  * @param warnings non-fatal issues surfaced during POM resolution
+ * @param securitySummary counts of the vulnerability scan over the declared dependencies; null when
+ *     the scan was disabled
+ * @param incomplete {@code true} only when at least one version lookup failed upstream, so empty
+ *     results mean "could not check" rather than "nothing to do"; absent otherwise
  * @author Arvind Menon
  * @since 3.0.0
  */
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record PomUpgradeRecommendation(
     List<UpgradeAction> deterministicActions,
     List<NeedsAttention> needsAttention,
-    List<String> warnings) {
+    List<String> warnings,
+    PomSecuritySummary securitySummary,
+    Boolean incomplete) {
+
+  /** Convenience constructor for complete responses. */
+  public PomUpgradeRecommendation(
+      List<UpgradeAction> deterministicActions,
+      List<NeedsAttention> needsAttention,
+      List<String> warnings,
+      PomSecuritySummary securitySummary) {
+    this(deterministicActions, needsAttention, warnings, securitySummary, null);
+  }
+
+  /** Convenience constructor for responses without a security scan. */
+  public PomUpgradeRecommendation(
+      List<UpgradeAction> deterministicActions,
+      List<NeedsAttention> needsAttention,
+      List<String> warnings) {
+    this(deterministicActions, needsAttention, warnings, null, null);
+  }
 
   public PomUpgradeRecommendation {
     Objects.requireNonNull(deterministicActions, "deterministicActions must not be null");

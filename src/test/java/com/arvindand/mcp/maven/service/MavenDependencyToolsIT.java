@@ -133,7 +133,7 @@ class MavenDependencyToolsIT {
 
     // Context7 guidance should be empty in test profile (disabled)
     // Note: Context7 might be enabled for this dependency, so just verify structure
-    assertNotNull(depResult.context7Guidance());
+    assertNotNull(depResult.context7Query());
   }
 
   @Test
@@ -160,7 +160,9 @@ class MavenDependencyToolsIT {
         mavenDependencyTools.analyze_project_health(dependencies, null, null, false, false);
 
     ProjectHealthAnalysis result = getSuccessData(response);
-    assertNotNull(result.analysisDate());
+    assertNotNull(java.time.Instant.parse(result.analysisDate()));
+    assertNotNull(result.overallHealth());
+    assertNotNull(result.averageHealthScore());
     assertTrue(result.dependencyCount() >= 2);
     assertTrue(result.dependencies().size() >= 2);
     assertNotNull(result.ageDistribution());
@@ -170,6 +172,8 @@ class MavenDependencyToolsIT {
     for (var depHealth : result.dependencies()) {
       assertNotNull(depHealth.dependency());
       assertNotNull(depHealth.latestVersion());
+      assertTrue(depHealth.currentVersion().isPresent());
+      assertEquals(depHealth.currentVersion(), depHealth.scannedVersion());
       assertNotNull(depHealth.ageClassification());
       assertTrue(
           depHealth.healthScore() >= 0); // healthScore is primitive int, check for valid range

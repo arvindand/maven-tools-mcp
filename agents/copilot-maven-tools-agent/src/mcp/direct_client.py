@@ -129,16 +129,17 @@ class DirectMcpClient:
         self,
         pom_xml: str,
         mode: str = "MINOR_PATCH",
+        min_release_age_days: Optional[int] = None,
     ) -> dict[str, Any]:
         """Call recommend_pom_upgrades and return the parsed tool payload."""
+        arguments: dict[str, Any] = {"pomXml": pom_xml, "mode": mode}
+        if min_release_age_days is not None:
+            arguments["minReleaseAgeDays"] = min_release_age_days
         result = await self._request(
             "tools/call",
             {
                 "name": "recommend_pom_upgrades",
-                "arguments": {
-                    "pomXml": pom_xml,
-                    "mode": mode,
-                },
+                "arguments": arguments,
             },
             timeout=600.0,
         )

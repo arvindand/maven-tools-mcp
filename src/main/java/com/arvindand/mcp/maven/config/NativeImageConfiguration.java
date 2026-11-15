@@ -9,6 +9,7 @@ import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.McpError;
 import com.arvindand.mcp.maven.model.NeedsAttention;
+import com.arvindand.mcp.maven.model.PomSecuritySummary;
 import com.arvindand.mcp.maven.model.PomUpgradeRecommendation;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
 import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
@@ -24,11 +25,15 @@ import com.arvindand.mcp.maven.model.security.SecurityAssessment;
 import com.arvindand.mcp.maven.model.security.SecurityFindings;
 import com.arvindand.mcp.maven.model.security.SecuritySummary;
 import com.arvindand.mcp.maven.model.security.VulnerabilityInfo;
+import com.arvindand.mcp.maven.model.transitive.DepsDevGraph;
+import com.arvindand.mcp.maven.model.transitive.TransitiveScanResult;
 import com.arvindand.mcp.maven.pom.EffectiveDependency;
 import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedAlternative;
 import com.arvindand.mcp.maven.pom.ManagedDeclaration;
+import com.arvindand.mcp.maven.pom.PluginDeclaration;
 import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
+import com.arvindand.mcp.maven.pom.PropertyOverride;
 import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.service.VulnerabilityService;
 import org.jspecify.annotations.Nullable;
@@ -137,6 +142,8 @@ public class NativeImageConfiguration {
 
       // Register MavenArtifact for timestamp analysis compatibility
       registerRecordClass(hints, MavenArtifact.class);
+      registerRecordClass(hints, com.arvindand.mcp.maven.model.Relocation.class);
+      registerRecordClass(hints, com.arvindand.mcp.maven.model.RelocationInfo.class);
 
       // Register VersionComparator record for version parsing
       registerRecordClass(
@@ -168,6 +175,10 @@ public class NativeImageConfiguration {
       // Register OSV API DTOs for native image JSON serialization (v2.0.0)
       registerRecordClass(hints, VulnerabilityService.OsvRequest.class);
       registerRecordClass(hints, VulnerabilityService.OsvPackage.class);
+      registerRecordClass(hints, VulnerabilityService.OsvBatchRequest.class);
+      registerRecordClass(hints, VulnerabilityService.OsvBatchResponse.class);
+      registerRecordClass(hints, VulnerabilityService.OsvBatchResult.class);
+      registerRecordClass(hints, VulnerabilityService.OsvBatchVulnerability.class);
       registerRecordClass(hints, VulnerabilityService.OsvResponse.class);
       registerRecordClass(hints, VulnerabilityService.OsvVulnerability.class);
       registerRecordClass(hints, VulnerabilityService.OsvSeverity.class);
@@ -187,14 +198,34 @@ public class NativeImageConfiguration {
       registerRecordClass(hints, ManagedAlternative.class);
       registerRecordClass(hints, ManagedDeclaration.class);
       registerRecordClass(hints, PluginDependencyDeclaration.class);
+      registerRecordClass(hints, PluginDeclaration.class);
+      registerRecordClass(hints, PropertyOverride.class);
 
       // Register recommend_pom_upgrades response records.
       registerRecordClass(hints, PomUpgradeRecommendation.class);
       registerRecordClass(hints, UpgradeAction.class);
+      registerRecordClass(hints, UpgradeAction.Security.class);
+      registerRecordClass(hints, PomSecuritySummary.class);
+      registerRecordClass(hints, NeedsAttention.PropertyOverride.class);
+      registerRecordClass(hints, NeedsAttention.Vulnerable.class);
+      registerRecordClass(hints, NeedsAttention.Relocated.class);
       registerRecordClass(hints, NeedsAttention.MajorAvailable.class);
       registerRecordClass(hints, NeedsAttention.Conflict.class);
       registerRecordClass(hints, NeedsAttention.ExplicitOverride.class);
       registerRecordClass(hints, NeedsAttention.Candidate.class);
+
+      // Register deps.dev graph DTOs and scan_transitive_vulnerabilities response records.
+      registerRecordClass(hints, DepsDevGraph.class);
+      registerRecordClass(hints, DepsDevGraph.Node.class);
+      registerRecordClass(hints, DepsDevGraph.VersionKey.class);
+      registerRecordClass(hints, DepsDevGraph.Edge.class);
+      registerRecordClass(hints, TransitiveScanResult.class);
+      registerRecordClass(hints, TransitiveScanResult.Summary.class);
+      registerRecordClass(hints, TransitiveScanResult.Finding.class);
+      registerRecordClass(hints, TransitiveScanResult.IntroducedBy.class);
+      registerRecordClass(hints, TransitiveScanResult.UnresolvedRoot.class);
+      registerEnumClass(hints, TransitiveScanResult.Relation.class);
+      registerEnumClass(hints, TransitiveScanResult.UnresolvedReason.class);
 
       // Register configuration properties record classes
       registerRecordClass(hints, MavenCentralProperties.class);

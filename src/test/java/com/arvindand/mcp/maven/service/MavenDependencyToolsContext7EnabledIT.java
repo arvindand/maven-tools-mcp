@@ -52,19 +52,22 @@ class MavenDependencyToolsContext7EnabledIT {
     VersionComparison comparison = getSuccessData(resp);
     assertNotNull(comparison);
 
-    // Check if any dependencies have updates available and Context7 guidance
+    // Bulk responses carry the orchestration template once and a short query per dependency
+    boolean anyUpdate = false;
     for (var dep : comparison.dependencies()) {
       if (dep.updateAvailable()) {
-        // When Context7 is enabled and updates are available, guidance should be present
+        anyUpdate = true;
         assertTrue(
-            dep.context7Guidance().isPresent(),
-            "Context7 guidance should be present for updates when enabled");
-
-        var guidance = dep.context7Guidance().get();
-        assertNotNull(guidance.orchestrationInstructions());
-        assertTrue(guidance.orchestrationInstructions().contains("resolve-library-id"));
-        assertTrue(guidance.orchestrationInstructions().contains("query-docs"));
+            dep.context7Query().isPresent(),
+            "Context7 query hint should be present for updates when enabled");
       }
+    }
+    if (anyUpdate) {
+      assertTrue(comparison.context7Guidance().isPresent());
+      var guidance = comparison.context7Guidance().get();
+      assertNotNull(guidance.orchestrationInstructions());
+      assertTrue(guidance.orchestrationInstructions().contains("resolve-library-id"));
+      assertTrue(guidance.orchestrationInstructions().contains("query-docs"));
     }
   }
 

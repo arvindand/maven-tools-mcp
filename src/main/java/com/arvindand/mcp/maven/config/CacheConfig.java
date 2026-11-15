@@ -49,6 +49,15 @@ public class CacheConfig {
             .weigher((Object key, Object value) -> cacheWeight(key, value, 8192))
             .expireAfterWrite(Duration.ofHours(6))
             .build());
+
+    // deps.dev re-resolves published versions over time, so graphs get a moderate TTL.
+    cacheManager.registerCustomCache(
+        CacheConstants.DEPS_DEV_GRAPHS,
+        Caffeine.newBuilder()
+            .maximumWeight(32L * 1024 * 1024)
+            .weigher((Object key, Object value) -> cacheWeight(key, value, 16_384))
+            .expireAfterWrite(Duration.ofHours(12))
+            .build());
     return cacheManager;
   }
 

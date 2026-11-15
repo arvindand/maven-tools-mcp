@@ -9,6 +9,7 @@ package com.arvindand.mcp.maven.config;
 public final class CacheConstants {
 
   public static final String OSV_RESPONSES = "osv-responses";
+  public static final String DEPS_DEV_GRAPHS = "deps-dev-graphs";
 
   // Maven Central cache names
   public static final String MAVEN_ARTIFACT_TIMESTAMPS = "maven-artifact-timestamps";

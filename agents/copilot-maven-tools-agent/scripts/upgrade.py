@@ -344,13 +344,23 @@ def _display_deterministic_actions(actions: list[dict[str, Any]]) -> None:
     table.add_column("Current", style="yellow")
     table.add_column("Target", style="green")
     table.add_column("Type", style="blue")
+    table.add_column("Security", style="red")
+    table.add_column("Note", style="white")
     for a in actions:
+        security = a.get("security")
+        held_back = a.get("heldBackFrom")
         table.add_row(
             a.get("kind", "?"),
             f"{a.get('groupId', '')}:{a.get('artifactId', '')}",
             a.get("current", ""),
             a.get("target", ""),
             a.get("updateType", ""),
+            (
+                f"fixes {security.get('maxSeverity', '?')} (target {security.get('targetStatus', '?')})"
+                if isinstance(security, dict)
+                else ""
+            ),
+            f"held back from {held_back} (release cooldown)" if held_back else "",
         )
     console.print(table)
 
@@ -382,6 +392,20 @@ def _display_needs_attention(attention: list[dict[str, Any]]) -> None:
             latest = n.get("latestOnCentral", "")
             candidates = n.get("managingCandidates", [])
             notes = f"override; {len(candidates)} managing candidate(s)"
+        elif kind == "vulnerable":
+            current = n.get("current", "")
+            latest = n.get("fixedInVersion") or n.get("latestOnCentral") or ""
+            notes = f"{n.get('maxSeverity', '?')}: {n.get('vulnerabilityCount', 0)} known vulnerabilities"
+        elif kind == "property_override":
+            current = n.get("pinnedValue", "")
+            latest = n.get("latestOnCentral") or ""
+            notes = f"{n.get('propertyName', '?')} {n.get('relation', 'unknown')} ({n.get('inheritedValue') or '?'})"
+        elif kind == "relocated":
+            current = n.get("current", "")
+            latest = n.get("relocatedToLatest") or ""
+            notes = f"relocated to {n.get('relocatedTo', '?')}"
+            if n.get("message"):
+                notes += f" ({n['message']})"
         else:
             current = ""
             latest = ""
@@ -407,12 +431,15 @@ async def _fetch_recommendations(
     mode: str,
     mcp_transport: str,
     mcp_url: Optional[str],
+    min_release_age_days: Optional[int] = None,
 ) -> dict[str, Any]:
     """Call recommend_pom_upgrades and return the parsed payload."""
     server_mode = "ALL" if mode == "all" else "MINOR_PATCH"
     async with DirectMcpClient(transport=mcp_transport, url=mcp_url) as client:
         console.print("[green]✓[/green] Connected directly to Maven Tools MCP")
-        response = await client.recommend_upgrades(pom_content, server_mode)
+        response = await client.recommend_upgrades(
+            pom_content, server_mode, min_release_age_days=min_release_age_days
+        )
         console.print("[green]✓[/green] Received MCP response")
         logger.debug(f"MCP response: {response}")
         return response
@@ -426,11 +453,20 @@ async def _run_deterministic_upgrade(
     mcp_transport: str,
     mcp_url: Optional[str],
     ignored_keys: set[str],
+    min_release_age_days: Optional[int] = None,
 ) -> int:
-    """Deterministic upgrade path — single MCP call, apply actions directly."""
+    """Deterministic upgrade path — single MCP call, apply actions directly.
+
+    Exits non-zero (after applying what was received) when the server reports that some
+    version lookups failed, so a partial run is never mistaken for "all up to date".
+    """
     console.print("\n[bold]Step 1: Asking MCP for upgrade recommendations...[/bold]")
+    if min_release_age_days:
+        console.print(f"[cyan]Release cooldown:[/cyan] {min_release_age_days} day(s)")
     try:
-        response = await _fetch_recommendations(pom_content, mode, mcp_transport, mcp_url)
+        response = await _fetch_recommendations(
+            pom_content, mode, mcp_transport, mcp_url, min_release_age_days
+        )
     except (RuntimeError, ValueError, ImportError) as e:
         console.print(f"[red]Error calling MCP tool: {e}[/red]")
         return 1
@@ -444,6 +480,8 @@ async def _run_deterministic_upgrade(
     actions = payload.get("deterministicActions") or payload.get("deterministic_actions") or []
     attention = payload.get("needsAttention") or payload.get("needs_attention") or []
     warnings = payload.get("warnings") or []
+    incomplete = payload.get("incomplete") is True
+    ok_code = 1 if incomplete else 0
 
     actions = _filter_actions_by_ignored(actions, ignored_keys)
     attention = _filter_attention_by_ignored(attention, ignored_keys)
@@ -456,13 +494,26 @@ async def _run_deterministic_upgrade(
     _display_needs_attention(attention)
     for warning in warnings:
         console.print(f"[yellow]⚠ Warning:[/yellow] {warning}")
+    if incomplete:
+        console.print(
+            Panel(
+                "[bold red]INCOMPLETE RESULT[/bold red]\n"
+                "Some version lookups failed upstream. Missing upgrades are NOT 'up to date'.\n"
+                "Actions that were received are still applied; this run exits non-zero.",
+                border_style="red",
+                expand=False,
+            )
+        )
 
     if dry_run:
         console.print("\n[yellow]Dry run - no changes will be made[/yellow]")
-        return 0
+        return ok_code
     if not actions:
-        console.print("\n[green]No deterministic upgrades to apply.[/green]")
-        return 0
+        if incomplete:
+            console.print("\n[red]No upgrades received, but the result is incomplete.[/red]")
+        else:
+            console.print("\n[green]No deterministic upgrades to apply.[/green]")
+        return ok_code
 
     console.print("\n[bold]Step 2: Applying actions...[/bold]")
     pom_updater = PomUpdater(pom_path)
@@ -476,7 +527,7 @@ async def _run_deterministic_upgrade(
 
     if not pom_updater.has_changes():
         console.print("[yellow]No changes were made to the POM[/yellow]")
-        return 0
+        return ok_code
 
     pom_updater.save()
     console.print(f"\n[green]✓[/green] Applied {len(applied)} updates to POM")
@@ -492,7 +543,7 @@ async def _run_deterministic_upgrade(
             expand=False,
         )
     )
-    return 0
+    return ok_code
 
 
 async def _fetch_copilot_major_review(
@@ -545,6 +596,7 @@ async def run_upgrade(
     mcp_transport: str = "stdio",
     mcp_url: Optional[str] = None,
     ignore_dependencies: tuple[str, ...] = (),
+    min_release_age_days: Optional[int] = None,
 ) -> int:
     """Run the complete upgrade workflow."""
     pom_path = Path(pom_file).absolute()
@@ -578,6 +630,7 @@ async def run_upgrade(
             mcp_transport=mcp_transport,
             mcp_url=mcp_url,
             ignored_keys=ignored_dependency_keys,
+            min_release_age_days=min_release_age_days,
         )
 
     # Major-review path (Copilot SDK): keeps the per-coordinate compare flow.
@@ -676,6 +729,15 @@ def _display_upgrade_findings(
     ),
 )
 @click.option(
+    "--min-release-age-days",
+    type=click.IntRange(min=0),
+    default=None,
+    help=(
+        "Release cooldown: only upgrade to versions published at least this many days ago "
+        "(default: no cooldown). Applies to minor_patch and all modes."
+    ),
+)
+@click.option(
     "--verbose",
     "-v",
     is_flag=True,
@@ -688,6 +750,7 @@ def main(
     http: bool,
     mcp_url: str,
     ignore_dependencies: tuple[str, ...],
+    min_release_age_days: Optional[int],
     verbose: bool,
 ) -> None:
     """
@@ -707,6 +770,7 @@ def main(
 
     Examples:
         maven-agent -f pom.xml --dry-run
+        maven-agent -f pom.xml --min-release-age-days 7
         maven-agent -f pom.xml --mode major --dry-run
         maven-agent -f pom.xml --http --mcp-url http://localhost:8080/mcp
         maven-agent --ignore-dependency io.modelcontextprotocol.sdk:mcp-bom --dry-run
@@ -730,6 +794,7 @@ def main(
             mcp_transport="http" if http else "stdio",
             mcp_url=mcp_url if http else None,
             ignore_dependencies=ignore_dependencies,
+            min_release_age_days=min_release_age_days,
         )
     )
 

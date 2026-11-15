@@ -26,8 +26,13 @@ It is a local Python subproject that:
 - reads the repository `pom.xml` and hands it to the `recommend_pom_upgrades` MCP tool
 - applies the returned `deterministicActions[]` directly, using exact property metadata when a
   root dependency-management or plugin dependency declaration owns the version, and owner-plugin
-  metadata to scope literal plugin dependency edits
+  metadata to scope literal plugin dependency edits; `plugin_bump` actions edit plugins' own
+  versions (literal, or the root property shared by `plugins` and `pluginManagement`)
 - displays `needsAttention[]` (majors, conflicts, explicit overrides) for visibility
+- accepts `--min-release-age-days N` (release cooldown, passed to the tool as `minReleaseAgeDays`;
+  off by default, the workflow does not set it)
+- prints a prominent warning and exits non-zero, after applying the actions it received, when
+  the tool reports `incomplete: true` (failed version lookups), so a partial run is visibly red
 - uses the Copilot SDK only in major-review mode
 - leaves PR creation to GitHub Actions
 

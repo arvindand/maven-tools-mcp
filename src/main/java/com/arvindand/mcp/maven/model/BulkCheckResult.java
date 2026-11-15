@@ -1,5 +1,6 @@
 package com.arvindand.mcp.maven.model;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.databind.annotation.JsonNaming;
 
@@ -18,6 +19,10 @@ import tools.jackson.databind.annotation.JsonNaming;
  * @param latestBeta latest beta version info
  * @param latestAlpha latest alpha version info
  * @param latestMilestone latest milestone version info
+ * @param retryAfterSeconds retry hint when the error is a retryable upstream failure (omitted
+ *     otherwise)
+ * @param relocation where the artifact moved to, when its newest POM carries a relocation (omitted
+ *     otherwise)
  * @author Arvind Menon
  * @since 0.1.0
  */
@@ -34,7 +39,9 @@ public record BulkCheckResult(
     VersionInfo latestRc,
     VersionInfo latestBeta,
     VersionInfo latestAlpha,
-    VersionInfo latestMilestone) {
+    VersionInfo latestMilestone,
+    @JsonInclude(JsonInclude.Include.NON_NULL) Integer retryAfterSeconds,
+    @JsonInclude(JsonInclude.Include.NON_NULL) RelocationInfo relocation) {
 
   public enum Status {
     FOUND("found"),
@@ -66,6 +73,8 @@ public record BulkCheckResult(
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 
@@ -83,6 +92,8 @@ public record BulkCheckResult(
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 
@@ -96,6 +107,8 @@ public record BulkCheckResult(
         null,
         totalVersions,
         stableVersions,
+        null,
+        null,
         null,
         null,
         null,
@@ -126,7 +139,9 @@ public record BulkCheckResult(
         latestRc,
         latestBeta,
         latestAlpha,
-        latestMilestone);
+        latestMilestone,
+        null,
+        null);
   }
 
   public static BulkCheckResult notFound(String dependency) {
@@ -135,6 +150,8 @@ public record BulkCheckResult(
         null,
         null,
         Status.NOT_FOUND.getValue(),
+        null,
+        null,
         null,
         null,
         null,
@@ -158,6 +175,8 @@ public record BulkCheckResult(
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 
@@ -174,6 +193,68 @@ public record BulkCheckResult(
         null,
         null,
         null,
+        null,
+        null,
         null);
+  }
+
+  /**
+   * Creates an error result that carries the retry hint of a classified upstream failure.
+   *
+   * @param dependency the dependency
+   * @param error human-readable message
+   * @param retryAfterSeconds retry hint, or null
+   * @return error result
+   */
+  public static BulkCheckResult error(String dependency, String error, Integer retryAfterSeconds) {
+    return error(dependency, error).withRetryAfter(retryAfterSeconds);
+  }
+
+  /**
+   * Returns a copy carrying the retry hint.
+   *
+   * @param seconds retry hint, or null
+   * @return the copy
+   */
+  public BulkCheckResult withRetryAfter(Integer seconds) {
+    return new BulkCheckResult(
+        dependency,
+        version,
+        type,
+        status,
+        error,
+        totalVersions,
+        stableVersions,
+        latestStable,
+        latestRc,
+        latestBeta,
+        latestAlpha,
+        latestMilestone,
+        seconds,
+        relocation);
+  }
+
+  /**
+   * Returns a copy carrying the relocation.
+   *
+   * @param info relocation, or null for none
+   * @return the copy
+   */
+  public BulkCheckResult withRelocation(RelocationInfo info) {
+    return new BulkCheckResult(
+        dependency,
+        version,
+        type,
+        status,
+        error,
+        totalVersions,
+        stableVersions,
+        latestStable,
+        latestRc,
+        latestBeta,
+        latestAlpha,
+        latestMilestone,
+        retryAfterSeconds,
+        info);
   }
 }

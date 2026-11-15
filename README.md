@@ -12,16 +12,17 @@
 
 Maven Tools MCP Server gives MCP-capable clients a practical way to inspect JVM dependencies using live Maven Central data.
 
-It is built for developers and agents that need more than a plain version lookup: stability filtering, upgrade comparisons, dependency health signals, license data, CVE checks, and optional documentation lookups through Context7.
+It is built for developers and agents that need more than a plain version lookup: stability filtering, upgrade comparisons, dependency health signals, license data, CVE checks on declared and transitive dependencies, and optional documentation lookups through Context7.
 
 ![Demo](assets/demo.gif)
 
 ## What It Helps With
 
 - **Version checks:** find stable releases and compare upgrades with major/minor/patch context.
-- **Dependency audits:** inspect age, release cadence, known vulnerabilities, and license data.
+- **Dependency audits:** inspect age, release cadence, known vulnerabilities, license data, and relocated artifacts for the versions you run.
+- **Transitive exposure:** find known vulnerabilities in transitive dependencies, with the path from the direct dependency that pulls each one in.
 - **POM analysis:** resolve declared dependency versions through parents and BOMs without building the project.
-- **Upgrade planning:** get structured edits an agent can validate and apply, with major upgrades, conflicts, and overrides flagged for review.
+- **Upgrade planning:** get structured edits an agent can validate and apply for dependencies, BOMs and plugins, with vulnerabilities, major upgrades, conflicts, version pins, and overrides flagged for review.
 - **Documentation:** look up library docs through the optional Context7 tools.
 
 Coordinate-based tools work with Maven, Gradle, SBT, and Mill projects. The POM analysis and upgrade-planning tools take Maven `pom.xml` files.
@@ -69,7 +70,7 @@ Add the following server to `.vscode/mcp.json` in your workspace:
 | `:latest-noc7` | STDIO | No | Networks where Context7 is blocked or not wanted |
 | `:latest-http` | HTTP | Yes | Streamable HTTP clients and sidecar workflows |
 
-The current release is [v3.2.4](https://github.com/arvindand/maven-tools-mcp/releases/tag/v3.2.4). For version-pinned setups, use `:3.2.4`, `:3.2.4-noc7` or `:3.2.4-http`; each supports Linux AMD64 and ARM64.
+The current release is [v3.3.0](https://github.com/arvindand/maven-tools-mcp/releases/tag/v3.3.0). For version-pinned setups, use `:3.3.0`, `:3.3.0-noc7` or `:3.3.0-http`; each supports Linux AMD64 and ARM64.
 
 `CONTEXT7_API_KEY` is optional. Most setups can start without it. If your environment requires Context7 auth, or you want to avoid anonymous limits, pass it through Docker with `-e CONTEXT7_API_KEY`.
 
@@ -77,7 +78,7 @@ For fuller setup guidance, including JAR and native-container usage, Docker Comp
 
 ## Available Tools
 
-The default image exposes 11 MCP tools; `-noc7` exposes the 9 core tools.
+The default image exposes 12 MCP tools; `-noc7` exposes the 10 core tools.
 
 ### Maven intelligence tools
 
@@ -92,6 +93,7 @@ The default image exposes 11 MCP tools; `-noc7` exposes the 9 core tools.
 | `analyze_project_health` | Run a broader dependency health audit |
 | `analyze_pom_dependencies` | Resolve declared dependency versions, identify their source, and surface BOM conflicts |
 | `recommend_pom_upgrades` | Produce actionable POM upgrade recommendations and flag changes needing review |
+| `scan_transitive_vulnerabilities` | Find known vulnerabilities in the transitive dependencies of your direct dependencies, with the path that pulls each one in |
 
 ### Context7 documentation tools
 
@@ -111,7 +113,7 @@ Both POM tools use **Apache Maven Model Builder** for parent inheritance, proper
 
 Recommendations cover editable parent/BOM versions, explicit dependencies, root dependency-management entries, and direct build/plugin dependencies. Declarations without an unambiguous edit location in the input POM are skipped. The server returns recommendations; the client or agent validates and applies them.
 
-Analysis covers declared dependencies, not the full transitive dependency graph. Profile activation is limited to active-by-default profiles. See [POM analysis details and limits](docs/tools.md#pom-aware-analysis).
+The POM tools analyze declared dependencies, not the full transitive dependency graph; use `scan_transitive_vulnerabilities` for transitive CVE exposure (graphs come from deps.dev, so confirm findings with `mvn dependency:tree`). Profile activation is limited to active-by-default profiles. See [POM analysis details and limits](docs/tools.md#pom-aware-analysis).
 
 ## Example
 
@@ -140,7 +142,7 @@ See [the dogfooding guide](docs/dogfooding.md) for the agent, GitHub Actions wor
 ## FAQ
 
 - **Does this replace Renovate or Dependabot?** The server provides dependency analysis and upgrade recommendations. File edits, testing, scheduling, and PR creation require a separate agent or workflow. The [included agent](docs/dogfooding.md) demonstrates this for Maven POM updates.
-- **Does it work offline?** Not fully. Uncached metadata queries need access to Maven Central or your configured repository. Vulnerability checks and Context7 documentation also use external services.
+- **Does it work offline?** Not fully. Uncached metadata queries need access to Maven Central or your configured repository. Vulnerability checks, transitive dependency graphs, and Context7 documentation also use external services.
 - **Does it parse Gradle, SBT, or Mill build files?** No. Use their dependencies' Maven coordinates with the coordinate-based tools; whole-file analysis accepts Maven POM XML.
 
 For a few more usage notes, see the FAQ section in [`docs/examples.md`](docs/examples.md#faq).
@@ -170,7 +172,7 @@ Guy Chauliac), scoped here to declared-dep resolution. See [`NOTICE`](NOTICE).
 
 If you want to build or test locally, start with [`docs/setup.md`](docs/setup.md#build-from-source) and the helper scripts in [`build/`](build/).
 
-Check out `v3.2.4` to build this release from source; `main` may contain unreleased changes.
+Check out `v3.3.0` to build this release from source; `main` may contain unreleased changes.
 
 Project history and release notes live in [`CHANGELOG.md`](CHANGELOG.md).
 

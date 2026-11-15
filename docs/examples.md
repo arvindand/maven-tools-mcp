@@ -118,6 +118,9 @@ A response from `analyze_project_health` may look like:
 
 ```json
 {
+  "analysis_date": "2026-11-14T10:15:30.123Z",
+  "overall_health": "fair",
+  "average_health_score": 57,
   "dependency_count": 1,
   "successful_analysis": 1,
   "failed_analysis": 0,
@@ -126,9 +129,23 @@ A response from `analyze_project_health` may look like:
     "current": 0,
     "aging": 0,
     "stale": 1
-  }
+  },
+  "dependencies": [
+    {
+      "dependency": "org.apache.logging.log4j:log4j-core:2.14.1",
+      "status": "success",
+      "currentVersion": "2.14.1",
+      "scannedVersion": "2.14.1",
+      "latestVersion": "2.25.3",
+      "updateAvailable": true,
+      "updateType": "minor",
+      "currentVersionAgeDays": 1900
+    }
+  ]
 }
 ```
+
+Dependencies are shown abbreviated. Security results are about `scannedVersion`: the version you supplied, or, for unversioned input, the newest version allowed by `stabilityFilter`.
 
 ### POM-aware: effective versions from raw XML
 

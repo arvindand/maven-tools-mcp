@@ -4,6 +4,8 @@ import com.arvindand.mcp.maven.model.license.LicenseFindings;
 import com.arvindand.mcp.maven.model.license.LicenseInfo;
 import com.arvindand.mcp.maven.model.security.SecurityAssessment;
 import com.arvindand.mcp.maven.model.security.SecurityFindings;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -13,7 +15,10 @@ import tools.jackson.databind.annotation.JsonNaming;
 /**
  * Comprehensive health analysis for multiple dependencies in a project.
  *
- * @param analysisDate ISO formatted date when analysis was performed
+ * @param analysisDate ISO-8601 instant at which the analysis was performed
+ * @param overallHealth overall health label (excellent, good, fair, poor, unknown)
+ * @param averageHealthScore average per-dependency health score rounded to an integer, over
+ *     successfully analysed dependencies (null when none succeeded)
  * @param dependencyCount total number of dependencies analyzed
  * @param successfulAnalysis count of successfully analyzed dependencies
  * @param failedAnalysis count of failed analyses
@@ -22,12 +27,16 @@ import tools.jackson.databind.annotation.JsonNaming;
  * @param recommendations prioritized list of recommendations
  * @param securityFindings aggregate security findings (null if scanning disabled)
  * @param licenseFindings aggregate license findings (null if scanning disabled)
+ * @param context7Guidance orchestration template for the per-dependency {@code context7Query}
+ *     hints, emitted once (empty when Context7 is disabled or no dependency has a hint)
  * @author Arvind Menon
  * @since 1.1.0
  */
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ProjectHealthAnalysis(
     String analysisDate,
+    String overallHealth,
+    Integer averageHealthScore,
     int dependencyCount,
     int successfulAnalysis,
     int failedAnalysis,
@@ -35,171 +44,96 @@ public record ProjectHealthAnalysis(
     List<DependencyHealthAnalysis> dependencies,
     List<String> recommendations,
     SecurityFindings securityFindings,
-    LicenseFindings licenseFindings) {
+    LicenseFindings licenseFindings,
+    Optional<Context7Guidance> context7Guidance) {
 
-  /** Constructor without security/license findings for backward compatibility. */
-  public ProjectHealthAnalysis(
-      String analysisDate,
+  /** Creates an analysis stamped with the current time and a derived Context7 template. */
+  public static ProjectHealthAnalysis of(
+      String overallHealth,
+      Integer averageHealthScore,
       int dependencyCount,
       int successfulAnalysis,
       int failedAnalysis,
       AgeDistribution ageDistribution,
       List<DependencyHealthAnalysis> dependencies,
-      List<String> recommendations) {
-    this(
-        analysisDate,
+      List<String> recommendations,
+      SecurityFindings securityFindings,
+      LicenseFindings licenseFindings) {
+    return new ProjectHealthAnalysis(
+        Instant.now().toString(),
+        overallHealth,
+        averageHealthScore,
         dependencyCount,
         successfulAnalysis,
         failedAnalysis,
         ageDistribution,
         dependencies,
         recommendations,
-        null,
-        null);
+        securityFindings,
+        licenseFindings,
+        dependencies.stream().anyMatch(dep -> dep.context7Query().isPresent())
+            ? Optional.of(Context7Guidance.bulkTemplate())
+            : Optional.empty());
   }
 
   /** Distribution of dependencies by age classification. */
   public record AgeDistribution(int fresh, int current, int aging, int stale) {}
 
-  /** Health analysis for a single dependency. */
+  /**
+   * Health analysis for a single dependency.
+   *
+   * @param dependency the dependency as supplied by the caller
+   * @param status success, error, not_found or no_stable_version
+   * @param currentVersion the version supplied by the caller (empty for unversioned input)
+   * @param scannedVersion the exact version the security and license scans were run against
+   * @param latestVersion newest version honouring the stability filter (and release variant)
+   * @param updateAvailable whether latestVersion is newer than currentVersion (versioned input)
+   * @param updateType major, minor, patch or none (versioned input)
+   * @param currentVersionAgeDays days since the current version was published (best effort)
+   * @param ageClassification age classification of latestVersion's release date
+   * @param daysSinceRelease days since latestVersion was released
+   * @param note additional clarification, for example a pre-release fallback
+   * @param context7Query optional suggested Context7 query (see top-level context7_guidance)
+   * @param retryAfterSeconds retry hint when the error is a retryable upstream failure (omitted
+   *     otherwise)
+   * @param relocation where the artifact moved to, when its newest POM carries a relocation
+   *     (omitted otherwise)
+   */
   public record DependencyHealthAnalysis(
       String dependency,
       String status,
+      Optional<String> currentVersion,
+      Optional<String> scannedVersion,
       String latestVersion,
+      Optional<Boolean> updateAvailable,
+      Optional<String> updateType,
+      Optional<Long> currentVersionAgeDays,
       String ageClassification,
       long daysSinceRelease,
       int healthScore,
       String maintenanceLevel,
       Optional<SecurityAssessment> security,
       Optional<List<LicenseInfo>> licenses,
-      Optional<Context7Guidance> context7Guidance,
-      Optional<String> error) {
+      Optional<String> note,
+      Optional<String> context7Query,
+      Optional<String> error,
+      @JsonInclude(JsonInclude.Include.NON_NULL) Integer retryAfterSeconds,
+      @JsonInclude(JsonInclude.Include.NON_NULL) RelocationInfo relocation) {
 
     private static final String STATUS_SUCCESS = "success";
-    private static final String AGE_AGING = "aging";
-    private static final String AGE_STALE = "stale";
-
-    /** Creates a successful analysis result. */
-    public static DependencyHealthAnalysis success(
-        String dependency,
-        String latestVersion,
-        String ageClassification,
-        long daysSinceRelease,
-        int healthScore,
-        String maintenanceLevel,
-        boolean context7Enabled) {
-      // Add Context7 guidance for aging/stale dependencies when Context7 is enabled
-      Optional<Context7Guidance> guidance =
-          (context7Enabled
-                  && (AGE_AGING.equals(ageClassification) || AGE_STALE.equals(ageClassification)))
-              ? Optional.of(Context7Guidance.forModernization(dependency, ageClassification))
-              : Optional.empty();
-
-      return new DependencyHealthAnalysis(
-          dependency,
-          STATUS_SUCCESS,
-          latestVersion,
-          ageClassification,
-          daysSinceRelease,
-          healthScore,
-          maintenanceLevel,
-          Optional.empty(),
-          Optional.empty(),
-          guidance,
-          Optional.empty());
-    }
-
-    /** Creates a successful analysis result with security assessment. */
-    public static DependencyHealthAnalysis successWithSecurity(
-        String dependency,
-        String latestVersion,
-        String ageClassification,
-        long daysSinceRelease,
-        int healthScore,
-        String maintenanceLevel,
-        SecurityAssessment security,
-        boolean context7Enabled) {
-      Optional<Context7Guidance> guidance =
-          (context7Enabled
-                  && (AGE_AGING.equals(ageClassification) || AGE_STALE.equals(ageClassification)))
-              ? Optional.of(Context7Guidance.forModernization(dependency, ageClassification))
-              : Optional.empty();
-
-      return new DependencyHealthAnalysis(
-          dependency,
-          STATUS_SUCCESS,
-          latestVersion,
-          ageClassification,
-          daysSinceRelease,
-          healthScore,
-          maintenanceLevel,
-          Optional.ofNullable(security),
-          Optional.empty(),
-          guidance,
-          Optional.empty());
-    }
-
-    /** Creates a successful analysis result with security and license information. */
-    public static DependencyHealthAnalysis successWithSecurityAndLicenses(
-        String dependency,
-        String latestVersion,
-        String ageClassification,
-        long daysSinceRelease,
-        int healthScore,
-        String maintenanceLevel,
-        SecurityAssessment security,
-        List<LicenseInfo> licenses,
-        boolean context7Enabled) {
-      Optional<Context7Guidance> guidance =
-          (context7Enabled
-                  && (AGE_AGING.equals(ageClassification) || AGE_STALE.equals(ageClassification)))
-              ? Optional.of(Context7Guidance.forModernization(dependency, ageClassification))
-              : Optional.empty();
-
-      return new DependencyHealthAnalysis(
-          dependency,
-          STATUS_SUCCESS,
-          latestVersion,
-          ageClassification,
-          daysSinceRelease,
-          healthScore,
-          maintenanceLevel,
-          Optional.ofNullable(security),
-          Optional.ofNullable(licenses),
-          guidance,
-          Optional.empty());
-    }
 
     /** Creates an error result. */
     public static DependencyHealthAnalysis error(String dependency, String error) {
-      return new DependencyHealthAnalysis(
-          dependency,
-          "error",
-          null,
-          null,
-          0,
-          0,
-          null,
-          Optional.empty(),
-          Optional.empty(),
-          Optional.empty(),
-          Optional.of(error));
+      return builder().dependency(dependency).status("error").error(error).build();
     }
 
     /** Creates a not found result. */
     public static DependencyHealthAnalysis notFound(String dependency) {
-      return new DependencyHealthAnalysis(
-          dependency,
-          "not_found",
-          null,
-          null,
-          0,
-          0,
-          null,
-          Optional.empty(),
-          Optional.empty(),
-          Optional.empty(),
-          Optional.of("Dependency not found in Maven Central"));
+      return builder()
+          .dependency(dependency)
+          .status("not_found")
+          .error("Dependency not found in Maven Central")
+          .build();
     }
 
     /** Builder for cleaner construction when many optional fields are involved. */
@@ -210,15 +144,33 @@ public record ProjectHealthAnalysis(
     public static final class Builder {
       private String dependency;
       private String status = STATUS_SUCCESS;
+      private String currentVersion;
+      private String scannedVersion;
       private String latestVersion;
+      private Boolean updateAvailable;
+      private String updateType;
+      private Long currentVersionAgeDays;
       private String ageClassification;
       private long daysSinceRelease;
       private int healthScore;
       private String maintenanceLevel;
       private SecurityAssessment security;
       private List<LicenseInfo> licenses;
-      private Context7Guidance context7Guidance;
+      private String note;
+      private String context7Query;
       private String error;
+      private Integer retryAfterSeconds;
+      private RelocationInfo relocation;
+
+      public Builder retryAfterSeconds(Integer retryAfterSeconds) {
+        this.retryAfterSeconds = retryAfterSeconds;
+        return this;
+      }
+
+      public Builder relocation(RelocationInfo relocation) {
+        this.relocation = relocation;
+        return this;
+      }
 
       public Builder dependency(String dependency) {
         this.dependency = dependency;
@@ -230,8 +182,33 @@ public record ProjectHealthAnalysis(
         return this;
       }
 
+      public Builder currentVersion(String currentVersion) {
+        this.currentVersion = currentVersion;
+        return this;
+      }
+
+      public Builder scannedVersion(String scannedVersion) {
+        this.scannedVersion = scannedVersion;
+        return this;
+      }
+
       public Builder latestVersion(String latestVersion) {
         this.latestVersion = latestVersion;
+        return this;
+      }
+
+      public Builder updateAvailable(Boolean updateAvailable) {
+        this.updateAvailable = updateAvailable;
+        return this;
+      }
+
+      public Builder updateType(String updateType) {
+        this.updateType = updateType;
+        return this;
+      }
+
+      public Builder currentVersionAgeDays(Long currentVersionAgeDays) {
+        this.currentVersionAgeDays = currentVersionAgeDays;
         return this;
       }
 
@@ -265,8 +242,13 @@ public record ProjectHealthAnalysis(
         return this;
       }
 
-      public Builder context7Guidance(Context7Guidance context7Guidance) {
-        this.context7Guidance = context7Guidance;
+      public Builder note(String note) {
+        this.note = note;
+        return this;
+      }
+
+      public Builder context7Query(String context7Query) {
+        this.context7Query = context7Query;
         return this;
       }
 
@@ -281,15 +263,23 @@ public record ProjectHealthAnalysis(
         return new DependencyHealthAnalysis(
             dependency,
             status,
+            Optional.ofNullable(currentVersion),
+            Optional.ofNullable(scannedVersion),
             latestVersion,
+            Optional.ofNullable(updateAvailable),
+            Optional.ofNullable(updateType),
+            Optional.ofNullable(currentVersionAgeDays),
             ageClassification,
             daysSinceRelease,
             healthScore,
             maintenanceLevel,
             Optional.ofNullable(security),
             Optional.ofNullable(licenses),
-            Optional.ofNullable(context7Guidance),
-            Optional.ofNullable(error));
+            Optional.ofNullable(note),
+            Optional.ofNullable(context7Query),
+            Optional.ofNullable(error),
+            retryAfterSeconds,
+            relocation);
       }
     }
   }

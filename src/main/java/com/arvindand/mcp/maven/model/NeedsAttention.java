@@ -1,5 +1,7 @@
 package com.arvindand.mcp.maven.model;
 
+import com.arvindand.mcp.maven.model.security.SecurityAssessment;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
@@ -19,11 +21,15 @@ import java.util.List;
 public sealed interface NeedsAttention
     permits NeedsAttention.MajorAvailable,
         NeedsAttention.Conflict,
-        NeedsAttention.ExplicitOverride {
+        NeedsAttention.ExplicitOverride,
+        NeedsAttention.PropertyOverride,
+        NeedsAttention.Vulnerable,
+        NeedsAttention.Relocated {
 
   /**
-   * Discriminator field — {@code "major_available"}, {@code "conflict"}, or {@code
-   * "explicit_override"}.
+   * Discriminator field — {@code "major_available"}, {@code "conflict"}, {@code
+   * "explicit_override"}, {@code "property_override"}, {@code "vulnerable"}, or {@code
+   * "relocated"}.
    */
   String kind();
 
@@ -45,9 +51,9 @@ public sealed interface NeedsAttention
    *     {@code current} if already at the latest of that major)
    * @param latestStable the highest stable version on Maven Central regardless of major
    * @param source where the current version came from ({@code EXPLICIT}, {@code MANAGED}, {@code
-   *     EXPLICIT_OVERRIDE}, {@code MANAGED_DECLARATION}, or {@code PLUGIN_DEPENDENCY}) — drives
-   *     whether the model should propose editing the dep's version, its owning declaration, or the
-   *     managing BOM
+   *     EXPLICIT_OVERRIDE}, {@code MANAGED_DECLARATION}, {@code PLUGIN_DEPENDENCY}, or {@code
+   *     PLUGIN}) — drives whether the model should propose editing the dep's version, its owning
+   *     declaration, or the managing BOM
    * @param managedByCoordinate the BOM or parent coordinate that supplies {@code current} when
    *     {@code source} is {@code MANAGED} or {@code EXPLICIT_OVERRIDE}; null for {@code EXPLICIT}
    *     {@code MANAGED_DECLARATION}, and {@code PLUGIN_DEPENDENCY}
@@ -124,6 +130,118 @@ public sealed interface NeedsAttention
     @JsonProperty("kind")
     public String kind() {
       return "explicit_override";
+    }
+  }
+
+  /**
+   * The root POM pins a property that an ancestor defines and uses as a version (the Spring Boot
+   * way of overriding a managed version). Never mechanical: a pin exists for a reason.
+   *
+   * @param groupId groupId of the first affected coordinate
+   * @param artifactId artifactId of the first affected coordinate
+   * @param propertyName the shadowing property, for example {@code snakeyaml.version}
+   * @param pinnedValue the value pinned in the root POM
+   * @param inheritedValue the value the nearest ancestor defines; null when unresolvable
+   * @param definedIn the ancestor coordinate that defines the property
+   * @param affects {@code groupId:artifactId} coordinates controlled by the property (capped)
+   * @param affectedCount total number of coordinates controlled by the property
+   * @param relation {@code behind_inherited} (the pin holds versions back), {@code
+   *     ahead_of_inherited}, {@code equal_to_inherited} (the pin is redundant) or {@code unknown}
+   * @param latestOnCentral latest stable version of the first affected artifact; null when the
+   *     lookup failed
+   */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  record PropertyOverride(
+      String groupId,
+      String artifactId,
+      String propertyName,
+      String pinnedValue,
+      String inheritedValue,
+      String definedIn,
+      List<String> affects,
+      int affectedCount,
+      String relation,
+      String latestOnCentral)
+      implements NeedsAttention {
+
+    public static final String BEHIND = "behind_inherited";
+    public static final String AHEAD = "ahead_of_inherited";
+    public static final String EQUAL = "equal_to_inherited";
+    public static final String UNKNOWN = "unknown";
+
+    @Override
+    @JsonProperty("kind")
+    public String kind() {
+      return "property_override";
+    }
+  }
+
+  /**
+   * The currently-resolved version of a declared dependency has known vulnerabilities and no
+   * deterministic action is guaranteed to fix it.
+   *
+   * @param groupId the coordinate's groupId
+   * @param artifactId the coordinate's artifactId
+   * @param current the effective version
+   * @param source {@code EXPLICIT}, {@code MANAGED} or {@code EXPLICIT_OVERRIDE}
+   * @param managedByCoordinate the BOM / parent supplying the version, when managed
+   * @param maxSeverity highest severity among the findings
+   * @param vulnerabilityCount number of findings
+   * @param criticalIds critical vulnerability ids
+   * @param highIds high severity vulnerability ids
+   * @param fixedInVersion verified fixed version, when known
+   * @param latestOnCentral latest stable version on Maven Central, when known
+   */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  record Vulnerable(
+      String groupId,
+      String artifactId,
+      String current,
+      String source,
+      String managedByCoordinate,
+      SecurityAssessment.Severity maxSeverity,
+      int vulnerabilityCount,
+      List<String> criticalIds,
+      List<String> highIds,
+      String fixedInVersion,
+      String latestOnCentral)
+      implements NeedsAttention {
+
+    @Override
+    @JsonProperty("kind")
+    public String kind() {
+      return "vulnerable";
+    }
+  }
+
+  /**
+   * A dependency the POM declares itself (or manages in its own dependencyManagement) whose newest
+   * published version carries a Maven relocation to new coordinates. Never mechanical: switching
+   * coordinates can require code changes.
+   *
+   * @param groupId the declared groupId
+   * @param artifactId the declared artifactId
+   * @param current the declared / effective version
+   * @param source {@code EXPLICIT}, {@code EXPLICIT_OVERRIDE} or {@code MANAGED_DECLARATION}
+   * @param relocatedTo the new coordinates as {@code groupId:artifactId}
+   * @param relocatedToLatest newest stable version at the new coordinates; null when unknown
+   * @param message explanation published in the relocation; null when none
+   */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  record Relocated(
+      String groupId,
+      String artifactId,
+      String current,
+      String source,
+      String relocatedTo,
+      String relocatedToLatest,
+      String message)
+      implements NeedsAttention {
+
+    @Override
+    @JsonProperty("kind")
+    public String kind() {
+      return "relocated";
     }
   }
 

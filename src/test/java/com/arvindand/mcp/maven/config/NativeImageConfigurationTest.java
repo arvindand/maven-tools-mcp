@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.arvindand.mcp.maven.model.McpError;
 import com.arvindand.mcp.maven.model.ToolResponse;
+import com.arvindand.mcp.maven.model.transitive.DepsDevGraph;
+import com.arvindand.mcp.maven.model.transitive.TransitiveScanResult;
 import com.arvindand.mcp.maven.pom.ManagedDeclaration;
 import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
 import java.util.List;
@@ -46,6 +48,34 @@ class NativeImageConfigurationTest {
                     MemberCategory.INVOKE_PUBLIC_CONSTRUCTORS,
                     MemberCategory.INVOKE_PUBLIC_METHODS))
         .accepts(register());
+  }
+
+  @Test
+  void registersRelocationRecordForSerialization() {
+    assertThat(
+            RuntimeHintsPredicates.reflection()
+                .onType(com.arvindand.mcp.maven.model.Relocation.class)
+                .withMemberCategories(
+                    MemberCategory.INVOKE_PUBLIC_CONSTRUCTORS,
+                    MemberCategory.INVOKE_PUBLIC_METHODS))
+        .accepts(register());
+  }
+
+  @Test
+  void registersRelocationOutputRecordsForSerialization() {
+    for (Class<?> type :
+        List.of(
+            com.arvindand.mcp.maven.model.RelocationInfo.class,
+            com.arvindand.mcp.maven.model.NeedsAttention.Relocated.class)) {
+      assertThat(
+              RuntimeHintsPredicates.reflection()
+                  .onType(type)
+                  .withMemberCategories(
+                      MemberCategory.INVOKE_PUBLIC_CONSTRUCTORS,
+                      MemberCategory.INVOKE_PUBLIC_METHODS))
+          .as(type.getSimpleName())
+          .accepts(register());
+    }
   }
 
   @Test
@@ -114,6 +144,36 @@ class NativeImageConfigurationTest {
   @Test
   void registersPluginDependencyDeclarationForReflection() {
     assertThat(RuntimeHintsPredicates.reflection().onType(PluginDependencyDeclaration.class))
+        .accepts(register());
+  }
+
+  @Test
+  void registersDepsDevAndTransitiveScanRecordsForReflection() {
+    RuntimeHints hints = register();
+    for (Class<?> type :
+        List.of(
+            DepsDevGraph.class,
+            DepsDevGraph.Node.class,
+            DepsDevGraph.VersionKey.class,
+            DepsDevGraph.Edge.class,
+            TransitiveScanResult.class,
+            TransitiveScanResult.Summary.class,
+            TransitiveScanResult.Finding.class,
+            TransitiveScanResult.IntroducedBy.class,
+            TransitiveScanResult.UnresolvedRoot.class,
+            TransitiveScanResult.Relation.class,
+            TransitiveScanResult.UnresolvedReason.class)) {
+      assertThat(RuntimeHintsPredicates.reflection().onType(type))
+          .as(type.getName())
+          .accepts(hints);
+    }
+  }
+
+  @Test
+  void registersPluginDeclarationForReflection() {
+    assertThat(
+            RuntimeHintsPredicates.reflection()
+                .onType(com.arvindand.mcp.maven.pom.PluginDeclaration.class))
         .accepts(register());
   }
 }

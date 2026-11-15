@@ -11,12 +11,12 @@ Perform a comprehensive dependency audit for this project using the maven-tools-
 
 1. **Identify Dependencies**
    - Scan `pom.xml` (Maven) or `build.gradle`/`build.gradle.kts` (Gradle)
-   - Extract all dependency coordinates (groupId:artifactId format)
+   - Extract all dependency coordinates, with versions when known (groupId:artifactId:version)
 
 2. **Health Analysis**
    - Use `analyze_project_health` with `includeSecurityScan=true` and `includeLicenseScan=true`
    - Assess per-dependency `healthScore` values and the age distribution
-   - Label any calculated average as client-derived; the response has no `average_health_score` field
+   - Use `overall_health` and `average_health_score` for the summary, and `scannedVersion` to say which version was audited
    - Identify stale or aging dependencies
 
 3. **Version Check**

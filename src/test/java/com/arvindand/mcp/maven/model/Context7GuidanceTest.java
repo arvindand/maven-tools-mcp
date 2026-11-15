@@ -1,5 +1,6 @@
 package com.arvindand.mcp.maven.model;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -75,6 +76,34 @@ class Context7GuidanceTest {
     Context7Guidance jacksonGuidance =
         Context7Guidance.forMigration("com.fasterxml.jackson.core:jackson-core", "major");
     assertTrue(jacksonGuidance.orchestrationInstructions().contains("jackson-core"));
+  }
+
+  @Test
+  void testBulkTemplateIsGenericAndCarriesToolNames() {
+    String template = Context7Guidance.bulkTemplate().orchestrationInstructions();
+
+    assertTrue(template.contains("resolve-library-id"));
+    assertTrue(template.contains("query-docs"));
+    assertTrue(template.contains("context7Query"));
+    assertTrue(template.contains("libraryName="));
+    assertTrue(template.contains("web search"));
+    // Generic: must not embed any particular artifact
+    assertTrue(!template.contains("spring"));
+  }
+
+  @Test
+  void testPerDependencyQueriesAreShort() {
+    String major = Context7Guidance.migrationQuery("org.hibernate:hibernate-core", "major");
+    assertEquals("hibernate-core migration guide breaking changes", major);
+    assertEquals(
+        "hibernate-core upgrade guide",
+        Context7Guidance.migrationQuery("org.hibernate:hibernate-core", "minor"));
+    assertEquals(
+        "commons-lang alternatives replacements deprecated",
+        Context7Guidance.modernizationQuery("commons-lang:commons-lang", "stale"));
+    assertEquals(
+        "commons-lang modern usage best practices",
+        Context7Guidance.modernizationQuery("commons-lang:commons-lang", "aging"));
   }
 
   @Test

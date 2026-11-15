@@ -17,6 +17,7 @@ This page collects the implementation notes that are useful for operators and co
 - if Context7 is unavailable, dependency analysis still works
 - if OSV.dev is unavailable or returns incomplete data, the security assessment is `UNKNOWN`; this does not mean vulnerability-free
 - network failures should surface clearly rather than silently degrading into wrong data
+- repository failures carry a machine-readable reason (`RATE_LIMITED`, `CIRCUIT_OPEN`, `UPSTREAM_ERROR`, `INVALID_RESPONSE`); HTTP 429 is retried with a bounded backoff (at most about 4s added per call) and then reported as rate limiting, never as "not found", and failures are never cached
 
 ### Fast startup and low ceremony
 
@@ -51,30 +52,47 @@ AI client -> analyze_pom_dependencies(pomXml, sideloadedPoms?) -> Maven Tools MC
    management wins over imports, and the first applicable import wins between BOMs
 5. Server classifies each declared dependency (EXPLICIT / MANAGED / EXPLICIT_OVERRIDE)
 6. Server identifies directly editable root dependency-management and build/plugin declarations
-7. Server surfaces multi-BOM conflicts and per-step warnings as raw data
+7. Server surfaces multi-BOM conflicts, root property pins that shadow an ancestor
+   property used as a version (propertyOverrides), and per-step warnings as raw data
 8. Server returns structured JSON; reasoning about what to upgrade is the caller's job
 ```
 
 `recommend_pom_upgrades` adds an opinion layer on top of the resolver output:
 
 ```text
-AI client -> recommend_pom_upgrades(pomXml, mode?, sideloadedPoms?) -> Maven Tools MCP Server
+AI client -> recommend_pom_upgrades(pomXml, mode?, sideloadedPoms?, includeSecurityScan?, minReleaseAgeDays?) -> Maven Tools MCP Server
 
 1-8. Same resolver pass as above (warning-free, non-sideloaded results are cached for 1h)
 9. For each user-controllable BOM (direct <parent> + root <dependencyManagement>
-   imports), look up the latest stable on Maven Central; emit bom_bump or route a
-   major to needsAttention. Transitively-imported BOMs are silently skipped —
+   imports), look up the latest stable on Maven Central; emit bom_bump, or for a major
+   emit major_available plus the same-major bom_bump when a newer same-major exists
+   (one shared classifier serves steps 9-12). Transitively-imported BOMs are silently skipped —
    nothing for the caller to edit in their own POM.
 10. For each direct root dependency-management declaration with a literal version or
    exact root-owned property, emit managed_decl_bump with edit metadata or route a
    major to needsAttention.
 11. For each direct build or plugin-management dependency, emit plugin_dep_bump with
    its owner plugin and edit location, or route a major to needsAttention.
+11b. For each root plugin (build and plugin management) with a literal or root-owned
+   property version, emit plugin_bump (one action per shared property, one per literal
+   declaration) or route a major to needsAttention with source PLUGIN.
 12. For each declared dep, classify: explicit_bump for available minor/patch
    upgrades, conflict / explicit_override / major_available to needsAttention
-13. Return two lists — deterministicActions[] for mechanical agent application,
-   needsAttention[] for human / LLM review (latestStable for major_available;
-   latestOnCentral for conflicts and explicit overrides)
+13. Emit property_override entries (relation computed with VersionComparator); never
+   deterministic.
+14. Unless includeSecurityScan=false, scan every declared dependency's effective version
+   (one VulnerabilityService.scanBulk call), attach a security object to actions whose
+   current version is vulnerable (second scanBulk for just those targets), and emit
+   vulnerable entries for those not fixed by an action with targetStatus OK. UNKNOWN
+   assessments are counted and warned about, never treated as clean.
+   Steps 9-12 share one per-run collector. It records lookups that threw (-> incomplete: true
+   plus an aggregated warning) and coordinates with no versions (aggregated "not found"
+   warning), and applies the optional release cooldown: the action target is the newest
+   version whose publish time (MavenCentralService.fetchArtifactWithTimestamp) is old
+   enough, else no action; unknown publish times fail closed.
+15. Return deterministicActions[] for mechanical agent application, needsAttention[]
+   for human / LLM review (vulnerable first, then the existing kinds, then
+   property_override) and securitySummary
 ```
 
 The POM resolver lives in `com.arvindand.mcp.maven.pom`. `MavenModelSession` adapts Apache Maven Model Builder to bounded, in-memory model sources; `EffectivePomResolver` classifies declarations and retains management provenance and editable locations. The original resolver design was inspired by [maxxq-org/maxxq-maven](https://github.com/maxxq-org/maxxq-maven); see `NOTICE` for attribution.
@@ -136,11 +154,13 @@ The server may need outbound HTTPS to:
 
 - `repo1.maven.org` for Maven metadata
 - `api.osv.dev` for vulnerability data
+- `api.deps.dev` for resolved dependency graphs (only `scan_transitive_vulnerabilities`)
 - `mcp.context7.com` for optional documentation tools
 
 For corporate networks:
 
 - network routing and proxy requirements depend on the deployed Java/Docker environment; there is no dedicated MCP proxy setting
+- `repo1.maven.org` throttles per IP (HTTP 429); on shared egress addresses point `maven.central.repository-base-url` at a mirror or repository manager (see [troubleshooting](troubleshooting.md#http-429-from-maven-central))
 - custom CA certificates are supported via a custom image
 - `:latest-noc7` is available when Context7 is not usable
 
@@ -175,13 +195,13 @@ Key points:
 - Framework: Spring Boot 4.1.2; Spring AI 2.0.2
 - Java: 25 (LTS)
 - Protocol: MCP 2025-11-25
-- Maven components: `maven-model-builder`, `maven-model`, `maven-artifact` and `maven-repository-metadata` 3.9.16; the full Maven Resolver dependency-graph stack is not used
+- Maven components: `maven-model-builder`, `maven-model`, `maven-artifact` and `maven-repository-metadata` 3.10.0; the full Maven Resolver dependency-graph stack is not used
 - CVSS scoring: `us.springett:cvss-calculator` 1.5.1 for v2/v3/v4 vectors
 - Local JVM container builds: Jib 3.5.2 with Eclipse Temurin 25; native containers use Spring Boot buildpacks
 - Default transport for desktop images: stdio
 - HTTP transport available as `:latest-http`
 - Data source: Maven Central metadata
-- Optional enrichments: OSV.dev and Context7
+- Optional enrichments: OSV.dev, deps.dev (transitive graphs) and Context7
 
 ## Reference Links
 

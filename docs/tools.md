@@ -1,6 +1,6 @@
 # Tools
 
-The default image exposes 11 MCP tools: 9 core Maven/dependency tools and 2 Context7 documentation tools. The `-noc7` image exposes only the 9 core tools.
+The default image exposes 12 MCP tools: 10 core Maven/dependency tools and 2 Context7 documentation tools. The `-noc7` image exposes only the 10 core tools.
 
 ## Core Maven Intelligence Tools
 
@@ -15,6 +15,7 @@ The default image exposes 11 MCP tools: 9 core Maven/dependency tools and 2 Cont
 | `analyze_project_health` | Run a broader audit across a dependency set | "Give me a health overview for this project" |
 | `analyze_pom_dependencies` | Resolve a whole POM into per-dep effective versions + classification | "What versions does my pom.xml actually resolve to, and which ones are BOM-managed?" |
 | `recommend_pom_upgrades` | Build on the resolver to produce a deterministic action list + a human-review list | "What can I safely bump in my pom.xml?" |
+| `scan_transitive_vulnerabilities` | Scan the transitive dependencies of direct dependencies for known vulnerabilities | "Is any CVE hiding below the dependencies I declare?" |
 
 ## POM-Aware Analysis
 
@@ -26,11 +27,13 @@ The default image exposes 11 MCP tools: 9 core Maven/dependency tools and 2 Cont
 - `directlyEditable` — whether there is a unique root declaration eligible for a mechanical version edit
 - `conflicts[]` — losing candidates when multiple BOMs at the same level disagree (e.g., Spring Boot + Spring Cloud + Jackson BOM all managing `jackson-databind`). Surfaced as raw data so the caller can decide whether to pin the version explicitly; the resolver does not recommend an action.
 
-The tool also returns the resolved `parentChain`, direct `rootImportedBoms[]`, directly editable `rootManagedDeclarations[]`, editable `rootPluginDependencyDeclarations[]` from both build plugins and plugin management, and a `warnings[]` array listing every silent-drop site. An owned declaration appears only when its version is literal or is an exact property reference owned by the input POM.
+The tool also returns the resolved `parentChain`, direct `rootImportedBoms[]`, directly editable `rootManagedDeclarations[]`, editable `rootPluginDependencyDeclarations[]` from both build plugins and plugin management, editable `rootPluginDeclarations[]` (the plugins' own versions from `<build><plugins>` and `<pluginManagement>`; `groupId` defaults to `org.apache.maven.plugins`; profiles and reporting excluded), `propertyOverrides[]`, and a `warnings[]` array listing every silent-drop site. An owned declaration appears only when its version is literal or is an exact property reference owned by the input POM.
 
 Analysis covers declarations in the input POM, not a transitive dependency graph. Active-by-default profile dependencies can appear in analysis, but profile-only declarations are not mechanically editable. Other activation conditions are not evaluated; warnings can originate from parents and imported BOMs. See [architecture limits](architecture.md#caches-and-input-limits).
 
 For multi-module / monorepo projects, pass an optional `sideloadedPoms: string[]` of additional POM XML strings (sibling modules, unreleased parents). The resolver indexes each by its self-declared GAV and tries the bundle before falling back to Maven Central — so a child whose parent is not yet published still resolves cleanly.
+
+`propertyOverrides[]` lists root `<properties>` that shadow a property of the same name defined by an ancestor which uses it as an exact `${name}` `<version>` (dependency management, `import` BOMs, dependencies, plugins). This is the Spring Boot way of pinning a managed version (e.g. `<snakeyaml.version>1.33</snakeyaml.version>`); such dependencies are `MANAGED`, so they would otherwise be invisible. Each entry has `propertyName`, `pinnedValue`, `inheritedValue` (nearest ancestor value, null if unresolvable), `definedIn`, `affects[]` (`groupId:artifactId`, capped at 20) and `affectedCount`. Properties no ancestor uses as a version (`java.version`, `project.build.sourceEncoding`) and profile properties are not reported.
 
 ### Why this matters for upgrades
 
@@ -44,10 +47,49 @@ The classification is the upgrade policy:
 
 `recommend_pom_upgrades` applies this policy and returns a split response so the right consumer reads the right part:
 
-- **`deterministicActions[]`** — mechanical edits a non-LLM agent applies directly. Each entry has `kind` (`explicit_bump`, `bom_bump`, `managed_decl_bump`, or `plugin_dep_bump`), `groupId`, `artifactId`, `current`, `target`, and `updateType`. Owned declarations carry `editTarget`, optional `propertyName`, and `declaredIn`; plugin dependency actions also carry `ownerGroupId` and `ownerArtifactId`.
-- **`needsAttention[]`** — items that need judgment. `kind: "major_available"` for majors (with `currentMajorLatest` so the model can choose to stay same-major); `kind: "conflict"` when two BOMs disagree (with every `candidate` version + `latestOnCentral`); `kind: "explicit_override"` (with `managingCandidates` + `latestOnCentral`). Major entries use `latestStable`; conflicts and explicit overrides use `latestOnCentral`.
+- **`deterministicActions[]`** — mechanical edits a non-LLM agent applies directly. Each entry has `kind` (`explicit_bump`, `bom_bump`, `managed_decl_bump`, `plugin_dep_bump`, or `plugin_bump`), `groupId`, `artifactId`, `current`, `target`, and `updateType`. Owned declarations carry `editTarget`, optional `propertyName`, and `declaredIn`; plugin dependency actions also carry `ownerGroupId` and `ownerArtifactId`. `plugin_bump` edits a plugin's own version (`major_available` entries for plugins use `source: PLUGIN`); a plugin whose version property is shared by `plugins` and `pluginManagement` yields one action, separate literal versions one action each, told apart by `declaredIn`. With `minReleaseAgeDays`, an action may carry `heldBackFrom`.
+- **`needsAttention[]`** — items that need judgment, in this order: `vulnerable` entries first (most severe first), then `relocated`, then `major_available` (with `currentMajorLatest` so the model can choose to stay same-major), `conflict` (every `candidate` version + `latestOnCentral`), `explicit_override` (`managingCandidates` + `latestOnCentral`), and finally `property_override`. `relocated` flags a dependency you declare yourself (`source` `EXPLICIT`, `EXPLICIT_OVERRIDE`, or `MANAGED_DECLARATION` for your own `dependencyManagement`) whose newest published version relocates to new coordinates: `relocatedTo` (`groupId:artifactId`), `relocatedToLatest` (newest stable at the new coordinates, when known) and `message`. It is never a deterministic action because switching coordinates can need code changes; BOM-managed dependencies, BOMs and plugins are not checked. Major entries use `latestStable`; conflicts, explicit overrides, property overrides and vulnerable entries use `latestOnCentral`.
+- **`securitySummary`** — `scanned`, `vulnerable`, `clean`, `unknown` counts and `worstSeverity`; omitted when the scan is disabled.
+- **`incomplete`** — `true` only when a version lookup failed upstream (HTTP error, throttling, open circuit breaker); absent otherwise. Treat an `incomplete` result with no actions as "could not check", never as "up to date".
 
-Use `mode: MINOR_PATCH` (default) to keep majors in the review lane, or `mode: ALL` to treat majors as deterministic too (rarely the right call).
+Use `mode: MINOR_PATCH` (default) to keep majors in the review lane, or `mode: ALL` to treat majors as deterministic too (rarely the right call). In `MINOR_PATCH` mode a newer major never blocks same-major updates: the `major_available` entry is emitted **and**, when a newer same-major stable exists (`currentMajorLatest` > current), the normal action targeting it (with the same edit metadata and a `minor`/`patch` `updateType`).
+
+### Release cooldown (`minReleaseAgeDays`)
+
+Optional Integer, after `includeSecurityScan`; absent or `<= 0` means no cooldown (and no extra lookups). When set, an action only targets a version whose Maven Central publish time (`Last-Modified` of its POM) is at least that many days old. If the preferred target is too young the newest older eligible upgrade of the same kind is used (stable, same variant, same-major for same-major actions; at most 5 publish-time lookups per coordinate) and the action carries `heldBackFrom` (the newest skipped version). If nothing is eligible no action is emitted and one aggregated warning lists the coordinates. A missing, non-positive or failed publish-time lookup counts as not eligible (fail closed). The cooldown also applies to security fixes and `mode: ALL`; a still-vulnerable dependency remains visible as a `vulnerable` entry. `latestStable` and `currentMajorLatest` stay unfiltered.
+
+### Failed lookups
+
+Version lookups that throw are reported in aggregated warnings and set `incomplete: true`; the warning names the cause, for example `Version lookup failed for 3 coordinates (repository rate limited; retry in ~15h): …`, `(repository circuit breaker open; retry in 30 seconds)` or `(upstream error)`. If a parent POM or imported BOM of the submitted POM cannot be read because the repository is rate limiting or the circuit is open, the tool returns that `RATE_LIMITED` / `EXTERNAL_SERVICE_UNAVAILABLE` error instead of a partial result with warnings (other fetch failures stay warnings). Coordinates for which the repository returns no versions (typical for internal artifacts) are reported in `Not found in the configured repository (skipped): …` and do not set `incomplete`. Each list shows at most 10 coordinates plus a count of the rest.
+
+### Property pins (`property_override`)
+
+A root property pin is never changed mechanically. The entry carries `propertyName`, `pinnedValue`, `inheritedValue`, `definedIn`, `affects[]`, `affectedCount`, `latestOnCentral` (first affected artifact, best effort) and `relation`: `behind_inherited` (the pin holds versions back), `equal_to_inherited` (the pin is redundant), `ahead_of_inherited`, or `unknown`. `groupId` / `artifactId` identify the first affected coordinate.
+
+### Security awareness
+
+`includeSecurityScan` (Boolean, default `true`) scans the effective version of every resolved declared dependency (EXPLICIT, MANAGED, EXPLICIT_OVERRIDE) with OSV in one bulk call; targets of actions whose current version is vulnerable get a second call.
+
+- A deterministic action whose current version is vulnerable carries `security`: `maxSeverity`, `vulnerabilityCount`, `vulnerabilityIds` (critical + high) and `targetStatus` (`OK` | `VULNERABLE` | `UNKNOWN`). Non-vulnerable actions are unchanged.
+- `kind: "vulnerable"` (`groupId`, `artifactId`, `current`, `source`, `managedByCoordinate`, `maxSeverity`, `vulnerabilityCount`, `criticalIds`, `highIds`, `fixedInVersion`, `latestOnCentral`) is emitted for every vulnerable dependency not resolved by an action with `targetStatus: OK`, in addition to any other entry for the same coordinate.
+- If OSV is unavailable the tool still succeeds: unassessed dependencies count as `unknown` (never clean) and a warning "Security scan unavailable for N dependencies" is added.
+
+## Transitive Vulnerability Scan
+
+`scan_transitive_vulnerabilities` takes your **direct** dependencies as `groupId:artifactId:version` (comma or newline separated, versions required, at most 100) and reports known vulnerabilities in everything they pull in. Parameters: `dependencies` (required) and `includeDirect` (optional, default `true`; set `false` to hide findings on the listed coordinates themselves).
+
+It fetches each root's resolved graph from [deps.dev](https://deps.dev) (no local dependency resolver), unions the nodes, and scans every distinct `groupId:artifactId:version` through OSV. The response contains:
+
+- `findings[]`, most severe first: `groupId`, `artifactId`, `version`, `relation` (`ROOT` for a coordinate you passed, `TRANSITIVE` otherwise), `maxSeverity`, `vulnerabilityCount`, `criticalIds`, `highIds`, `fixedInVersion`, and `introducedBy[]` (up to 5 roots, each with one shortest `root -> ... -> vulnerable` path of `g:a:v` entries) plus `introducedByTotal`
+- `summary`: roots requested/resolved/failed, transitive nodes found, nodes scanned, vulnerable and unknown counts, worst severity
+- `unresolvedRoots[]`: roots without a graph, as `NOT_FOUND` (deps.dev does not know the version) or `UPSTREAM_ERROR`
+- `warnings[]`: the accuracy caveat, scan-unavailable notices and graph errors flagged by deps.dev
+
+If deps.dev is unreachable for every root the tool returns an `EXTERNAL_SERVICE_UNAVAILABLE` error, never an empty "clean" result. Versions whose OSV lookup fails are counted as `unknownCount` and warned about, not treated as clean. If two roots pull different versions of the same artifact, each version is reported separately.
+
+**Accuracy caveat:** each graph is deps.dev's resolution of that root on its own. It does not apply your project's `dependencyManagement`, BOM imports, exclusions or version mediation between roots, so your project may resolve different versions of a transitive. Treat findings as leads and confirm them with `mvn dependency:tree` or `gradle dependencies`. Use `compare_dependency_versions` for upgrade advice on the declared dependencies themselves.
+
+Graphs are cached for 12 hours. The scan is limited to 1000 distinct versions per request; split larger projects into groups of roots.
 
 ## Raw Context7 Documentation Tools
 
@@ -93,6 +135,8 @@ checks up to three candidate releases against OSV. It never constructs an assume
 version. If repository lookup or OSV verification fails, known vulnerabilities remain visible
 and no unverified fix is proposed.
 
+In `analyze_project_health`, `stabilityFilter` (default `PREFER_STABLE`) decides which version counts as "latest" and, for unversioned input, which version is scanned: with `PREFER_STABLE` or `STABLE_ONLY` the newest stable release is used. If no stable release exists, `PREFER_STABLE` and `ALL` fall back to the newest pre-release (with a `note`), while `STABLE_ONLY` reports status `no_stable_version` and scans nothing.
+
 Version responses are classified using the server's built-in stability types:
 
 - `stable`
@@ -116,6 +160,12 @@ There is no `get_version_timeline` tool or `versionCount` parameter. Use `recent
 
 These are most useful in `compare_dependency_versions` and `analyze_project_health` when you want a fuller upgrade or compliance picture.
 
+`analyze_project_health` accepts `groupId:artifactId` or `groupId:artifactId:version`, and a list may mix both. For an audit of a real project, include the versions you run:
+
+- with a version, the security and license scans use exactly that version; the result reports `currentVersion`, `scannedVersion`, `latestVersion` (per `stabilityFilter`, preserving release variants such as `-jre`/`-android`), `updateAvailable`, `updateType`, and, best effort, `currentVersionAgeDays`. A version that does not exist in the repository is reported as `status: "error"` and nothing else is scanned in its place
+- without a version, the newest version per `stabilityFilter` is scanned, and `scannedVersion` states which one, so a clean result is never ambiguous
+- `ageClassification`, `daysSinceRelease` and `maintenanceLevel` describe the artifact's release history (the latest version honouring `stabilityFilter` and the recent release cadence), not the version you run
+
 ## Response Behavior
 
 The tools are designed for conversational clients and agents:
@@ -125,11 +175,17 @@ The tools are designed for conversational clients and agents:
 - POM response fields use camelCase (`deterministicActions`, `needsAttention`, `effectiveVersion`); other analytical records may use snake_case, so follow the actual tool schema/payload
 - version stability is classified directly
 - upgrade results include major/minor/patch context
-- some responses include guidance about when to consult Context7 docs
+- some responses include guidance about when to consult Context7 docs; bulk tools (`compare_dependency_versions`, `analyze_project_health`) emit the orchestration instructions once as a top-level `context7_guidance` template and a short per-dependency `context7Query` hint, and emit nothing when Context7 hints are disabled
 
 Security results distinguish a successful scan from `UNKNOWN` when upstream data is unavailable or incomplete. CVSS v2/v3/v4 vectors are scored with a maintained library. Recommended remediation versions are checked against OSV; a successful scan is an advisory snapshot, not a guarantee that a dependency is vulnerability-free.
 
-In 3.2.2, `analyze_project_health` has a known field mismatch: `analysis_date` contains an overall health label (for example, `poor`), not a timestamp. There is no top-level `overall_health` or `average_health_score`; use the per-dependency `healthScore` values and `age_distribution`, and do not parse `analysis_date` as a date.
+`analyze_project_health` returns top-level `analysis_date` (ISO-8601 timestamp), `overall_health` (`excellent`, `good`, `fair`, `poor`, or `unknown` when nothing could be analysed) and `average_health_score` (rounded, over successfully analysed dependencies; `null` when none succeeded), alongside `age_distribution`, per-dependency `healthScore` values, and the security and license findings.
+
+Upstream failures are reported precisely, never as a missing artifact or `INTERNAL_ERROR`: `RATE_LIMITED` (HTTP 429, or a 404 that carries `Retry-After`, which is how the CDN throttles), `EXTERNAL_SERVICE_UNAVAILABLE` (open circuit breaker, timeouts, server errors), each with a `retryAfter` hint in seconds (the repository's own `Retry-After`, up to 24 hours). In bulk tools a per-dependency failure carries a readable `error` (no raw upstream body) and, when retryable, `retry_after_seconds`; when every dependency failed that way the call returns the tool-level error instead of a success envelope.
+
+### Relocated artifacts
+
+When the newest published version of an artifact carries a Maven relocation (`distributionManagement/relocation`, for example `mysql:mysql-connector-java` to `com.mysql:mysql-connector-j`), `get_latest_version`, `check_multiple_dependencies`, `compare_dependency_versions` and `analyze_project_health` add `relocation: {groupId, artifactId, version?, message?, latestVersion?}` (`latestVersion` is the newest stable version at the new coordinates). The field is absent when nothing is relocated or the lookup failed: it is best effort, never fails the tool and never marks a result incomplete. `analyze_project_health` also adds a recommendation line. In `recommend_pom_upgrades` the same fact appears as a `relocated` entry in `needsAttention`.
 
 The project aims to keep the server focused on dependency intelligence so the client can make decisions with clean inputs instead of custom parsing.
 

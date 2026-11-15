@@ -19,8 +19,8 @@ If no dependencies are specified, extract them from the project's build file (`p
 
 **Health Score Overview:**
 
-- Per-dependency `healthScore` values (0-100); label any calculated average as client-derived
-- Do not interpret the 3.2.2 `analysis_date` value as a date: it currently contains a health label
+- `overall_health`, `average_health_score` and per-dependency `healthScore` values (0-100)
+- Which version was audited per dependency (`scannedVersion`); pass `groupId:artifactId:version` when versions are known, otherwise state that the newest stable version was scanned
 - Dependency age breakdown (fresh/current/aging/stale counts)
 
 **Security Findings:**

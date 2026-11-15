@@ -3,6 +3,7 @@ package com.arvindand.mcp.maven.service;
 import com.arvindand.mcp.maven.MavenToolsConstants;
 import com.arvindand.mcp.maven.config.Context7Properties;
 import com.arvindand.mcp.maven.model.BulkCheckResult;
+import com.arvindand.mcp.maven.model.Context7Guidance;
 import com.arvindand.mcp.maven.model.DependencyAge;
 import com.arvindand.mcp.maven.model.DependencyAgeAnalysis;
 import com.arvindand.mcp.maven.model.DependencyInfo;
@@ -10,9 +11,12 @@ import com.arvindand.mcp.maven.model.MavenArtifact;
 import com.arvindand.mcp.maven.model.MavenCoordinate;
 import com.arvindand.mcp.maven.model.McpError;
 import com.arvindand.mcp.maven.model.NeedsAttention;
+import com.arvindand.mcp.maven.model.PomSecuritySummary;
 import com.arvindand.mcp.maven.model.PomUpgradeRecommendation;
 import com.arvindand.mcp.maven.model.ProjectHealthAnalysis;
 import com.arvindand.mcp.maven.model.ReleasePatternAnalysis;
+import com.arvindand.mcp.maven.model.Relocation;
+import com.arvindand.mcp.maven.model.RelocationInfo;
 import com.arvindand.mcp.maven.model.StabilityFilter;
 import com.arvindand.mcp.maven.model.ToolResponse;
 import com.arvindand.mcp.maven.model.UpgradeAction;
@@ -32,7 +36,9 @@ import com.arvindand.mcp.maven.pom.EffectivePomResolver;
 import com.arvindand.mcp.maven.pom.EffectivePomResult;
 import com.arvindand.mcp.maven.pom.ManagedAlternative;
 import com.arvindand.mcp.maven.pom.ManagedDeclaration;
+import com.arvindand.mcp.maven.pom.PluginDeclaration;
 import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
+import com.arvindand.mcp.maven.pom.PropertyOverride;
 import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.util.MavenCoordinateParser;
 import com.arvindand.mcp.maven.util.VersionComparator;
@@ -41,14 +47,21 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
@@ -71,9 +84,9 @@ public class MavenDependencyTools {
 
   // Error message constants
   private static final String UNEXPECTED_ERROR = "Unexpected error";
-  private static final String MAVEN_CENTRAL_ERROR = "Maven Central error: ";
   private static final String INVALID_MAVEN_COORDINATE_FORMAT = "Invalid Maven coordinate format: ";
   private static final String SUCCESS_STATUS = "success";
+  private static final String ERROR_STATUS = "error";
   private static final String MAJOR_UPDATE_TYPE = "major";
   private static final String MINOR_UPDATE_TYPE = "minor";
   private static final String PATCH_UPDATE_TYPE = "patch";
@@ -146,15 +159,162 @@ public class MavenDependencyTools {
   private <T> ToolResponse executeToolOperation(ToolOperation<T> operation) {
     try {
       T result = operation.execute();
+      if (result instanceof ToolResponse response) {
+        return response;
+      }
       return ToolResponse.Success.of(result);
     } catch (IllegalArgumentException e) {
       return ToolResponse.Error.of(
           McpError.invalidInput(INVALID_MAVEN_COORDINATE_FORMAT + e.getMessage(), Map.of()));
-    } catch (MavenCentralException e) {
-      return ToolResponse.Error.of(MAVEN_CENTRAL_ERROR + e.getMessage());
     } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return toolFailure(e);
+    }
+  }
+
+  /**
+   * Maps a non-validation failure to a tool error. Recognised upstream failures (rate limiting,
+   * open circuit, HTTP / I/O errors) become precise, retryable {@link McpError}s; anything else is
+   * a genuine internal error and is logged at error level.
+   */
+  private static ToolResponse toolFailure(Exception e) {
+    if (MavenCentralException.isUpstreamFailure(e)) {
+      MavenCentralException upstream = MavenCentralException.classify(e);
+      logger.warn("Maven repository failure ({}): {}", upstream.getReason(), upstream.getMessage());
+      return ToolResponse.Error.of(upstream.toMcpError());
+    }
+    logger.error(UNEXPECTED_ERROR, e);
+    return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+  }
+
+  /** Human-readable per-dependency message for a classified upstream failure. */
+  private static String describe(MavenCentralException failure) {
+    Integer hint = failure.getRetryAfterSeconds();
+    boolean retryable =
+        failure.getReason() == MavenCentralException.Reason.RATE_LIMITED
+            || failure.getReason() == MavenCentralException.Reason.CIRCUIT_OPEN;
+    return retryable && hint != null
+        ? failure.getMessage() + "; retry in " + McpError.describeRetry(hint)
+        : failure.getMessage();
+  }
+
+  /**
+   * Collects, per call, the dependencies whose failure was a recognised upstream failure, so that a
+   * bulk call in which every dependency failed that way becomes one precise tool-level error
+   * instead of a success envelope full of identical per-dependency errors.
+   */
+  private static final class UpstreamFailures {
+    private final Map<String, MavenCentralException> byDependency = new ConcurrentHashMap<>();
+
+    /** Returns the classified failure when {@code e} is an upstream failure, else null. */
+    @Nullable MavenCentralException record(String dependency, RuntimeException e) {
+      if (!MavenCentralException.isUpstreamFailure(e)) {
+        return null;
+      }
+      MavenCentralException classified = MavenCentralException.classify(e);
+      byDependency.putIfAbsent(dependency, classified);
+      return classified;
+    }
+
+    /** Throws the most informative failure when all {@code total} dependencies failed upstream. */
+    void throwIfAllFailed(int total) {
+      if (total <= 0 || byDependency.size() < total) {
+        return;
+      }
+      MavenCentralException best = null;
+      for (MavenCentralException candidate : byDependency.values()) {
+        if (best == null
+            || priority(candidate) < priority(best)
+            || (priority(candidate) == priority(best) && hint(candidate) > hint(best))) {
+          best = candidate;
+        }
+      }
+      throw best;
+    }
+
+    private static int priority(MavenCentralException e) {
+      return switch (e.getReason()) {
+        case RATE_LIMITED -> 0;
+        case CIRCUIT_OPEN -> 1;
+        case UPSTREAM_ERROR -> 2;
+        case INVALID_RESPONSE -> 3;
+      };
+    }
+
+    private static int hint(MavenCentralException e) {
+      return e.getRetryAfterSeconds() == null ? 0 : e.getRetryAfterSeconds();
+    }
+  }
+
+  /** Per-dependency failure text and retry hint for result records. */
+  private record FailureText(String message, @Nullable Integer retryAfterSeconds) {}
+
+  private FailureText failureText(
+      UpstreamFailures failures, String dependency, RuntimeException e) {
+    MavenCentralException classified = failures.record(dependency, e);
+    if (classified == null) {
+      return new FailureText(e.getMessage(), null);
+    }
+    return new FailureText(describe(classified), classified.getRetryAfterSeconds());
+  }
+
+  /**
+   * Best-effort relocation lookup, one per distinct {@code groupId:artifactId} per call. Looks at
+   * the newest published version of the old coordinates (relocation stubs are published as the
+   * newest versions) and, when it relocates, at the newest stable version of the new coordinates.
+   * Any failure yields no relocation; it never fails a tool or marks a result incomplete.
+   */
+  private final class RelocationLookup {
+    private final Map<String, CompletableFuture<Optional<RelocationInfo>>> memo =
+        new ConcurrentHashMap<>();
+
+    @Nullable RelocationInfo find(MavenCoordinate coordinate) {
+      return find(coordinate.groupId(), coordinate.artifactId());
+    }
+
+    @Nullable RelocationInfo find(String groupId, String artifactId) {
+      String key = groupId + ":" + artifactId;
+      CompletableFuture<Optional<RelocationInfo>> mine = new CompletableFuture<>();
+      CompletableFuture<Optional<RelocationInfo>> existing = memo.putIfAbsent(key, mine);
+      if (existing != null) {
+        return existing.join().orElse(null);
+      }
+      mine.complete(Optional.ofNullable(compute(groupId, artifactId)));
+      return mine.join().orElse(null);
+    }
+
+    @Nullable
+    private RelocationInfo compute(String groupId, String artifactId) {
+      try {
+        Optional<Relocation> found =
+            mavenCentralService.findRelocationOfLatest(MavenCoordinate.of(groupId, artifactId));
+        if (found.isEmpty()) {
+          return null;
+        }
+        Relocation relocation = found.get();
+        if (groupId.equals(relocation.groupId()) && artifactId.equals(relocation.artifactId())) {
+          return null; // a version-only relocation is not a coordinate change
+        }
+        return RelocationInfo.of(
+            relocation, latestStableOf(relocation.groupId(), relocation.artifactId()));
+      } catch (RuntimeException e) {
+        logger.debug("Relocation lookup failed for {}:{}: {}", groupId, artifactId, e.getMessage());
+        return null;
+      }
+    }
+
+    @Nullable
+    private String latestStableOf(String groupId, String artifactId) {
+      try {
+        List<String> versions =
+            mavenCentralService.getAllVersions(MavenCoordinate.of(groupId, artifactId));
+        return versions == null
+            ? null
+            : versions.stream().filter(versionComparator::isStableVersion).findFirst().orElse(null);
+      } catch (RuntimeException e) {
+        logger.debug(
+            "Latest version lookup failed for {}:{}: {}", groupId, artifactId, e.getMessage());
+        return null;
+      }
     }
   }
 
@@ -174,7 +334,8 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Single dependency. Returns newest versions by type (stable/rc/beta/alpha/milestone). Set"
+          "Single dependency. Returns newest versions by type (stable/rc/beta/alpha/milestone) and"
+              + " any relocation to new coordinates. Set"
               + " stabilityFilter to ALL, STABLE_ONLY, or PREFER_STABLE (default). Use when asked:"
               + " 'what's the latest version of X?' Results span platform variants; for an"
               + " existing dependency use compare_dependency_versions to preserve its variant."
@@ -203,7 +364,8 @@ public class MavenDependencyTools {
 
           StabilityFilter filter =
               stabilityFilter != null ? stabilityFilter : StabilityFilter.PREFER_STABLE;
-          return buildVersionsByType(coordinate, allVersions, filter);
+          return buildVersionsByType(coordinate, allVersions, filter)
+              .withRelocation(new RelocationLookup().find(coordinate));
         });
   }
 
@@ -264,8 +426,8 @@ public class MavenDependencyTools {
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "Bulk lookup (NO versions in input). Returns latest versions by type for each"
-              + " dependency. Use when you have a list of dependencies without versions and need to"
+          "Bulk lookup (NO versions in input). Returns latest versions by type (and any"
+              + " relocation) for each dependency. Use when you have a list of dependencies without versions and need to"
               + " find what versions are available. For upgrade checks, use compare_dependency_versions"
               + " instead.")
   public ToolResponse check_multiple_dependencies(
@@ -286,8 +448,14 @@ public class MavenDependencyTools {
           List<String> depList = parseDependencies(dependencies);
           StabilityFilter filter = stabilityFilter != null ? stabilityFilter : StabilityFilter.ALL;
 
-          return processBatchWithBackpressure(
-              depList.stream().distinct().toList(), dep -> processVersionCheck(dep, filter));
+          List<String> distinct = depList.stream().distinct().toList();
+          UpstreamFailures failures = new UpstreamFailures();
+          RelocationLookup relocations = new RelocationLookup();
+          List<BulkCheckResult> results =
+              processBatchWithBackpressure(
+                  distinct, dep -> processVersionCheck(dep, filter, failures, relocations));
+          failures.throwIfAllFailed(distinct.size());
+          return results;
         });
   }
 
@@ -304,7 +472,8 @@ public class MavenDependencyTools {
   @Tool(
       description =
           "Bulk upgrade check (versions REQUIRED in input). Compares current versions to latest and"
-              + " suggests upgrades (major/minor/patch). Includes CVE vulnerability scanning."
+              + " suggests upgrades (major/minor/patch), flags relocated artifacts. Includes CVE"
+              + " vulnerability scanning."
               + " Use when user provides their current dependency versions and wants upgrade advice.")
   public ToolResponse compare_dependency_versions(
       @ToolParam(
@@ -336,10 +505,16 @@ public class MavenDependencyTools {
           final SecuritySummary securitySummary =
               scanSecurity ? SecuritySummary.fromAssessments(securityAssessments) : null;
 
+          List<String> distinct = depList.stream().distinct().toList();
+          UpstreamFailures failures = new UpstreamFailures();
+          RelocationLookup relocations = new RelocationLookup();
           List<VersionComparison.DependencyComparisonResult> results =
               processBatchWithBackpressure(
-                  depList.stream().distinct().toList(),
-                  dep -> compareDependencyVersion(dep, filter, securityAssessments));
+                  distinct,
+                  dep ->
+                      compareDependencyVersion(
+                          dep, filter, securityAssessments, failures, relocations));
+          failures.throwIfAllFailed(distinct.size());
 
           VersionComparison.UpdateSummary summary = calculateUpdateSummary(results);
 
@@ -468,8 +643,7 @@ public class MavenDependencyTools {
                   coordinate, ACCURATE_TIMESTAMP_VERSION_LIMIT);
 
           if (allVersions.isEmpty()) {
-            throw new MavenCentralException(
-                "No versions found for " + coordinate.toCoordinateString());
+            return notFoundResponse(coordinate);
           }
 
           return analyzeReleasePattern(
@@ -492,14 +666,17 @@ public class MavenDependencyTools {
       description =
           "Bulk project view (PREFERRED for full audits). Summarizes health across many"
               + " dependencies using age and maintenance patterns. Includes CVE vulnerability"
-              + " scanning and license compliance. Use this instead of check_multiple_dependencies"
-              + " when you need security/license info or overall project health assessment.")
+              + " scanning, license compliance and relocation hints. Include versions (groupId:artifactId:version) to"
+              + " audit what you actually run; without one the newest version per stabilityFilter"
+              + " is scanned (reported as scannedVersion). Use this instead of"
+              + " check_multiple_dependencies when you need security/license info or overall"
+              + " project health assessment.")
   public ToolResponse analyze_project_health(
       @ToolParam(
               description =
-                  "Comma or newline separated list of Maven dependency coordinates in format"
-                      + " 'groupId:artifactId' (NO versions). Example:"
-                      + " 'org.springframework:spring-core,junit:junit'")
+                  "Comma or newline separated Maven coordinates 'groupId:artifactId' or"
+                      + " 'groupId:artifactId:version' (versions optional, recommended for a real"
+                      + " audit). Example: 'org.springframework:spring-core:6.0.0,junit:junit'")
           String dependencies,
       @ToolParam(
               description =
@@ -510,8 +687,8 @@ public class MavenDependencyTools {
           @Nullable Integer maxAgeInDays,
       @ToolParam(
               description =
-                  "Stability filter: ALL (any version), STABLE_ONLY (production-ready only), or"
-                      + " PREFER_STABLE (prioritize stable). Default: PREFER_STABLE",
+                  "Stability filter for the latest version (and the scanned version when none is"
+                      + " given): ALL, STABLE_ONLY, or PREFER_STABLE. Default: PREFER_STABLE",
               required = false)
           @Nullable StabilityFilter stabilityFilter,
       @ToolParam(
@@ -534,24 +711,38 @@ public class MavenDependencyTools {
 
           boolean scanSecurity = includeSecurityScan == null || includeSecurityScan;
           boolean scanLicenses = includeLicenseScan == null || includeLicenseScan;
+          StabilityFilter filter =
+              stabilityFilter != null ? stabilityFilter : StabilityFilter.PREFER_STABLE;
+
+          List<String> distinctDeps = depList.stream().distinct().toList();
+          // Decide once, per dependency, which version is audited (supplied or latest per filter)
+          UpstreamFailures failures = new UpstreamFailures();
+          RelocationLookup relocations = new RelocationLookup();
+          final Map<String, HealthTarget> targets =
+              resolveHealthTargets(distinctDeps, filter, failures);
+          failures.throwIfAllFailed(distinctDeps.size());
 
           final Map<String, SecurityAssessment> securityByDependency =
-              scanSecurity ? scanLatestDependencySecurity(depList) : Map.of();
+              scanSecurity ? scanTargetSecurity(targets) : Map.of();
           final Map<String, List<LicenseInfo>> licensesByDependency =
-              scanLicenses ? scanLatestDependencyLicenses(depList) : Map.of();
+              scanLicenses ? scanTargetLicenses(targets) : Map.of();
 
           // Analyze each dependency for age and patterns
           List<ProjectHealthAnalysis.DependencyHealthAnalysis> dependencyAnalyses =
               processBatchWithBackpressure(
-                  depList.stream().distinct().toList(),
+                  distinctDeps,
                   dep ->
                       analyzeDependencyHealthWithSecurityAndLicenses(
                           dep,
+                          targets.get(dep),
                           maxAgeInDays,
                           scanSecurity,
                           securityByDependency,
                           scanLicenses,
-                          licensesByDependency));
+                          licensesByDependency,
+                          failures,
+                          relocations));
+          failures.throwIfAllFailed(distinctDeps.size());
 
           // Perform security scan if requested
           SecurityFindings securityFindings = null;
@@ -583,14 +774,31 @@ public class MavenDependencyTools {
   private ProjectHealthAnalysis.DependencyHealthAnalysis
       analyzeDependencyHealthWithSecurityAndLicenses(
           String dependency,
+          HealthTarget target,
           Integer maxAgeInDays,
           boolean scanSecurity,
           Map<String, SecurityAssessment> securityByDependency,
           boolean scanLicenses,
-          Map<String, List<LicenseInfo>> licensesByDependency) {
+          Map<String, List<LicenseInfo>> licensesByDependency,
+          UpstreamFailures failures,
+          RelocationLookup relocations) {
     try {
-      MavenCoordinate coordinate = MavenCoordinateParser.parse(dependency);
-      String gaKey = gaKey(coordinate);
+      if (target == null) {
+        return ProjectHealthAnalysis.DependencyHealthAnalysis.error(
+            dependency, "Dependency could not be resolved");
+      }
+      if (!HealthTarget.OK.equals(target.status())) {
+        return ProjectHealthAnalysis.DependencyHealthAnalysis.builder()
+            .dependency(dependency)
+            .status(target.status())
+            .currentVersion(target.currentVersion())
+            .error(target.error())
+            .retryAfterSeconds(target.retryAfterSeconds())
+            .build();
+      }
+
+      MavenCoordinate coordinate = target.coordinate();
+      String scannedKey = target.scannedKey();
 
       List<MavenArtifact> versions =
           mavenCentralService.getRecentVersionsWithAccurateTimestamps(coordinate, 10);
@@ -598,18 +806,39 @@ public class MavenDependencyTools {
         return ProjectHealthAnalysis.DependencyHealthAnalysis.notFound(dependency);
       }
 
-      MavenArtifact latestVersion = versions.get(0);
+      // Freshness describes the latest version honouring the stability filter; maintenance
+      // describes the artifact's recent release history.
+      List<String> notes = new ArrayList<>();
+      if (target.note() != null) {
+        notes.add(target.note());
+      }
+      MavenArtifact latestArtifact =
+          target.latestVersion() != null
+              ? findArtifactTimestamp(coordinate, versions, target.latestVersion())
+              : null;
+      if (latestArtifact == null) {
+        latestArtifact = versions.get(0);
+        if (target.latestVersion() != null) {
+          notes.add(
+              "Release date of "
+                  + target.latestVersion()
+                  + " unavailable; freshness is based on the newest published version "
+                  + latestArtifact.version());
+        }
+      }
       DependencyAgeAnalysis ageAnalysis =
           DependencyAgeAnalysis.fromTimestamp(
-              coordinate.toCoordinateString(), latestVersion.version(), latestVersion.timestamp());
+              coordinate.toCoordinateString(),
+              latestArtifact.version(),
+              latestArtifact.timestamp());
 
       String maintenanceStatus = determineMaintenanceStatus(versions);
       int freshnessScore = calculateFreshnessScore(ageAnalysis, maxAgeInDays);
       int maintenanceScore = calculateMaintenanceScore(maintenanceStatus);
 
       SecurityAssessment security =
-          resolveSecurityAssessment(scanSecurity, gaKey, securityByDependency);
-      List<LicenseInfo> licenses = resolveLicenses(scanLicenses, gaKey, licensesByDependency);
+          resolveSecurityAssessment(scanSecurity, scannedKey, securityByDependency);
+      List<LicenseInfo> licenses = resolveLicenses(scanLicenses, scannedKey, licensesByDependency);
 
       int healthScore =
           (scanSecurity || scanLicenses)
@@ -617,29 +846,77 @@ public class MavenDependencyTools {
                   freshnessScore, maintenanceScore, security, licenses)
               : calculateSimpleHealthScore(ageAnalysis, maintenanceStatus, maxAgeInDays);
 
-      if (scanSecurity || scanLicenses) {
-        return ProjectHealthAnalysis.DependencyHealthAnalysis.successWithSecurityAndLicenses(
-            dependency,
-            latestVersion.version(),
-            ageAnalysis.ageClassification().getName(),
-            ageAnalysis.daysSinceLastRelease(),
-            healthScore,
-            maintenanceStatus,
-            security,
-            licenses,
-            context7Properties.enabled());
+      String ageName = ageAnalysis.ageClassification().getName();
+      var builder =
+          ProjectHealthAnalysis.DependencyHealthAnalysis.builder()
+              .dependency(dependency)
+              .currentVersion(target.currentVersion())
+              .scannedVersion(target.scannedVersion())
+              .latestVersion(target.latestVersion())
+              .ageClassification(ageName)
+              .daysSinceRelease(ageAnalysis.daysSinceLastRelease())
+              .healthScore(healthScore)
+              .maintenanceLevel(maintenanceStatus)
+              .security(security)
+              .licenses((scanSecurity || scanLicenses) ? licenses : null)
+              .note(notes.isEmpty() ? null : String.join("; ", notes))
+              .relocation(relocations.find(coordinate));
+
+      String updateType = null;
+      boolean updateAvailable = false;
+      if (target.currentVersion() != null && target.latestVersion() != null) {
+        updateType =
+            versionComparator.determineUpdateType(target.currentVersion(), target.latestVersion());
+        updateAvailable =
+            versionComparator.compare(target.currentVersion(), target.latestVersion()) < 0;
+        builder.updateAvailable(updateAvailable).updateType(updateType);
+      }
+      if (target.currentVersion() != null) {
+        MavenArtifact current =
+            findArtifactTimestamp(coordinate, versions, target.currentVersion());
+        if (current != null) {
+          builder.currentVersionAgeDays(
+              ChronoUnit.DAYS.between(Instant.ofEpochMilli(current.timestamp()), Instant.now()));
+        }
       }
 
-      return ProjectHealthAnalysis.DependencyHealthAnalysis.success(
-          dependency,
-          latestVersion.version(),
-          ageAnalysis.ageClassification().getName(),
-          ageAnalysis.daysSinceLastRelease(),
-          healthScore,
-          maintenanceStatus,
-          context7Properties.enabled());
+      if (context7Properties.enabled()) {
+        if (updateAvailable) {
+          builder.context7Query(Context7Guidance.migrationQuery(dependency, updateType));
+        } else if (AGING_AGE.equals(ageName) || STALE_AGE.equals(ageName)) {
+          builder.context7Query(Context7Guidance.modernizationQuery(dependency, ageName));
+        }
+      }
+
+      return builder.build();
     } catch (RuntimeException e) {
-      return ProjectHealthAnalysis.DependencyHealthAnalysis.error(dependency, e.getMessage());
+      FailureText failure = failureText(failures, dependency, e);
+      return ProjectHealthAnalysis.DependencyHealthAnalysis.builder()
+          .dependency(dependency)
+          .status(ERROR_STATUS)
+          .error(failure.message())
+          .retryAfterSeconds(failure.retryAfterSeconds())
+          .build();
+    }
+  }
+
+  /**
+   * Finds a version's release timestamp in the already fetched recent versions, falling back to a
+   * single (cached) lookup. Best effort: returns null when unavailable.
+   */
+  private MavenArtifact findArtifactTimestamp(
+      MavenCoordinate coordinate, List<MavenArtifact> recent, String version) {
+    for (MavenArtifact artifact : recent) {
+      if (version.equals(artifact.version())) {
+        return artifact.timestamp() > 0 ? artifact : null;
+      }
+    }
+    try {
+      MavenArtifact fetched = mavenCentralService.fetchArtifactWithTimestamp(coordinate, version);
+      return fetched != null && fetched.timestamp() > 0 ? fetched : null;
+    } catch (RuntimeException e) {
+      logger.debug("Could not fetch release date of {}:{}", coordinate, version, e);
+      return null;
     }
   }
 
@@ -683,8 +960,9 @@ public class MavenDependencyTools {
         : List.of();
   }
 
-  private static String gaKey(MavenCoordinate coordinate) {
-    return coordinate.groupId() + ":" + coordinate.artifactId();
+  private static String gaOf(String dependency) {
+    String[] parts = dependency.split(":");
+    return parts.length >= 2 ? parts[0] + ":" + parts[1] : dependency;
   }
 
   private int calculateFreshnessScore(DependencyAgeAnalysis ageAnalysis, Integer maxAgeInDays) {
@@ -773,64 +1051,156 @@ public class MavenDependencyTools {
     return allPermissive ? 100 : 70;
   }
 
-  private Map<String, SecurityAssessment> scanLatestDependencySecurity(List<String> dependencies) {
-    // Resolve latest versions and scan those versions
-    List<MavenCoordinate> coordinatesWithVersions = new ArrayList<>();
+  /**
+   * The version of one dependency that an audit looks at.
+   *
+   * @param coordinate parsed input coordinate (carries the supplied version, if any)
+   * @param currentVersion version supplied by the caller, or null
+   * @param scannedVersion version security/license scans run against (current, else latest)
+   * @param latestVersion newest version honouring the stability filter, or null
+   * @param status {@link #OK} or the status to report for the dependency
+   * @param error message when status is not OK
+   * @param note optional clarification for the report
+   * @param retryAfterSeconds retry hint when the failure was a retryable upstream failure
+   */
+  private record HealthTarget(
+      MavenCoordinate coordinate,
+      String currentVersion,
+      String scannedVersion,
+      String latestVersion,
+      String status,
+      String error,
+      String note,
+      @Nullable Integer retryAfterSeconds) {
 
-    for (String dep : dependencies) {
-      try {
-        MavenCoordinate coord = MavenCoordinateParser.parse(dep);
-        String latestVersion = mavenCentralService.getLatestVersion(coord);
-        if (latestVersion != null) {
-          coordinatesWithVersions.add(
-              MavenCoordinate.of(coord.groupId(), coord.artifactId(), latestVersion));
-        }
-      } catch (Exception e) {
-        logger.debug("Could not resolve version for {}: {}", dep, e.getMessage());
-      }
+    static final String OK = SUCCESS_STATUS;
+
+    static HealthTarget failed(
+        MavenCoordinate coordinate, String status, String error, String currentVersion) {
+      return failed(coordinate, status, error, currentVersion, null);
     }
 
-    if (coordinatesWithVersions.isEmpty()) {
-      return Map.of();
+    static HealthTarget failed(
+        MavenCoordinate coordinate,
+        String status,
+        String error,
+        String currentVersion,
+        @Nullable Integer retryAfterSeconds) {
+      return new HealthTarget(
+          coordinate, currentVersion, null, null, status, error, null, retryAfterSeconds);
     }
 
-    Map<String, SecurityAssessment> versionKeyed =
-        vulnerabilityService.scanBulk(coordinatesWithVersions);
-    Map<String, SecurityAssessment> byGa = new LinkedHashMap<>();
-
-    for (MavenCoordinate c : coordinatesWithVersions) {
-      String ga = gaKey(c);
-      SecurityAssessment assessment = versionKeyed.get(c.toCoordinateString());
-      if (assessment != null) {
-        byGa.put(ga, assessment);
-      }
+    String scannedKey() {
+      return coordinate.groupId() + ":" + coordinate.artifactId() + ":" + scannedVersion;
     }
-
-    return Map.copyOf(byGa);
   }
 
-  private Map<String, List<LicenseInfo>> scanLatestDependencyLicenses(List<String> dependencies) {
-    Map<String, List<LicenseInfo>> byGa = new LinkedHashMap<>();
-
+  private Map<String, HealthTarget> resolveHealthTargets(
+      List<String> dependencies, StabilityFilter filter, UpstreamFailures failures) {
+    Map<String, HealthTarget> targets = new LinkedHashMap<>();
     for (String dep : dependencies) {
+      MavenCoordinate coord = null;
       try {
-        MavenCoordinate coord = MavenCoordinateParser.parse(dep);
-        String ga = gaKey(coord);
-        String latestVersion = mavenCentralService.getLatestVersion(coord);
-        if (latestVersion == null) {
-          byGa.put(ga, List.of());
-          continue;
+        coord = MavenCoordinateParser.parse(dep);
+        targets.put(dep, resolveHealthTarget(coord, filter));
+      } catch (RuntimeException e) {
+        logger.debug("Could not resolve version for {}: {}", dep, e.getMessage());
+        FailureText failure = failureText(failures, dep, e);
+        if (coord != null) {
+          targets.put(
+              dep,
+              HealthTarget.failed(
+                  coord,
+                  ERROR_STATUS,
+                  failure.message(),
+                  coord.version(),
+                  failure.retryAfterSeconds()));
         }
-
-        MavenCoordinate coordWithVersion =
-            MavenCoordinate.of(coord.groupId(), coord.artifactId(), latestVersion);
-        byGa.put(ga, mavenCentralService.getLicenses(coordWithVersion));
-      } catch (Exception e) {
-        logger.debug("Could not scan license for {}: {}", dep, e.getMessage());
       }
     }
+    return targets;
+  }
 
-    return Map.copyOf(byGa);
+  private HealthTarget resolveHealthTarget(MavenCoordinate coord, StabilityFilter filter) {
+    String current = coord.version();
+    List<String> allVersions = mavenCentralService.getAllVersions(coord);
+    if (allVersions.isEmpty()) {
+      return HealthTarget.failed(
+          coord, "not_found", "Dependency not found in Maven Central", current);
+    }
+    if (current != null && !allVersions.contains(current)) {
+      return HealthTarget.failed(
+          coord,
+          ERROR_STATUS,
+          "Version %s of %s:%s does not exist in the repository"
+              .formatted(current, coord.groupId(), coord.artifactId()),
+          current);
+    }
+
+    String latest = getLatestCompatibleVersion(coord, filter != StabilityFilter.ALL);
+    String note = null;
+    if (latest == null && filter != StabilityFilter.STABLE_ONLY) {
+      latest = getLatestCompatibleVersion(coord, false);
+      note = "No stable release exists; the newest pre-release is used as latest";
+    }
+
+    if (current != null) {
+      if (latest == null) {
+        note = "No stable release available for stabilityFilter=STABLE_ONLY";
+      }
+      return new HealthTarget(coord, current, current, latest, HealthTarget.OK, null, note, null);
+    }
+    if (latest == null) {
+      return HealthTarget.failed(
+          coord,
+          "no_stable_version",
+          "No stable version exists and stabilityFilter=STABLE_ONLY; nothing was scanned",
+          null);
+    }
+    return new HealthTarget(coord, null, latest, latest, HealthTarget.OK, null, note, null);
+  }
+
+  private Map<String, SecurityAssessment> scanTargetSecurity(Map<String, HealthTarget> targets) {
+    Map<String, MavenCoordinate> toScan = new LinkedHashMap<>();
+    for (HealthTarget target : targets.values()) {
+      if (HealthTarget.OK.equals(target.status())) {
+        toScan.putIfAbsent(
+            target.scannedKey(),
+            MavenCoordinate.of(
+                target.coordinate().groupId(),
+                target.coordinate().artifactId(),
+                target.scannedVersion()));
+      }
+    }
+    if (toScan.isEmpty()) {
+      return Map.of();
+    }
+    return vulnerabilityService.scanBulk(List.copyOf(toScan.values()));
+  }
+
+  private Map<String, List<LicenseInfo>> scanTargetLicenses(Map<String, HealthTarget> targets) {
+    Map<String, List<LicenseInfo>> byKey = new LinkedHashMap<>();
+    for (HealthTarget target : targets.values()) {
+      if (!HealthTarget.OK.equals(target.status())) {
+        continue;
+      }
+      String key = target.scannedKey();
+      if (byKey.containsKey(key)) {
+        continue;
+      }
+      try {
+        byKey.put(
+            key,
+            mavenCentralService.getLicenses(
+                MavenCoordinate.of(
+                    target.coordinate().groupId(),
+                    target.coordinate().artifactId(),
+                    target.scannedVersion())));
+      } catch (Exception e) {
+        logger.debug("Could not scan license for {}: {}", key, e.getMessage());
+      }
+    }
+    return Map.copyOf(byKey);
   }
 
   private LicenseFindings buildLicenseFindings(
@@ -923,14 +1293,16 @@ public class MavenDependencyTools {
         .toList();
   }
 
-  private BulkCheckResult processVersionCheck(String dep, StabilityFilter filter) {
+  private BulkCheckResult processVersionCheck(
+      String dep, StabilityFilter filter, UpstreamFailures failures, RelocationLookup relocations) {
     return switch (filter) {
-      case STABLE_ONLY -> processStableVersionCheck(dep);
-      case ALL, PREFER_STABLE -> processComprehensiveVersionCheck(dep);
+      case STABLE_ONLY -> processStableVersionCheck(dep, failures, relocations);
+      case ALL, PREFER_STABLE -> processComprehensiveVersionCheck(dep, failures, relocations);
     };
   }
 
-  private BulkCheckResult processStableVersionCheck(String dep) {
+  private BulkCheckResult processStableVersionCheck(
+      String dep, UpstreamFailures failures, RelocationLookup relocations) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
       List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
@@ -944,23 +1316,29 @@ public class MavenDependencyTools {
 
       String latestStable = stableVersions.isEmpty() ? null : stableVersions.get(0);
 
-      return latestStable != null
-          ? BulkCheckResult.foundStable(
-              coordinate.toCoordinateString(),
-              latestStable,
-              VersionType.STABLE.getDisplayName(),
-              allVersions.size(),
-              stableVersions.size())
-          : BulkCheckResult.noStableVersion(coordinate.toCoordinateString(), allVersions.size());
-    } catch (Exception e) {
-      return BulkCheckResult.error(dep, e.getMessage());
+      BulkCheckResult result =
+          latestStable != null
+              ? BulkCheckResult.foundStable(
+                  coordinate.toCoordinateString(),
+                  latestStable,
+                  VersionType.STABLE.getDisplayName(),
+                  allVersions.size(),
+                  stableVersions.size())
+              : BulkCheckResult.noStableVersion(
+                  coordinate.toCoordinateString(), allVersions.size());
+      return result.withRelocation(relocations.find(coordinate));
+    } catch (RuntimeException e) {
+      FailureText failure = failureText(failures, dep, e);
+      return BulkCheckResult.error(dep, failure.message(), failure.retryAfterSeconds());
     }
   }
 
   private VersionComparison.DependencyComparisonResult compareDependencyVersion(
       String dep,
       StabilityFilter stabilityFilter,
-      Map<String, SecurityAssessment> securityAssessments) {
+      Map<String, SecurityAssessment> securityAssessments,
+      UpstreamFailures failures,
+      RelocationLookup relocations) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
       String currentVersion = coordinate.version();
@@ -974,7 +1352,8 @@ public class MavenDependencyTools {
 
       if (currentVersion == null) {
         return VersionComparison.DependencyComparisonResult.noCurrentVersion(
-            coordinate.toCoordinateString());
+                coordinate.toCoordinateString())
+            .withRelocation(relocations.find(coordinate));
       }
 
       String latestType = versionComparator.getVersionTypeString(latestVersion);
@@ -988,30 +1367,35 @@ public class MavenDependencyTools {
         security = securityAssessments.get(coordinate.toCoordinateString());
       }
 
+      RelocationInfo relocation = relocations.find(coordinate);
       if (security != null) {
         return VersionComparison.DependencyComparisonResult.successWithSecurity(
-            coordinate.toCoordinateString(),
-            currentVersion,
-            latestVersion,
-            latestType,
-            updateType,
-            updateAvailable,
-            security,
-            context7Properties.enabled(),
-            sameMajorStableFallback);
+                coordinate.toCoordinateString(),
+                currentVersion,
+                latestVersion,
+                latestType,
+                updateType,
+                updateAvailable,
+                security,
+                context7Properties.enabled(),
+                sameMajorStableFallback)
+            .withRelocation(relocation);
       }
 
       return VersionComparison.DependencyComparisonResult.success(
-          coordinate.toCoordinateString(),
-          currentVersion,
-          latestVersion,
-          latestType,
-          updateType,
-          updateAvailable,
-          context7Properties.enabled(),
-          sameMajorStableFallback);
+              coordinate.toCoordinateString(),
+              currentVersion,
+              latestVersion,
+              latestType,
+              updateType,
+              updateAvailable,
+              context7Properties.enabled(),
+              sameMajorStableFallback)
+          .withRelocation(relocation);
     } catch (RuntimeException e) {
-      return VersionComparison.DependencyComparisonResult.error(dep, e.getMessage());
+      FailureText failure = failureText(failures, dep, e);
+      return VersionComparison.DependencyComparisonResult.error(
+          dep, failure.message(), failure.retryAfterSeconds());
     }
   }
 
@@ -1062,7 +1446,8 @@ public class MavenDependencyTools {
     return numericParts.length > 0 ? numericParts[0] : null;
   }
 
-  private BulkCheckResult processComprehensiveVersionCheck(String dep) {
+  private BulkCheckResult processComprehensiveVersionCheck(
+      String dep, UpstreamFailures failures, RelocationLookup relocations) {
     try {
       MavenCoordinate coordinate = MavenCoordinateParser.parse(dep);
       List<String> allVersions = mavenCentralService.getAllVersions(coordinate);
@@ -1084,19 +1469,26 @@ public class MavenDependencyTools {
               : versionComparator.getVersionTypeString(allVersions.get(0));
 
       return BulkCheckResult.foundComprehensive(
-          dep,
-          primaryVersion,
-          primaryType,
-          allVersions.size(),
-          stableCount,
-          versionInfos.latestStable(),
-          versionInfos.latestRc(),
-          versionInfos.latestBeta(),
-          versionInfos.latestAlpha(),
-          versionInfos.latestMilestone());
+              dep,
+              primaryVersion,
+              primaryType,
+              allVersions.size(),
+              stableCount,
+              versionInfos.latestStable(),
+              versionInfos.latestRc(),
+              versionInfos.latestBeta(),
+              versionInfos.latestAlpha(),
+              versionInfos.latestMilestone())
+          .withRelocation(relocations.find(coordinate));
     } catch (RuntimeException e) {
-      logger.error("Error processing comprehensive version check for {}: {}", dep, e.getMessage());
-      return BulkCheckResult.error(dep, e.getMessage());
+      FailureText failure = failureText(failures, dep, e);
+      if (failures.byDependency.containsKey(dep)) {
+        logger.warn("Version check failed for {}: {}", dep, failure.message());
+      } else {
+        logger.error(
+            "Error processing comprehensive version check for {}: {}", dep, e.getMessage());
+      }
+      return BulkCheckResult.error(dep, failure.message(), failure.retryAfterSeconds());
     }
   }
 
@@ -1160,10 +1552,6 @@ public class MavenDependencyTools {
         counts.getOrDefault(MINOR_UPDATE_TYPE, 0L).intValue(),
         counts.getOrDefault(PATCH_UPDATE_TYPE, 0L).intValue(),
         counts.getOrDefault(NO_UPDATE_TYPE, 0L).intValue());
-  }
-
-  private String getLatestStableVersion(MavenCoordinate coordinate) throws MavenCentralException {
-    return getLatestCompatibleVersion(coordinate, true);
   }
 
   private String getLatestCompatibleVersion(MavenCoordinate coordinate, boolean stableOnly)
@@ -1311,8 +1699,9 @@ public class MavenDependencyTools {
         dependencyAnalyses.stream().filter(dep -> SUCCESS_STATUS.equals(dep.status())).toList();
 
     if (successfulDeps.isEmpty()) {
-      return new ProjectHealthAnalysis(
+      return ProjectHealthAnalysis.of(
           "unknown",
+          null,
           totalDependencies,
           0,
           totalDependencies,
@@ -1347,8 +1736,9 @@ public class MavenDependencyTools {
             securityFindings,
             licenseFindings);
 
-    return new ProjectHealthAnalysis(
+    return ProjectHealthAnalysis.of(
         overallHealth,
+        (int) Math.round(averageHealthScore),
         totalDependencies,
         successfulAnalyses,
         totalDependencies - successfulAnalyses,
@@ -1429,6 +1819,20 @@ public class MavenDependencyTools {
       }
     }
 
+    List<ProjectHealthAnalysis.DependencyHealthAnalysis> relocated =
+        successfulDeps.stream().filter(dep -> dep.relocation() != null).toList();
+    if (!relocated.isEmpty()) {
+      ProjectHealthAnalysis.DependencyHealthAnalysis first = relocated.get(0);
+      recommendations.add(
+          relocated.size()
+              + (relocated.size() == 1 ? " dependency is" : " dependencies are")
+              + " relocated to new coordinates (for example "
+              + gaOf(first.dependency())
+              + " -> "
+              + first.relocation().coordinate()
+              + "); switching groupId/artifactId may require code changes");
+    }
+
     if (metrics.staleCount() > 0) {
       recommendations.add(
           "Review " + metrics.staleCount() + " stale dependencies for alternatives");
@@ -1483,8 +1887,10 @@ public class MavenDependencyTools {
               + " POMs (monorepo siblings, unreleased parents) used before falling back to Maven"
               + " Central. Use when asked: 'analyze my pom.xml', 'what versions does this POM"
               + " actually resolve to?', or for multi-module monorepos. Returns the parent chain,"
-              + " resolved dependencies, directly editable root dependency-management and"
-              + " build/plugin dependency declarations, and warnings for unresolved bits.")
+              + " resolved dependencies, directly editable root dependency-management, plugin"
+              + " (rootPluginDeclarations) and plugin dependency declarations, propertyOverrides"
+              + " (root properties"
+              + " shadowing an ancestor property used as a version), and warnings.")
   public ToolResponse analyze_pom_dependencies(
       @ToolParam(description = "Raw <project>...</project> XML content of the POM to analyze.")
           String pomXml,
@@ -1505,8 +1911,7 @@ public class MavenDependencyTools {
     } catch (IllegalArgumentException e) {
       return ToolResponse.Error.of("Invalid POM input: " + e.getMessage());
     } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return toolFailure(e);
     }
   }
 
@@ -1518,24 +1923,30 @@ public class MavenDependencyTools {
    * @param mode {@link UpgradeMode#MINOR_PATCH} (default) or {@link UpgradeMode#ALL}
    * @param sideloadedPoms optional bundle of additional POMs (monorepo siblings, unreleased
    *     parents) tried before Maven Central
+   * @param includeSecurityScan whether to scan dependency versions for vulnerabilities (default
+   *     true)
+   * @param minReleaseAgeDays optional release cooldown: actions only target versions published at
+   *     least this many days ago (default: none; values {@code <= 0} mean none)
    * @return JSON response wrapping {@link PomUpgradeRecommendation}
    */
   @SuppressWarnings("java:S100") // MCP tool method naming
   @Tool(
       description =
-          "POM-aware upgrade recommender. Takes raw pom.xml content and returns two lists: (1)"
-              + " deterministic_actions — mechanical version/property edits a non-LLM agent can"
-              + " apply"
-              + " directly (explicit_bump for declared deps, bom_bump for user-editable BOMs,"
-              + " managed_decl_bump for direct root dependency-management entries,"
-              + " plugin_dep_bump for direct build/plugin dependencies); (2)"
-              + " needs_attention — major upgrades,"
-              + " multi-BOM conflicts, and explicit overrides that need human or LLM review,"
-              + " each carrying the Maven Central latest so the model has full context in one"
-              + " round-trip. Default mode MINOR_PATCH routes majors to needs_attention; mode"
-              + " ALL treats majors as deterministic (rarely what you want). Use when asked:"
-              + " 'recommend upgrades for my pom.xml', 'what can I safely bump?', or to drive an"
-              + " automated dependency-update workflow.")
+          "POM-aware upgrade recommender. Takes raw pom.xml content and returns (1)"
+              + " deterministicActions — mechanical version/property edits a non-LLM agent can"
+              + " apply (explicit_bump, bom_bump, managed_decl_bump, plugin_dep_bump,"
+              + " plugin_bump); actions"
+              + " for vulnerable versions carry a security object with targetStatus; (2)"
+              + " needsAttention — vulnerable (known CVEs, first), relocated (declared dependency moved to"
+              + " new coordinates), major_available (alongside the"
+              + " same-major action when one exists), property_override (a root property pinning a"
+              + " parent-managed version, e.g. snakeyaml.version),"
+              + " conflict and explicit_override entries needing review, each with the Maven"
+              + " Central latest; plus securitySummary. Mode MINOR_PATCH (default) keeps majors in"
+              + " needsAttention; ALL makes them deterministic. minReleaseAgeDays skips too-new"
+              + " versions (heldBackFrom). incomplete=true: lookups failed, results partial. Use"
+              + " for 'recommend upgrades for my pom.xml' or automated dependency-update"
+              + " workflows.")
   public ToolResponse recommend_pom_upgrades(
       @ToolParam(description = "Raw <project>...</project> XML content of the POM to analyze.")
           String pomXml,
@@ -1552,26 +1963,45 @@ public class MavenDependencyTools {
                       + " parents). Each is indexed by its self-declared groupId:artifactId:version"
                       + " and tried before Maven Central.",
               required = false)
-          @Nullable List<String> sideloadedPoms) {
+          @Nullable List<String> sideloadedPoms,
+      @ToolParam(
+              description =
+                  "Scan dependency versions for known vulnerabilities (OSV) and annotate actions /"
+                      + " add 'vulnerable' entries. Default true.",
+              required = false)
+          @Nullable Boolean includeSecurityScan,
+      @ToolParam(
+              description =
+                  "Only target versions published at least this many days ago (e.g. 7)."
+                      + " Default: no cooldown.",
+              required = false)
+          @Nullable Integer minReleaseAgeDays) {
     try {
       EffectivePomResult resolved =
           (sideloadedPoms == null || sideloadedPoms.isEmpty())
               ? pomResolver.resolve(pomXml)
               : pomResolver.resolve(pomXml, sideloadedPoms);
       UpgradeMode effectiveMode = mode != null ? mode : UpgradeMode.MINOR_PATCH;
-      return ToolResponse.Success.of(buildPomUpgradeRecommendation(resolved, effectiveMode));
+      boolean scan = includeSecurityScan == null || includeSecurityScan;
+      return ToolResponse.Success.of(
+          buildPomUpgradeRecommendation(
+              resolved, effectiveMode, scan, new RecommendationRun(minReleaseAgeDays)));
     } catch (IllegalArgumentException e) {
       return ToolResponse.Error.of("Invalid POM input: " + e.getMessage());
     } catch (Exception e) {
-      logger.error(UNEXPECTED_ERROR, e);
-      return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+      return toolFailure(e);
     }
   }
 
   private PomUpgradeRecommendation buildPomUpgradeRecommendation(
-      EffectivePomResult resolved, UpgradeMode mode) {
+      EffectivePomResult resolved,
+      UpgradeMode mode,
+      boolean includeSecurityScan,
+      RecommendationRun run) {
     List<UpgradeAction> actions = new ArrayList<>();
     List<NeedsAttention> attention = new ArrayList<>();
+    // Best effort and never mechanical; ordered after vulnerable and before every other kind.
+    List<NeedsAttention> relocated = buildRelocatedAttention(resolved);
 
     // Only BOMs the user can edit in their own POM are actionable: the direct <parent> and the
     // root POM's direct <dependencyManagement> imports. Transitively-imported BOMs (e.g.,
@@ -1592,24 +2022,38 @@ public class MavenDependencyTools {
     // even when they don't directly manage any classified dep — bumping the parent is itself a
     // useful upgrade signal.
     for (MavenCoordinate bom : userControllableBoms.values()) {
-      classifyBomCandidate(bom, mode, actions, attention);
+      classifyBomCandidate(run, bom, mode, actions, attention);
     }
 
     // Direct non-import dependency-management declarations are independent user-owned knobs. They
     // remain actionable even when the platform POM has no normal <dependencies> usage of its own.
     for (ManagedDeclaration declaration : resolved.rootManagedDeclarations()) {
-      classifyManagedDeclarationCandidate(declaration, mode, actions, attention);
+      classifyManagedDeclarationCandidate(run, declaration, mode, actions, attention);
     }
 
     for (PluginDependencyDeclaration declaration : resolved.rootPluginDependencyDeclarations()) {
-      classifyPluginDependencyCandidate(declaration, mode, actions, attention);
+      classifyPluginDependencyCandidate(run, declaration, mode, actions, attention);
+    }
+
+    // Plugins' own versions. The same plugin may be declared in both <plugins> and
+    // <pluginManagement>: a shared property yields one action, separate literals one per site.
+    Set<String> seenPlugins = new HashSet<>();
+    for (PluginDeclaration declaration : resolved.rootPluginDeclarations()) {
+      if (seenPlugins.add(pluginDeclarationKey(declaration))) {
+        classifyPluginCandidate(run, declaration, mode, actions, attention);
+      }
     }
 
     // Second pass: per-dep classification. MANAGED deps whose managedBy is user-controllable are
     // covered by the BOM pass above; transitively-managed deps are silently skipped (their
     // upgrade lives behind a user-controllable knob already classified).
     for (EffectiveDependency dep : resolved.dependencies()) {
-      classifyDependencyCandidate(dep, mode, actions, attention);
+      classifyDependencyCandidate(run, dep, mode, actions, attention);
+    }
+
+    // Property pins are never mechanical: a pin exists for a reason.
+    for (PropertyOverride override : resolved.propertyOverrides()) {
+      toPropertyOverrideAttention(run, override).ifPresent(attention::add);
     }
 
     List<String> warnings = new ArrayList<>(resolved.warnings());
@@ -1624,140 +2068,539 @@ public class MavenDependencyTools {
                         + ":"
                         + dependency.artifactId()
                         + " requires a manual profile, inherited-property or artifact-variant edit"));
-    return new PomUpgradeRecommendation(actions, attention, warnings);
+
+    if (!includeSecurityScan) {
+      warnings.addAll(run.warnings());
+      List<NeedsAttention> unscanned = new ArrayList<>(relocated);
+      unscanned.addAll(attention);
+      return new PomUpgradeRecommendation(
+          actions, unscanned, warnings, null, run.incomplete() ? Boolean.TRUE : null);
+    }
+    SecurityOutcome security = applySecurityScan(run, resolved, actions);
+    if (security.summary().unknown() > 0) {
+      warnings.add(
+          "Security scan unavailable for " + security.summary().unknown() + " dependencies");
+    }
+    warnings.addAll(run.warnings());
+    List<NeedsAttention> ordered = new ArrayList<>(security.vulnerable());
+    ordered.addAll(relocated);
+    ordered.addAll(attention);
+    return new PomUpgradeRecommendation(
+        security.actions(),
+        ordered,
+        warnings,
+        security.summary(),
+        run.incomplete() ? Boolean.TRUE : null);
+  }
+
+  /**
+   * Builds {@code relocated} entries for dependencies the POM declares itself (EXPLICIT,
+   * EXPLICIT_OVERRIDE) and for its own dependency-management declarations. BOM-managed (MANAGED)
+   * dependencies, BOMs and plugins are not looked up. Lookups run in the bounded batch, one per
+   * distinct {@code groupId:artifactId}; any failure just yields no entry.
+   */
+  private List<NeedsAttention> buildRelocatedAttention(EffectivePomResult resolved) {
+    record Declared(String groupId, String artifactId, String current, String source) {}
+    Set<Declared> declared = new LinkedHashSet<>();
+    for (EffectiveDependency dep : resolved.dependencies()) {
+      if (dep.source() == Source.EXPLICIT || dep.source() == Source.EXPLICIT_OVERRIDE) {
+        declared.add(
+            new Declared(
+                dep.groupId(), dep.artifactId(), dep.effectiveVersion(), dep.source().name()));
+      }
+    }
+    for (ManagedDeclaration declaration : resolved.rootManagedDeclarations()) {
+      declared.add(
+          new Declared(
+              declaration.groupId(),
+              declaration.artifactId(),
+              declaration.version(),
+              "MANAGED_DECLARATION"));
+    }
+    if (declared.isEmpty()) {
+      return List.of();
+    }
+    List<String> distinct =
+        declared.stream().map(d -> d.groupId() + ":" + d.artifactId()).distinct().toList();
+    Map<String, RelocationInfo> found = new HashMap<>();
+    try {
+      RelocationLookup lookup = new RelocationLookup();
+      List<RelocationInfo> infos =
+          processBatchWithBackpressure(
+              distinct,
+              ga -> {
+                String[] parts = ga.split(":", 2);
+                return lookup.find(parts[0], parts[1]);
+              });
+      for (int i = 0; i < distinct.size(); i++) {
+        if (infos.get(i) != null) {
+          found.put(distinct.get(i), infos.get(i));
+        }
+      }
+    } catch (RuntimeException e) {
+      logger.debug("Relocation lookups skipped: {}", e.getMessage());
+      return List.of();
+    }
+    List<NeedsAttention> out = new ArrayList<>();
+    for (Declared d : declared) {
+      RelocationInfo info = found.get(d.groupId() + ":" + d.artifactId());
+      if (info != null) {
+        out.add(
+            new NeedsAttention.Relocated(
+                d.groupId(),
+                d.artifactId(),
+                d.current(),
+                d.source(),
+                info.coordinate(),
+                info.latestVersion(),
+                info.message()));
+      }
+    }
+    return out;
+  }
+
+  private static String pluginDeclarationKey(PluginDeclaration declaration) {
+    boolean property = ManagedDeclaration.EDIT_TARGET_PROPERTY.equals(declaration.editTarget());
+    return String.join(
+        "|",
+        declaration.groupId(),
+        declaration.artifactId(),
+        declaration.version(),
+        declaration.editTarget(),
+        property ? declaration.propertyName() : declaration.declaredIn());
+  }
+
+  /**
+   * Per-run collector threaded through the classification helpers: lookup failures, repository
+   * misses, release-cooldown state and the aggregated warnings derived from them. Not thread-safe;
+   * a run is classified sequentially.
+   */
+  private static final class RecommendationRun {
+    private static final int MAX_LISTED = 10;
+    private static final int MAX_TIMESTAMP_LOOKUPS = 5;
+    private static final long MILLIS_PER_DAY = 86_400_000L;
+
+    private final Integer minReleaseAgeDays;
+    private final long cutoffEpochMillis;
+    private final Map<String, MavenCentralException> lookupFailures = new LinkedHashMap<>();
+    private final Set<String> notFound = new LinkedHashSet<>();
+    private final Set<String> cooldownBlocked = new LinkedHashSet<>();
+    private final Map<String, Boolean> eligibility = new HashMap<>();
+
+    RecommendationRun(@Nullable Integer minReleaseAgeDays) {
+      this.minReleaseAgeDays =
+          minReleaseAgeDays != null && minReleaseAgeDays > 0 ? minReleaseAgeDays : null;
+      this.cutoffEpochMillis =
+          this.minReleaseAgeDays == null
+              ? 0L
+              : System.currentTimeMillis() - this.minReleaseAgeDays * MILLIS_PER_DAY;
+    }
+
+    boolean cooldownEnabled() {
+      return minReleaseAgeDays != null;
+    }
+
+    /** True only when a lookup threw; repository misses alone do not make a run incomplete. */
+    boolean incomplete() {
+      return !lookupFailures.isEmpty();
+    }
+
+    /** Records a failed lookup with its classified cause; the first cause per key is kept. */
+    void recordFailure(String key, RuntimeException failure) {
+      lookupFailures.putIfAbsent(key, MavenCentralException.classify(failure));
+    }
+
+    List<String> warnings() {
+      List<String> out = new ArrayList<>();
+      Map<MavenCentralException.Reason, Set<String>> byReason = new LinkedHashMap<>();
+      Map<MavenCentralException.Reason, Integer> hints = new HashMap<>();
+      lookupFailures.forEach(
+          (key, failure) -> {
+            byReason.computeIfAbsent(failure.getReason(), r -> new LinkedHashSet<>()).add(key);
+            if (failure.getRetryAfterSeconds() != null) {
+              hints.merge(failure.getReason(), failure.getRetryAfterSeconds(), Math::max);
+            }
+          });
+      byReason.forEach(
+          (reason, keys) ->
+              out.add(
+                  "Version lookup failed for "
+                      + keys.size()
+                      + (keys.size() == 1 ? " coordinate" : " coordinates")
+                      + " ("
+                      + failureLabel(reason, hints.get(reason))
+                      + "): "
+                      + listed(keys)));
+      if (!notFound.isEmpty()) {
+        out.add("Not found in the configured repository (skipped): " + listed(notFound));
+      }
+      if (!cooldownBlocked.isEmpty()) {
+        out.add(
+            "Release cooldown (minReleaseAgeDays="
+                + minReleaseAgeDays
+                + "): no upgrade emitted for "
+                + cooldownBlocked.size()
+                + (cooldownBlocked.size() == 1 ? " coordinate" : " coordinates")
+                + " because newer versions are too recent or have no usable publish time: "
+                + listed(cooldownBlocked));
+      }
+      return out;
+    }
+
+    private static String failureLabel(
+        MavenCentralException.Reason reason, @Nullable Integer retryAfterSeconds) {
+      String retry =
+          retryAfterSeconds == null
+              ? ""
+              : "; retry in " + McpError.describeRetry(retryAfterSeconds);
+      return switch (reason) {
+        case RATE_LIMITED -> "repository rate limited" + retry;
+        case CIRCUIT_OPEN -> "repository circuit breaker open" + retry;
+        case UPSTREAM_ERROR, INVALID_RESPONSE -> "upstream error";
+      };
+    }
+
+    private static String listed(Set<String> values) {
+      List<String> all = List.copyOf(values);
+      String head = String.join(", ", all.subList(0, Math.min(all.size(), MAX_LISTED)));
+      return all.size() > MAX_LISTED ? head + " and " + (all.size() - MAX_LISTED) + " more" : head;
+    }
+  }
+
+  private record SecurityOutcome(
+      List<UpgradeAction> actions,
+      List<NeedsAttention.Vulnerable> vulnerable,
+      PomSecuritySummary summary) {}
+
+  /**
+   * Scans every resolved declared dependency, annotates deterministic actions whose current version
+   * is vulnerable (scanning only those targets), and builds the {@code vulnerable} entries.
+   */
+  private SecurityOutcome applySecurityScan(
+      RecommendationRun run, EffectivePomResult resolved, List<UpgradeAction> actions) {
+    Map<String, MavenCoordinate> toScan = new LinkedHashMap<>();
+    for (EffectiveDependency dep : resolved.dependencies()) {
+      MavenCoordinate coordinate =
+          MavenCoordinate.of(dep.groupId(), dep.artifactId(), dep.effectiveVersion());
+      toScan.putIfAbsent(coordinate.toCoordinateString(), coordinate);
+    }
+    Map<String, SecurityAssessment> assessments = safeScanBulk(toScan.values());
+
+    int vulnerableCount = 0;
+    int cleanCount = 0;
+    int unknownCount = 0;
+    SecurityAssessment.Severity worst = null;
+    for (String key : toScan.keySet()) {
+      SecurityAssessment assessment = assessments.get(key);
+      SecurityAssessment.Status status = statusOf(assessment);
+      if (status == SecurityAssessment.Status.VULNERABLE) {
+        vulnerableCount++;
+        SecurityAssessment.Severity severity = severityOf(assessment);
+        if (worst == null || severity.ordinal() < worst.ordinal()) {
+          worst = severity;
+        }
+      } else if (status == SecurityAssessment.Status.OK) {
+        cleanCount++;
+      } else {
+        unknownCount++;
+      }
+    }
+    PomSecuritySummary summary =
+        new PomSecuritySummary(toScan.size(), vulnerableCount, cleanCount, unknownCount, worst);
+
+    // Second scan: only the targets of actions whose current version is vulnerable.
+    Map<String, MavenCoordinate> targets = new LinkedHashMap<>();
+    for (UpgradeAction action : actions) {
+      String key = actionCurrentKey(action);
+      if (!isScannedKind(action)) {
+        continue;
+      }
+      if (statusOf(assessments.get(key)) == SecurityAssessment.Status.VULNERABLE) {
+        MavenCoordinate target =
+            MavenCoordinate.of(action.groupId(), action.artifactId(), action.target());
+        targets.putIfAbsent(target.toCoordinateString(), target);
+      }
+    }
+    Map<String, SecurityAssessment> targetAssessments =
+        targets.isEmpty() ? Map.of() : safeScanBulk(targets.values());
+
+    List<UpgradeAction> annotated = new ArrayList<>(actions.size());
+    for (UpgradeAction action : actions) {
+      SecurityAssessment current = assessments.get(actionCurrentKey(action));
+      if (!isScannedKind(action) || statusOf(current) != SecurityAssessment.Status.VULNERABLE) {
+        annotated.add(action);
+        continue;
+      }
+      String targetKey =
+          MavenCoordinate.of(action.groupId(), action.artifactId(), action.target())
+              .toCoordinateString();
+      annotated.add(
+          action.withSecurity(
+              new UpgradeAction.Security(
+                  severityOf(current),
+                  current.vulnerabilityCount(),
+                  severeIds(current),
+                  statusOf(targetAssessments.get(targetKey)))));
+    }
+
+    List<NeedsAttention.Vulnerable> vulnerable = new ArrayList<>();
+    Set<String> seen = new HashSet<>();
+    for (EffectiveDependency dep : resolved.dependencies()) {
+      MavenCoordinate coordinate =
+          MavenCoordinate.of(dep.groupId(), dep.artifactId(), dep.effectiveVersion());
+      SecurityAssessment assessment = assessments.get(coordinate.toCoordinateString());
+      if (statusOf(assessment) != SecurityAssessment.Status.VULNERABLE
+          || !seen.add(coordinate.toCoordinateString() + "|" + dep.source())
+          || isFixedByDeterministicAction(dep, annotated)) {
+        continue;
+      }
+      vulnerable.add(
+          new NeedsAttention.Vulnerable(
+              dep.groupId(),
+              dep.artifactId(),
+              dep.effectiveVersion(),
+              dep.source().name(),
+              dep.managedBy().map(MavenCoordinate::toCoordinateString).orElse(null),
+              severityOf(assessment),
+              assessment.vulnerabilityCount(),
+              assessment.criticalCves() == null ? List.of() : assessment.criticalCves(),
+              assessment.highCves() == null ? List.of() : assessment.highCves(),
+              assessment.fixedInVersion(),
+              latestStable(run, coordinate)));
+    }
+    vulnerable.sort(
+        Comparator.comparingInt((NeedsAttention.Vulnerable v) -> v.maxSeverity().ordinal())
+            .thenComparing(
+                Comparator.comparingInt(NeedsAttention.Vulnerable::vulnerabilityCount).reversed())
+            .thenComparing(v -> v.groupId() + ":" + v.artifactId()));
+    return new SecurityOutcome(annotated, vulnerable, summary);
+  }
+
+  private Map<String, SecurityAssessment> safeScanBulk(Collection<MavenCoordinate> coordinates) {
+    try {
+      Map<String, SecurityAssessment> result =
+          vulnerabilityService.scanBulk(List.copyOf(coordinates));
+      return result == null ? Map.of() : result;
+    } catch (RuntimeException e) {
+      logger.warn("Security scan failed for POM dependencies: {}", e.getMessage());
+      return Map.of();
+    }
+  }
+
+  /** Missing or null assessments are UNKNOWN, never clean. */
+  private static SecurityAssessment.Status statusOf(SecurityAssessment assessment) {
+    return assessment == null || assessment.status() == null
+        ? SecurityAssessment.Status.UNKNOWN
+        : assessment.status();
+  }
+
+  private static SecurityAssessment.Severity severityOf(SecurityAssessment assessment) {
+    return assessment.maxSeverity() == null
+        ? SecurityAssessment.Severity.UNKNOWN
+        : assessment.maxSeverity();
+  }
+
+  private static List<String> severeIds(SecurityAssessment assessment) {
+    List<String> ids = new ArrayList<>();
+    if (assessment.criticalCves() != null) ids.addAll(assessment.criticalCves());
+    if (assessment.highCves() != null) ids.addAll(assessment.highCves());
+    return ids;
+  }
+
+  /** A plugin's own version is not a scanned project dependency. */
+  private static boolean isScannedKind(UpgradeAction action) {
+    return !UpgradeAction.KIND_PLUGIN_BUMP.equals(action.kind());
+  }
+
+  private static String actionCurrentKey(UpgradeAction action) {
+    return MavenCoordinate.of(action.groupId(), action.artifactId(), action.current())
+        .toCoordinateString();
+  }
+
+  private static boolean isFixedByDeterministicAction(
+      EffectiveDependency dep, List<UpgradeAction> actions) {
+    return actions.stream()
+        .anyMatch(
+            action ->
+                action.security() != null
+                    // A plugin's own dependency does not change the project dependency.
+                    && !UpgradeAction.KIND_PLUGIN_DEP_BUMP.equals(action.kind())
+                    && action.security().targetStatus() == SecurityAssessment.Status.OK
+                    && action.groupId().equals(dep.groupId())
+                    && action.artifactId().equals(dep.artifactId())
+                    && dep.effectiveVersion().equals(action.current()));
+  }
+
+  /** Builds the {@code property_override} entry; null when the override lists no coordinates. */
+  private Optional<NeedsAttention> toPropertyOverrideAttention(
+      RecommendationRun run, PropertyOverride override) {
+    if (override.affects().isEmpty()) {
+      return Optional.empty();
+    }
+    String[] first = override.affects().get(0).split(":", 2);
+    String pinned = override.pinnedValue();
+    String inherited = override.inheritedValue();
+    String relation = NeedsAttention.PropertyOverride.UNKNOWN;
+    if (pinned != null && inherited != null && !pinned.contains("${")) {
+      int comparison = versionComparator.compare(pinned, inherited);
+      relation =
+          comparison < 0
+              ? NeedsAttention.PropertyOverride.BEHIND
+              : comparison > 0
+                  ? NeedsAttention.PropertyOverride.AHEAD
+                  : NeedsAttention.PropertyOverride.EQUAL;
+    }
+    String latest =
+        latestStable(
+            run,
+            MavenCoordinate.of(
+                first[0], first[1], pinned != null && !pinned.contains("${") ? pinned : null));
+    return Optional.of(
+        new NeedsAttention.PropertyOverride(
+            first[0],
+            first[1],
+            override.propertyName(),
+            pinned,
+            inherited,
+            override.definedIn(),
+            override.affects(),
+            override.affectedCount(),
+            relation,
+            latest));
   }
 
   /**
    * Looks up the latest stable version of a managing BOM and either emits a {@link UpgradeAction
-   * bom_bump} action (minor/patch, or major when {@code mode == ALL}) or a {@link
-   * NeedsAttention.MajorAvailable major_available} entry. Network failures and missing-version
-   * cases drop silently — those would already surface as warnings on the upstream resolution.
+   * bom_bump} action or a {@link NeedsAttention.MajorAvailable major_available} entry. Lookup
+   * failures and missing artifacts are recorded on the run and surface as aggregated warnings.
    */
   private void classifyBomCandidate(
+      RecommendationRun run,
       MavenCoordinate bom,
       UpgradeMode mode,
       List<UpgradeAction> actions,
       List<NeedsAttention> attention) {
-    try {
-      String latest = getLatestStableVersion(bom);
-      if (latest == null || bom.version() == null) {
-        return;
-      }
-      if (versionComparator.compare(bom.version(), latest) >= 0) {
-        return;
-      }
-      String updateType = versionComparator.determineUpdateType(bom.version(), latest);
-      if (MAJOR_UPDATE_TYPE.equals(updateType) && mode == UpgradeMode.MINOR_PATCH) {
-        String currentMajorLatest = findCurrentMajorLatest(bom, bom.version());
-        attention.add(
-            new NeedsAttention.MajorAvailable(
-                bom.groupId(),
-                bom.artifactId(),
-                bom.version(),
-                currentMajorLatest != null ? currentMajorLatest : bom.version(),
-                latest,
-                Source.MANAGED.name(),
-                bom.toCoordinateString()));
-      } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
-          .contains(updateType)) {
-        actions.add(
-            UpgradeAction.bomBump(
-                bom.groupId(), bom.artifactId(), bom.version(), latest, updateType));
-      }
-    } catch (MavenCentralException _) {
-      // upstream resolver already warned about unreachable parents; nothing to add here.
+    if (bom.version() == null) {
+      return;
     }
+    classifyUpgrade(
+        run,
+        bom,
+        bom.version(),
+        latestStable(run, bom),
+        mode,
+        Source.MANAGED.name(),
+        bom.toCoordinateString(),
+        (target, updateType) ->
+            UpgradeAction.bomBump(
+                bom.groupId(), bom.artifactId(), bom.version(), target, updateType),
+        actions,
+        attention);
   }
 
   /** Classifies a direct root dependency-management declaration with a known edit target. */
   private void classifyManagedDeclarationCandidate(
+      RecommendationRun run,
       ManagedDeclaration declaration,
       UpgradeMode mode,
       List<UpgradeAction> actions,
       List<NeedsAttention> attention) {
     MavenCoordinate coordinate =
         MavenCoordinate.of(declaration.groupId(), declaration.artifactId(), declaration.version());
-    String latest = safeGetLatestStable(coordinate);
-    if (latest == null || versionComparator.compare(declaration.version(), latest) >= 0) {
-      return;
-    }
-
-    String updateType = versionComparator.determineUpdateType(declaration.version(), latest);
-    if (MAJOR_UPDATE_TYPE.equals(updateType) && mode == UpgradeMode.MINOR_PATCH) {
-      String currentMajorLatest = findCurrentMajorLatest(coordinate, declaration.version());
-      attention.add(
-          new NeedsAttention.MajorAvailable(
-              declaration.groupId(),
-              declaration.artifactId(),
-              declaration.version(),
-              currentMajorLatest != null ? currentMajorLatest : declaration.version(),
-              latest,
-              "MANAGED_DECLARATION",
-              null));
-    } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
-        .contains(updateType)) {
-      actions.add(
-          UpgradeAction.managedDeclarationBump(
-              declaration.groupId(),
-              declaration.artifactId(),
-              declaration.version(),
-              latest,
-              updateType,
-              declaration.editTarget(),
-              declaration.propertyName()));
-    }
+    classifyUpgrade(
+        run,
+        coordinate,
+        declaration.version(),
+        latestStable(run, coordinate),
+        mode,
+        "MANAGED_DECLARATION",
+        null,
+        (target, updateType) ->
+            UpgradeAction.managedDeclarationBump(
+                declaration.groupId(),
+                declaration.artifactId(),
+                declaration.version(),
+                target,
+                updateType,
+                declaration.editTarget(),
+                declaration.propertyName()),
+        actions,
+        attention);
   }
 
   /** Classifies a direct build/plugin dependency declaration with a known edit target. */
   private void classifyPluginDependencyCandidate(
+      RecommendationRun run,
       PluginDependencyDeclaration declaration,
       UpgradeMode mode,
       List<UpgradeAction> actions,
       List<NeedsAttention> attention) {
     MavenCoordinate coordinate =
         MavenCoordinate.of(declaration.groupId(), declaration.artifactId(), declaration.version());
-    String latest = safeGetLatestStable(coordinate);
-    if (latest == null || versionComparator.compare(declaration.version(), latest) >= 0) {
-      return;
-    }
+    classifyUpgrade(
+        run,
+        coordinate,
+        declaration.version(),
+        latestStable(run, coordinate),
+        mode,
+        "PLUGIN_DEPENDENCY",
+        null,
+        (target, updateType) ->
+            UpgradeAction.pluginDependencyBump(
+                declaration.groupId(),
+                declaration.artifactId(),
+                declaration.version(),
+                target,
+                updateType,
+                declaration.editTarget(),
+                declaration.propertyName(),
+                declaration.declaredIn(),
+                declaration.pluginGroupId(),
+                declaration.pluginArtifactId()),
+        actions,
+        attention);
+  }
 
-    String updateType = versionComparator.determineUpdateType(declaration.version(), latest);
-    if (MAJOR_UPDATE_TYPE.equals(updateType) && mode == UpgradeMode.MINOR_PATCH) {
-      String currentMajorLatest = findCurrentMajorLatest(coordinate, declaration.version());
-      attention.add(
-          new NeedsAttention.MajorAvailable(
-              declaration.groupId(),
-              declaration.artifactId(),
-              declaration.version(),
-              currentMajorLatest != null ? currentMajorLatest : declaration.version(),
-              latest,
-              "PLUGIN_DEPENDENCY",
-              null));
-    } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
-        .contains(updateType)) {
-      actions.add(
-          UpgradeAction.pluginDependencyBump(
-              declaration.groupId(),
-              declaration.artifactId(),
-              declaration.version(),
-              latest,
-              updateType,
-              declaration.editTarget(),
-              declaration.propertyName(),
-              declaration.declaredIn(),
-              declaration.pluginGroupId(),
-              declaration.pluginArtifactId()));
-    }
+  /** Classifies a build plugin's own version declaration with a known edit target. */
+  private void classifyPluginCandidate(
+      RecommendationRun run,
+      PluginDeclaration declaration,
+      UpgradeMode mode,
+      List<UpgradeAction> actions,
+      List<NeedsAttention> attention) {
+    MavenCoordinate coordinate =
+        MavenCoordinate.of(declaration.groupId(), declaration.artifactId(), declaration.version());
+    classifyUpgrade(
+        run,
+        coordinate,
+        declaration.version(),
+        latestStable(run, coordinate),
+        mode,
+        "PLUGIN",
+        null,
+        (target, updateType) ->
+            UpgradeAction.pluginBump(
+                declaration.groupId(),
+                declaration.artifactId(),
+                declaration.version(),
+                target,
+                updateType,
+                declaration.editTarget(),
+                declaration.propertyName(),
+                declaration.declaredIn()),
+        actions,
+        attention);
   }
 
   /**
    * Classifies a single declared dependency: surfaces conflicts and explicit overrides into {@code
    * needsAttention} regardless of upgrade availability; for EXPLICIT deps emits a {@link
-   * UpgradeAction explicit_bump} (or routes majors to {@code needsAttention} when mode is {@code
-   * MINOR_PATCH}); MANAGED deps without conflicts are covered by the upstream BOM bump pass and do
-   * not produce per-dep actions here.
+   * UpgradeAction explicit_bump} (plus a {@code major_available} entry when a newer major exists in
+   * {@code MINOR_PATCH} mode); MANAGED deps without conflicts are covered by the upstream BOM bump
+   * pass and do not produce per-dep actions here.
    */
   private void classifyDependencyCandidate(
+      RecommendationRun run,
       EffectiveDependency dep,
       UpgradeMode mode,
       List<UpgradeAction> actions,
@@ -1769,9 +2612,9 @@ public class MavenDependencyTools {
       return;
     }
 
-    String latestOnCentral =
-        safeGetLatestStable(
-            MavenCoordinate.of(dep.groupId(), dep.artifactId(), dep.effectiveVersion()));
+    MavenCoordinate coordinate =
+        MavenCoordinate.of(dep.groupId(), dep.artifactId(), dep.effectiveVersion());
+    String latestOnCentral = latestStable(run, coordinate);
 
     if (!dep.conflicts().isEmpty() && dep.source() != Source.EXPLICIT_OVERRIDE) {
       // MANAGED dep with multiple BOMs disagreeing — surface the conflict.
@@ -1802,69 +2645,216 @@ public class MavenDependencyTools {
       return;
     }
 
-    // EXPLICIT path: bump candidate.
-    if (latestOnCentral == null) {
+    classifyUpgrade(
+        run,
+        coordinate,
+        dep.effectiveVersion(),
+        latestOnCentral,
+        mode,
+        Source.EXPLICIT.name(),
+        null,
+        (target, updateType) ->
+            UpgradeAction.explicitBump(
+                dep.groupId(), dep.artifactId(), dep.effectiveVersion(), target, updateType),
+        actions,
+        attention);
+  }
+
+  /**
+   * Shared upgrade classification for every edit kind. A minor / patch upgrade yields the action
+   * built by {@code actionFactory}. In {@code MINOR_PATCH} mode a major upgrade yields a {@code
+   * major_available} entry and — when a newer same-major stable version exists — also the normal
+   * action targeting that version, so a newer major never blocks same-major updates. {@code ALL}
+   * mode promotes the major itself to an action. With a release cooldown the action target may be
+   * an older eligible version (see {@link #selectTarget}); {@code major_available} stays
+   * unfiltered.
+   */
+  private void classifyUpgrade(
+      RecommendationRun run,
+      MavenCoordinate coordinate,
+      String current,
+      @Nullable String latest,
+      UpgradeMode mode,
+      String majorSource,
+      @Nullable String majorManagedBy,
+      BiFunction<String, String, UpgradeAction> actionFactory,
+      List<UpgradeAction> actions,
+      List<NeedsAttention> attention) {
+    if (latest == null || versionComparator.compare(current, latest) >= 0) {
       return;
     }
-    if (versionComparator.compare(dep.effectiveVersion(), latestOnCentral) >= 0) {
-      return;
-    }
-    String updateType =
-        versionComparator.determineUpdateType(dep.effectiveVersion(), latestOnCentral);
-    if (MAJOR_UPDATE_TYPE.equals(updateType) && mode == UpgradeMode.MINOR_PATCH) {
-      String currentMajorLatest =
-          findCurrentMajorLatest(
-              MavenCoordinate.of(dep.groupId(), dep.artifactId(), null), dep.effectiveVersion());
-      attention.add(
+    String updateType = versionComparator.determineUpdateType(current, latest);
+    boolean minorPatchOnly = mode == UpgradeMode.MINOR_PATCH;
+    if (MAJOR_UPDATE_TYPE.equals(updateType) && minorPatchOnly) {
+      String sameMajor = findCurrentMajorLatest(run, coordinate, current);
+      NeedsAttention.MajorAvailable major =
           new NeedsAttention.MajorAvailable(
-              dep.groupId(),
-              dep.artifactId(),
-              dep.effectiveVersion(),
-              currentMajorLatest != null ? currentMajorLatest : dep.effectiveVersion(),
-              latestOnCentral,
-              Source.EXPLICIT.name(),
-              null));
+              coordinate.groupId(),
+              coordinate.artifactId(),
+              current,
+              sameMajor != null ? sameMajor : current,
+              latest,
+              majorSource,
+              majorManagedBy);
+      if (!attention.contains(major)) {
+        attention.add(major);
+      }
+      if (sameMajor != null && versionComparator.compare(current, sameMajor) < 0) {
+        String sameMajorType = versionComparator.determineUpdateType(current, sameMajor);
+        if (MINOR_UPDATE_TYPE.equals(sameMajorType) || PATCH_UPDATE_TYPE.equals(sameMajorType)) {
+          addAction(
+              run, coordinate, current, sameMajor, sameMajorType, true, actionFactory, actions);
+        }
+      }
     } else if (List.of(MAJOR_UPDATE_TYPE, MINOR_UPDATE_TYPE, PATCH_UPDATE_TYPE)
         .contains(updateType)) {
-      actions.add(
-          UpgradeAction.explicitBump(
-              dep.groupId(),
-              dep.artifactId(),
-              dep.effectiveVersion(),
-              latestOnCentral,
-              updateType));
+      addAction(
+          run, coordinate, current, latest, updateType, minorPatchOnly, actionFactory, actions);
     }
   }
 
-  /** Wraps {@link #getLatestStableVersion} and swallows transient lookup failures. */
-  private String safeGetLatestStable(MavenCoordinate coord) {
-    try {
-      return getLatestStableVersion(coord);
-    } catch (MavenCentralException _) {
-      return null;
+  private void addAction(
+      RecommendationRun run,
+      MavenCoordinate coordinate,
+      String current,
+      String preferred,
+      String preferredType,
+      boolean minorPatchOnly,
+      BiFunction<String, String, UpgradeAction> actionFactory,
+      List<UpgradeAction> actions) {
+    if (!run.cooldownEnabled()) {
+      actions.add(actionFactory.apply(preferred, preferredType));
+      return;
     }
+    String target =
+        selectTarget(run, coordinate, current, preferred, preferredType, minorPatchOnly);
+    if (target == null) {
+      run.cooldownBlocked.add(
+          coordinate.groupId() + ":" + coordinate.artifactId() + ":" + preferred);
+      return;
+    }
+    if (target.equals(preferred)) {
+      actions.add(actionFactory.apply(preferred, preferredType));
+    } else {
+      actions.add(
+          actionFactory
+              .apply(target, versionComparator.determineUpdateType(current, target))
+              .withHeldBackFrom(preferred));
+    }
+  }
+
+  /**
+   * Picks the newest version that satisfies the release cooldown: {@code preferred} when it is old
+   * enough, else the newest older upgrade of the same kind (stable, same variant, still newer than
+   * {@code current}, and a minor / patch upgrade when {@code minorPatchOnly}). At most {@link
+   * RecommendationRun#MAX_TIMESTAMP_LOOKUPS} publish-time lookups are spent per call. Returns null
+   * when nothing qualifies; unknown or failed publish times never qualify.
+   */
+  @Nullable
+  private String selectTarget(
+      RecommendationRun run,
+      MavenCoordinate coordinate,
+      String current,
+      String preferred,
+      String preferredType,
+      boolean minorPatchOnly) {
+    List<String> candidates = new ArrayList<>();
+    candidates.add(preferred);
+    lookupVersions(run, coordinate).stream()
+        .filter(versionComparator::isStableVersion)
+        .filter(candidate -> versionComparator.preservesReleaseVariant(current, candidate))
+        .filter(candidate -> versionComparator.compare(current, candidate) < 0)
+        .filter(candidate -> versionComparator.compare(candidate, preferred) < 0)
+        .filter(
+            candidate -> {
+              String type = versionComparator.determineUpdateType(current, candidate);
+              return MINOR_UPDATE_TYPE.equals(type)
+                  || PATCH_UPDATE_TYPE.equals(type)
+                  || (!minorPatchOnly && MAJOR_UPDATE_TYPE.equals(type));
+            })
+        .sorted(versionComparator.reversed())
+        .limit(RecommendationRun.MAX_TIMESTAMP_LOOKUPS - 1L)
+        .forEach(candidates::add);
+    for (String candidate : candidates) {
+      if (isOldEnough(run, coordinate, candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  /** Fails closed: a failed lookup or a missing / non-positive timestamp is not eligible. */
+  private boolean isOldEnough(RecommendationRun run, MavenCoordinate coordinate, String version) {
+    String key = coordinate.groupId() + ":" + coordinate.artifactId() + ":" + version;
+    Boolean known = run.eligibility.get(key);
+    if (known != null) {
+      return known;
+    }
+    boolean eligible = false;
+    try {
+      MavenArtifact artifact = mavenCentralService.fetchArtifactWithTimestamp(coordinate, version);
+      eligible =
+          artifact != null
+              && artifact.timestamp() > 0
+              && artifact.timestamp() <= run.cutoffEpochMillis;
+    } catch (RuntimeException e) {
+      logger.debug("Publish-time lookup failed for {}: {}", key, e.getMessage());
+      run.recordFailure(coordinate.groupId() + ":" + coordinate.artifactId(), e);
+    }
+    run.eligibility.put(key, eligible);
+    return eligible;
+  }
+
+  /**
+   * Fetches all versions of a coordinate, newest first. A throw is recorded as an upstream failure
+   * and an empty answer as "not found in the configured repository"; both return an empty list.
+   */
+  private List<String> lookupVersions(RecommendationRun run, MavenCoordinate coordinate) {
+    String key = coordinate.groupId() + ":" + coordinate.artifactId();
+    try {
+      List<String> versions = mavenCentralService.getAllVersions(coordinate);
+      if (versions == null || versions.isEmpty()) {
+        run.notFound.add(key);
+        return List.of();
+      }
+      return versions;
+    } catch (RuntimeException e) {
+      logger.debug("Version lookup failed for {}: {}", key, e.getMessage());
+      run.recordFailure(key, e);
+      return List.of();
+    }
+  }
+
+  /** Latest stable version preserving {@code coordinate}'s release variant, or null. */
+  @Nullable
+  private String latestStable(RecommendationRun run, MavenCoordinate coordinate) {
+    return lookupVersions(run, coordinate).stream()
+        .filter(versionComparator::isStableVersion)
+        .filter(
+            candidate ->
+                coordinate.version() == null
+                    || versionComparator.preservesReleaseVariant(coordinate.version(), candidate))
+        .findFirst()
+        .orElse(null);
   }
 
   /**
    * Finds the latest stable version sharing the same major as {@code current}, or null if no newer
    * same-major stable version exists.
    */
-  private String findCurrentMajorLatest(MavenCoordinate coordinate, String current) {
+  private String findCurrentMajorLatest(
+      RecommendationRun run, MavenCoordinate coordinate, String current) {
     Integer currentMajor = extractMajorVersion(current);
     if (currentMajor == null) {
       return null;
     }
-    try {
-      return mavenCentralService.getAllVersions(coordinate).stream()
-          .filter(versionComparator::isStableVersion)
-          .filter(candidate -> versionComparator.preservesReleaseVariant(current, candidate))
-          .filter(candidate -> currentMajor.equals(extractMajorVersion(candidate)))
-          .filter(candidate -> versionComparator.compare(current, candidate) <= 0)
-          .findFirst()
-          .orElse(null);
-    } catch (MavenCentralException _) {
-      return null;
-    }
+    return lookupVersions(run, coordinate).stream()
+        .filter(versionComparator::isStableVersion)
+        .filter(candidate -> versionComparator.preservesReleaseVariant(current, candidate))
+        .filter(candidate -> currentMajor.equals(extractMajorVersion(candidate)))
+        .filter(candidate -> versionComparator.compare(current, candidate) <= 0)
+        .findFirst()
+        .orElse(null);
   }
 
   private static List<NeedsAttention.Candidate> toCandidates(
