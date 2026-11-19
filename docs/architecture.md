@@ -104,7 +104,7 @@ The tool analyzes declarations in the supplied POM, including dependencies from 
 - Warning-free `resolve(pomXml)` results use a one-hour effective-POM cache with a 16 MiB weight budget. Sideloaded bundles bypass this result cache.
 - Maven metadata and POM XML caches use 24-hour expiry and a 32 MiB weight budget per region. Complete OSV responses use six-hour expiry and a 32 MiB budget. Failed upstream calls and incomplete OSV responses are not cached.
 - Cache weights estimate retained character data and impose a minimum entry weight; these are allocation controls, not measurements of JVM heap usage. Expiry is independent between result and upstream caches, so recomputation may reuse cached parent/BOM XML.
-- Each POM is limited to 1,048,576 Java characters, 64 levels of XML nesting and 20,000 elements. Sideloaded bundles permit up to 64 documents and 4,194,304 characters; fetched models also have per-resolution count and cumulative-character budgets. DTDs are rejected, and property expansion is bounded.
+- Each POM is limited to 1,048,576 Java characters, 64 levels of XML nesting and 20,000 elements. Sideloaded bundles permit up to 256 documents and 4,194,304 characters. Each resolution may use up to 256 distinct parent and imported-BOM models, sideloaded ones included, within the same cumulative-character budget and a 60-second deadline. DTDs are rejected, and property expansion is bounded.
 - Repository and OSV responses are limited to 4 MiB of bytes, including streamed bodies. Redirects are rejected; configure the final endpoint.
 - Coordinate batches permit up to 500 items, share ten concurrent operations, and have a 30-second total deadline including permit waits. Model resolution checks a 60-second budget between stages; an in-flight fetch still follows its network timeout and retry policy.
 
@@ -195,7 +195,7 @@ Key points:
 - Framework: Spring Boot 4.1.2; Spring AI 2.0.2
 - Java: 25 (LTS)
 - Protocol: MCP 2025-11-25
-- Maven components: `maven-model-builder`, `maven-model`, `maven-artifact` and `maven-repository-metadata` 3.10.0; the full Maven Resolver dependency-graph stack is not used
+- Maven components: `maven-model-builder`, `maven-model`, `maven-artifact` and `maven-repository-metadata` 3.10.1; the full Maven Resolver dependency-graph stack is not used
 - CVSS scoring: `us.springett:cvss-calculator` 1.5.1 for v2/v3/v4 vectors
 - Local JVM container builds: Jib 3.5.2 with Eclipse Temurin 25; native containers use Spring Boot buildpacks
 - Default transport for desktop images: stdio

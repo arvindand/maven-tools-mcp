@@ -88,6 +88,21 @@ public record McpError(String code, String message, Map<String, Object> data, In
   }
 
   /**
+   * A POM resolution ran out of its time budget, usually because Maven Central was slow or
+   * throttled. Fetched parents and BOMs are cached, so an immediate retry makes progress.
+   *
+   * @return McpError with EXTERNAL_SERVICE_UNAVAILABLE code and reason POM_RESOLUTION_TIMEOUT
+   */
+  public static McpError pomResolutionTimeout() {
+    return new McpError(
+        EXTERNAL_SERVICE_UNAVAILABLE,
+        "POM resolution did not finish within its time budget: the parent and BOM chain is long or"
+            + " the repository is slow. Fetched POMs are cached, so retry now.",
+        Map.of("reason", "POM_RESOLUTION_TIMEOUT"),
+        2);
+  }
+
+  /**
    * Renders a retry delay for humans: seconds up to two minutes, then minutes, then hours.
    *
    * @param seconds delay in seconds

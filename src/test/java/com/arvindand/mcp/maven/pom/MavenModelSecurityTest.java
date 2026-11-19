@@ -112,13 +112,80 @@ class MavenModelSecurityTest {
     String doctype =
         "<!DOCTYPE project [<!ENTITY x SYSTEM 'file:///etc/passwd'>]>" + pom("<name>&x;</name>");
     String deepXml = "<x>".repeat(65) + "</x>".repeat(65);
-    java.util.List<String> oversizedBundle = java.util.Collections.nCopies(65, pom(""));
+    java.util.List<String> oversizedBundle =
+        java.util.Collections.nCopies(PomInputLimits.MAX_MODELS + 1, pom(""));
     assertThatThrownBy(() -> PomInputLimits.check(doctype))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(() -> PomInputLimits.check(deepXml))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(() -> PomInputLimits.checkBundle(oversizedBundle))
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void resolvesImportsUpToTheModelCapAndRejectsOneMore() {
+    int cap = PomInputLimits.MAX_MODELS;
+    PomFetcher fetcher =
+        InMemoryPomFetcher.fromXml(
+            // Exactly cap BOMs: one more would exceed the sideloaded-bundle limit, and the extra
+            // import below trips the model cap before it is fetched anyway.
+            java.util.stream.IntStream.rangeClosed(1, cap)
+                .mapToObj(
+                    i ->
+                        pom("""
+                        <packaging>pom</packaging><dependencyManagement><dependencies>
+                        <dependency><groupId>g</groupId><artifactId>lib-%d</artifactId>
+                        <version>1</version></dependency>
+                        </dependencies></dependencyManagement>
+                        """
+                                .formatted(i))
+                            .replace(
+                                "<artifactId>app</artifactId>",
+                                "<artifactId>bom-" + i + "</artifactId>"))
+                .toList());
+    EffectivePomResolver resolver = new EffectivePomResolver(fetcher);
+
+    EffectivePomResult atCap = resolver.resolve(importingRoot(cap));
+    assertThat(atCap.warnings()).isEmpty();
+    assertThat(atCap.rootImportedBoms()).hasSize(cap);
+    assertThat(atCap.dependencies())
+        .singleElement()
+        .satisfies(dependency -> assertThat(dependency.effectiveVersion()).isEqualTo("1"));
+    assertThatThrownBy(() -> resolver.resolve(importingRoot(cap + 1)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("exceeds " + cap + " fetched models");
+  }
+
+  @Test
+  void interruptedResolutionFailsAsATimeoutRatherThanInvalidInput() {
+    EffectivePomResolver resolver = new EffectivePomResolver(_ -> Optional.empty());
+    Thread.currentThread().interrupt();
+    try {
+      assertThatThrownBy(() -> resolver.resolve(importingRoot(1)))
+          .isInstanceOf(PomResolutionTimeoutException.class)
+          .isNotInstanceOf(IllegalArgumentException.class);
+    } finally {
+      Thread.interrupted();
+    }
+  }
+
+  private static String importingRoot(int boms) {
+    StringBuilder imports = new StringBuilder();
+    for (int i = 1; i <= boms; i++) {
+      imports
+          .append("<dependency><groupId>g</groupId><artifactId>bom-")
+          .append(i)
+          .append("</artifactId><version>1</version><type>pom</type><scope>import</scope>")
+          .append("</dependency>");
+    }
+    // Only the last BOM manages this dependency, so its version proves every import was applied.
+    return pom(
+        "<dependencyManagement><dependencies>"
+            + imports
+            + "</dependencies></dependencyManagement><dependencies><dependency>"
+            + "<groupId>g</groupId><artifactId>lib-"
+            + boms
+            + "</artifactId></dependency></dependencies>");
   }
 
   @Test

@@ -15,7 +15,13 @@ import javax.xml.stream.XMLStreamReader;
  */
 public final class PomInputLimits {
   public static final int MAX_DOCUMENT_CHARS = 1_048_576;
-  public static final int MAX_MODELS = 64;
+
+  /**
+   * Distinct parent and imported-BOM models per resolution, sideloaded ones included. Spring Boot
+   * 4.1's dependency BOM alone needs about 60, so this leaves headroom for project parents and
+   * extra BOMs. The four MiB character budget and the session deadline bound the actual cost.
+   */
+  public static final int MAX_MODELS = 256;
 
   private PomInputLimits() {}
 
@@ -28,7 +34,8 @@ public final class PomInputLimits {
   public static void checkBundle(List<String> documents) {
     if (documents.size() > MAX_MODELS
         || documents.stream().mapToLong(String::length).sum() > 4L * MAX_DOCUMENT_CHARS) {
-      throw new IllegalArgumentException("POM bundle exceeds 64 models or 4 MiB of characters");
+      throw new IllegalArgumentException(
+          "POM bundle exceeds " + MAX_MODELS + " models or 4 MiB of characters");
     }
   }
 
