@@ -210,7 +210,8 @@ final class MavenModelSession implements ModelResolver {
     ModelSource existing = sources.get(key);
     if (existing != null) return existing;
     if (sources.size() >= PomInputLimits.MAX_MODELS) {
-      throw new IllegalArgumentException("POM resolution exceeds 64 fetched models");
+      throw new IllegalArgumentException(
+          "POM resolution exceeds " + PomInputLimits.MAX_MODELS + " fetched models");
     }
     Model model;
     try {
@@ -250,7 +251,7 @@ final class MavenModelSession implements ModelResolver {
 
   private void checkDeadline() {
     if (Thread.currentThread().isInterrupted() || System.nanoTime() > deadline) {
-      throw new IllegalArgumentException("POM resolution exceeded its time budget");
+      throw new PomResolutionTimeoutException();
     }
   }
 

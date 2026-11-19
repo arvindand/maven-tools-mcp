@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2026-11-19
+
+### Fixed (3.3.1)
+
+- Allow up to 256 parent and imported-BOM models per POM resolution and in sideloaded bundles, up from 64. Spring Boot 4.1's dependency BOM alone needs 59, so projects with their own parents and a few extra BOMs hit the old cap. The character budget and the 60-second deadline still bound each resolution.
+- `analyze_pom_dependencies` and `recommend_pom_upgrades` return `INVALID_INPUT` instead of `INTERNAL_ERROR` for malformed POMs and exhausted resolution budgets. A resolution that runs out of time returns a retryable `EXTERNAL_SERVICE_UNAVAILABLE` error with reason `POM_RESOLUTION_TIMEOUT` and `retryAfter: 2`, since fetched POMs are cached.
+
+### Changed (3.3.1)
+
+- Upgrade the Maven model, artifact and repository-metadata components from 3.10.0 to 3.10.1.
+- Align project, runtime, registry and build fallback versions at 3.3.1.
+- The resolver integration test reads the expected `maven-model-builder` version from the POM, so dependency updates no longer break it.
+
 ## [3.3.0] - 2026-11-15
 
 ### Added (3.3.0)
@@ -823,7 +836,8 @@ This major release updates tool names and adds stability parameters while mainta
 - Unit and integration tests
 - Maven Central API integration
 
-[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/arvindand/maven-tools-mcp/compare/v3.3.1...HEAD
+[3.3.1]: https://github.com/arvindand/maven-tools-mcp/compare/v3.3.0...v3.3.1
 [3.3.0]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.4...v3.3.0
 [3.2.4]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.3...v3.2.4
 [3.2.3]: https://github.com/arvindand/maven-tools-mcp/compare/v3.2.2...v3.2.3

@@ -38,6 +38,7 @@ import com.arvindand.mcp.maven.pom.ManagedAlternative;
 import com.arvindand.mcp.maven.pom.ManagedDeclaration;
 import com.arvindand.mcp.maven.pom.PluginDeclaration;
 import com.arvindand.mcp.maven.pom.PluginDependencyDeclaration;
+import com.arvindand.mcp.maven.pom.PomResolutionTimeoutException;
 import com.arvindand.mcp.maven.pom.PropertyOverride;
 import com.arvindand.mcp.maven.pom.Source;
 import com.arvindand.mcp.maven.util.BoundedBatch;
@@ -196,6 +197,10 @@ public class MavenDependencyTools {
       logger.warn("Batch deadline exceeded: {}", e.getMessage());
       return ToolResponse.Error.of(McpError.batchTimeout());
     }
+    if (e instanceof PomResolutionTimeoutException) {
+      logger.warn("POM resolution deadline exceeded");
+      return ToolResponse.Error.of(McpError.pomResolutionTimeout());
+    }
     if (MavenCentralException.isUpstreamFailure(e)) {
       MavenCentralException upstream = MavenCentralException.classify(e);
       logger.warn("Maven repository failure ({}): {}", upstream.getReason(), upstream.getMessage());
@@ -203,6 +208,12 @@ public class MavenDependencyTools {
     }
     logger.error(UNEXPECTED_ERROR, e);
     return ToolResponse.Error.of(UNEXPECTED_ERROR + ": " + e.getMessage());
+  }
+
+  /** Rejected POM input, including exhausted resolution budgets, is a caller error. */
+  private static ToolResponse invalidPomInput(IllegalArgumentException e) {
+    return ToolResponse.Error.of(
+        McpError.invalidInput("Invalid POM input: " + e.getMessage(), Map.of()));
   }
 
   /** Human-readable per-dependency message for a classified upstream failure. */
@@ -1947,7 +1958,7 @@ public class MavenDependencyTools {
               : pomResolver.resolve(pomXml, sideloadedPoms);
       return ToolResponse.Success.of(result);
     } catch (IllegalArgumentException e) {
-      return ToolResponse.Error.of("Invalid POM input: " + e.getMessage());
+      return invalidPomInput(e);
     } catch (Exception e) {
       return toolFailure(e);
     }
@@ -2025,7 +2036,7 @@ public class MavenDependencyTools {
           buildPomUpgradeRecommendation(
               resolved, effectiveMode, scan, new RecommendationRun(minReleaseAgeDays)));
     } catch (IllegalArgumentException e) {
-      return ToolResponse.Error.of("Invalid POM input: " + e.getMessage());
+      return invalidPomInput(e);
     } catch (Exception e) {
       return toolFailure(e);
     }

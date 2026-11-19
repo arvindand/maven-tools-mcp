@@ -70,7 +70,7 @@ Add the following server to `.vscode/mcp.json` in your workspace:
 | `:latest-noc7` | STDIO | No | Networks where Context7 is blocked or not wanted |
 | `:latest-http` | HTTP | Yes | Streamable HTTP clients and sidecar workflows |
 
-The current release is [v3.3.0](https://github.com/arvindand/maven-tools-mcp/releases/tag/v3.3.0). For version-pinned setups, use `:3.3.0`, `:3.3.0-noc7` or `:3.3.0-http`; each supports Linux AMD64 and ARM64.
+The current release is [v3.3.1](https://github.com/arvindand/maven-tools-mcp/releases/tag/v3.3.1). For version-pinned setups, use `:3.3.1`, `:3.3.1-noc7` or `:3.3.1-http`; each supports Linux AMD64 and ARM64.
 
 `CONTEXT7_API_KEY` is optional. Most setups can start without it. If your environment requires Context7 auth, or you want to avoid anonymous limits, pass it through Docker with `-e CONTEXT7_API_KEY`.
 
@@ -172,7 +172,7 @@ Guy Chauliac), scoped here to declared-dep resolution. See [`NOTICE`](NOTICE).
 
 If you want to build or test locally, start with [`docs/setup.md`](docs/setup.md#build-from-source) and the helper scripts in [`build/`](build/).
 
-Check out `v3.3.0` to build this release from source; `main` may contain unreleased changes.
+Check out `v3.3.1` to build this release from source; `main` may contain unreleased changes.
 
 Project history and release notes live in [`CHANGELOG.md`](CHANGELOG.md).
 

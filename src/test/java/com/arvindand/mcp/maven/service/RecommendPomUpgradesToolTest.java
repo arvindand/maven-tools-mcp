@@ -562,9 +562,26 @@ class RecommendPomUpgradesToolTest {
             .recommend_pom_upgrades("<bad-pom", null, null, false, null);
 
     assertThat(response).isInstanceOf(ToolResponse.Error.class);
+    assertThat(((ToolResponse.Error) response).error().code()).isEqualTo("INVALID_INPUT");
     assertThat(((ToolResponse.Error) response).error().message())
         .startsWith("Invalid POM input:")
         .contains("malformed");
+  }
+
+  @Test
+  void resolutionTimeoutBecomesARetryableTimeoutNotInvalidInput() {
+    EffectivePomResolver resolver = mock(EffectivePomResolver.class);
+    when(resolver.resolve("<project/>"))
+        .thenThrow(new com.arvindand.mcp.maven.pom.PomResolutionTimeoutException());
+
+    ToolResponse response =
+        buildTools(resolver, mock(MavenCentralService.class))
+            .recommend_pom_upgrades("<project/>", null, null, false, null);
+
+    com.arvindand.mcp.maven.model.McpError error = ((ToolResponse.Error) response).error();
+    assertThat(error.code()).isEqualTo("EXTERNAL_SERVICE_UNAVAILABLE");
+    assertThat(error.data()).containsEntry("reason", "POM_RESOLUTION_TIMEOUT");
+    assertThat(error.retryAfter()).isEqualTo(2);
   }
 
   @Test
